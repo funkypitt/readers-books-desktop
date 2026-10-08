@@ -2812,6 +2812,9 @@ class Main(QtWidgets.QMainWindow):
         self.account_changed()
 
     def account_changed(self):
+        # What the drive answered to the old account no longer stands: with a new one the scan
+        # is free to carry on by itself.
+        self.remote.error = None
         if self.screen[0] == LIBRARY:
             self.enter_library()
         self.show_screen()

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Reader's Books
+Comment=A shelf as a plain list; books as pages of text cut at whole lines
+Comment[fr]=Une étagère en simple liste ; des livres en pages de texte coupées à la ligne entière
+Exec=readers-books %F
+Icon=readers-books
+Terminal=false
+Categories=Office;Viewer;Literature;Qt;
+Keywords=ebook;epub;mobi;fb2;book;reader;
+MimeType=application/epub+zip;application/x-mobipocket-ebook;application/vnd.amazon.ebook;application/x-fictionbook+xml;application/x-fictionbook;

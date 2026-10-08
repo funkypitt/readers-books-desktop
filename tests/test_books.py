@@ -1,0 +1,263 @@
+"""The parsers, the shelf, the credentials file and the pager, on books made up for the purpose."""
+import importlib.util
+import json
+import os
+import sys
+import tempfile
+import unittest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+TMP = tempfile.mkdtemp(prefix="readers-books-test-")
+os.environ["XDG_CONFIG_HOME"] = os.path.join(TMP, "config")
+os.environ["XDG_DATA_HOME"] = os.path.join(TMP, "data")
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(HERE, "tests"))
+spec = importlib.util.spec_from_file_location("rb", os.path.join(HERE, "readers_books.py"))
+rb = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rb)
+import make_books  # noqa: E402
+
+APP = rb.QtWidgets.QApplication.instance() or rb.QtWidgets.QApplication([])
+rb.load_bundled_fonts()
+
+
+def path(name):
+    return os.path.join(TMP, name)
+
+
+class Parsing(unittest.TestCase):
+    def test_an_epub_gives_chapters_with_their_titles_and_pictures(self):
+        p = make_books.epub(path("a.epub"))
+        self.assertEqual(rb.detect(p, "a.epub"), rb.EPUB)
+        book = rb.parse_book(p, rb.EPUB, "a")
+        self.assertEqual(book.title, "Le Livre d'essai")
+        self.assertEqual([c.title for c in book.chapters][:2], ["Chapitre 1", "Chapitre 2"])
+        self.assertIsNone(book.magazine)
+        first = book.chapters[0].blocks[0]
+        self.assertEqual((first.paragraphs[0].kind, first.paragraphs[0].text), (rb.HEADING, "Chapitre 1 — La pluie"))
+        second = book.chapters[1]
+        pictures = [b.source for b in second.blocks if isinstance(b, rb.ImageBlock)]
+        self.assertEqual(pictures, ["OEBPS/img/two.png"])
+        last = second.blocks[-1].paragraphs
+        self.assertEqual((last[0].kind, last[0].text), (rb.SMALL, "Une légende, en petit."))
+        self.assertEqual(last[1].text, "Une ligne\npuis une autre, après un retour.")
+        self.assertEqual(book.total, sum(c.length for c in book.chapters))
+
+    def test_a_magazine_opens_on_its_articles(self):
+        book = rb.parse_book(make_books.epub(path("m.epub"), "Le Journal", magazine=True), rb.EPUB, "m")
+        self.assertEqual(len(book.magazine), 6)
+        a = book.magazine[2]
+        self.assertEqual((a.category, a.title, a.author, a.image), ("Culture", "Article numéro 3 & ses suites", "Auteur 3", "OEBPS/img/one.png"))
+        self.assertEqual(book.chapters[a.chapter].title, "Article numéro 3 & ses suites")
+        kinds = [p.kind for b in book.chapters[0].blocks if isinstance(b, rb.TextBlock) for p in b.paragraphs]
+        self.assertEqual(kinds[:4], [rb.SMALL, rb.HEADING, rb.SMALL, rb.LEAD])
+
+    def test_a_long_chapter_is_cut_into_parts_that_keep_its_name(self):
+        ch = rb.Chapter("Long", [rb.TextBlock([rb.Para("mot " * 1000) for _i in range(8)])])
+        parts, first = rb._split_long([rb.Chapter("Court", [rb.TextBlock([rb.Para("x")])]), ch])
+        self.assertEqual(first, [0, 1])
+        self.assertEqual([p.title for p in parts], ["Court", "Long", "Long · 2", "Long · 3", "Long · 4"])
+        self.assertTrue(all(p.length <= 12100 for p in parts))
+
+    def test_mobi_fb2_and_plain_text(self):
+        m = make_books.mobi(path("b.mobi"))
+        self.assertEqual(rb.detect(m, "b.mobi"), rb.MOBI)
+        book = rb.parse_book(m, rb.MOBI, "b")
+        self.assertEqual((book.title, [c.title for c in book.chapters]), ("Un Mobi", ["Premier", "Second"]))
+        self.assertEqual(book.chapters[1].blocks[0].paragraphs[-1].text, "Fin — été.")
+        f = make_books.fb2(path("c.fb2"))
+        self.assertEqual(rb.detect(f, "c.fb2"), rb.FB2)
+        book = rb.parse_book(f, rb.FB2, "c")
+        self.assertEqual((book.title, [c.title for c in book.chapters]), ("Un FB2", ["Un", "Deux"]))
+        t = make_books.txt(path("d.txt"))
+        book = rb.parse_book(t, rb.detect(t, "d.txt"), "d")
+        self.assertEqual([p.text for p in book.chapters[0].blocks[0].paragraphs],
+                         ["Premier paragraphe.", "Second paragraphe,\nsur deux lignes.", "Troisième."])
+
+    def test_palmdoc_compression(self):
+        # a literal run, a space-and-letter pair, and a copy of what came before
+        self.assertEqual(rb._palmdoc(bytes([0x61, 0x62, 0x63, 0xE4, 0x80, 0x2B])), b"abc dabc da")
+
+    def test_what_cannot_be_read_says_so(self):
+        with open(path("bad.epub"), "wb") as fh:
+            fh.write(b"PK\x03\x04 not a zip")
+        with self.assertRaises(rb.Unsupported):
+            rb.parse_book(path("bad.epub"), rb.EPUB, "bad")
+        with open(path("empty.txt"), "w") as fh:
+            fh.write("  \n")
+        with self.assertRaises(rb.Unsupported):
+            rb.parse_book(path("empty.txt"), rb.TXT, "empty")
+
+
+class Shelf(unittest.TestCase):
+    def test_a_book_keeps_its_place_when_it_is_opened_again(self):
+        lib = rb.Library()
+        e = lib.add(make_books.epub(path("s.epub"), "Sur l'étagère"), "s.epub")
+        self.assertTrue(os.path.exists(path("s.epub")))             # the original stays where it was
+        self.assertEqual((e["title"], e["format"], e["magazine"], e["opened"]), ("Sur l'étagère", "EPUB", False, 0))
+        lib.save_position(e["id"], 3, 420, 51)
+        again = lib.add(path("s.epub"), "s.epub", source="ref-1")
+        self.assertEqual((again["chapter"], again["charOffset"], again["progress"]), (3, 420, 51))
+        self.assertEqual([b["id"] for b in lib.books if b["title"] == "Sur l'étagère"], [again["id"]])
+        self.assertFalse(os.path.exists(os.path.join(rb.BOOKS_DIR, e["fileName"])))
+        self.assertEqual(lib.by_source("ref-1")["id"], again["id"])
+        self.assertEqual(rb.Library().get(again["id"])["charOffset"], 420)          # and it is on disk
+        with self.assertRaises(Exception):
+            lib.add(path("empty.txt"), "empty.txt")
+        lib.remove(again["id"])
+        self.assertIsNone(lib.get(again["id"]))
+
+
+class Pages(unittest.TestCase):
+    def test_every_line_is_on_one_page_and_no_page_overflows(self):
+        book = rb.parse_book(make_books.epub(path("p.epub")), rb.EPUB, "p")
+        store = rb.ImageStore(path("p.epub"))
+        font = rb.QtGui.QFont(rb.SANS_FAMILY)
+        font.setPixelSize(18)
+        for width, height in ((500, 700), (320, 410), (700, 300)):
+            for chapter in book.chapters[:3]:
+                pages = rb.paginate(chapter, font, rb.QtGui.QColor("#888"), width, height, store)
+                starts = [rb.page_start(p) for p in pages]
+                self.assertEqual(starts, sorted(starts))
+                self.assertEqual(len(set(starts)), len(starts))
+                seen = {}
+                for page in pages:
+                    for piece in page:
+                        if isinstance(piece, rb.Lines):
+                            bottom = piece.y + piece.block.bottoms[piece.last] - piece.block.tops[piece.first]
+                            for i in range(piece.first, piece.last + 1):
+                                seen.setdefault(id(piece.block), []).append(i)
+                        else:
+                            bottom = piece.y + piece.height
+                            self.assertLessEqual(piece.width, width)
+                        self.assertLessEqual(bottom, height)
+                for lines in seen.values():
+                    self.assertEqual(lines, list(range(len(lines))))            # each line once, in order
+                self.assertEqual(rb.page_for(pages, starts[-1]), len(pages) - 1)
+                self.assertEqual(rb.page_for(pages, 1 << 30), len(pages) - 1)
+
+    def test_the_characters_of_a_block_are_counted_as_the_layout_counts_them(self):
+        block = rb.TextBlock([rb.Para("Titre", rb.HEADING), rb.Para("Un 😀 deux"), rb.Para("Trois\nquatre")])
+        font = rb.QtGui.QFont(rb.SANS_FAMILY)
+        font.setPixelSize(16)
+        laid = rb.LaidBlock(block, font, rb.QtGui.QColor("#888"), 300)
+        # the two em spaces of the third paragraph's indent, twice (it holds a line break)
+        self.assertEqual(len(laid.layout.text().encode("utf-16-le")) // 2, block.length - 1 + 4)
+
+
+class Credentials(unittest.TestCase):
+    def test_export_merges_and_import_reads_our_section_or_a_neighbour_s(self):
+        target = path("cred.json")
+        with open(target, "w") as fh:
+            json.dump({"format": "readers-credentials", "version": 1, "readers-notes": {"server": "https://dav.example/", "folder": "notes", "username": "u", "password": "p"}}, fh)
+        cfg = {"share": "", "url": "", "username": "", "password": ""}
+        self.assertTrue(rb.import_credentials(cfg, target))             # from a neighbour
+        self.assertEqual((cfg["url"], cfg["username"], cfg["password"]), ("https://dav.example/", "u", "p"))
+        rb.export_credentials({"share": "https://kdrive.infomaniak.com/app/share/1/ab-cd", "url": "", "username": "", "password": ""}, target)
+        with open(target) as fh:
+            data = json.load(fh)
+        self.assertEqual(data["readers-books"], {"share": "https://kdrive.infomaniak.com/app/share/1/ab-cd"})
+        self.assertIn("readers-notes", data)
+        self.assertFalse(rb.import_credentials(cfg, target))
+        self.assertEqual((cfg["share"], cfg["url"], cfg["password"]), ("https://kdrive.infomaniak.com/app/share/1/ab-cd", "", ""))
+        with open(path("other.json"), "w") as fh:
+            fh.write('{"hello": 1}')
+        with self.assertRaises(rb.NotCredentials):
+            rb.import_credentials(cfg, path("other.json"))
+        with self.assertRaises(rb.NotCredentials):
+            rb.export_credentials(cfg, path("other.json"))
+
+    def test_what_the_drive_says_of_a_book(self):
+        b = {"name": "Simenon - Le_chien_jaune.epub", "folder": "Romans/Maigret"}
+        self.assertEqual((rb.remote_title(b), rb.remote_author(b), rb.remote_folder_name(b)),
+                         ("Simenon - Le chien jaune", "Simenon", "Maigret"))
+        self.assertEqual(rb.remote_author({"name": "Sans auteur.epub", "folder": "Romans/Maigret"}), "Maigret")
+        self.assertTrue(rb.skip_folder(".cache") and rb.skip_folder("Trash") and not rb.skip_folder("Livres"))
+        self.assertEqual([rb.n_books(n) for n in (1, 2)], ["1 book", "2 books"] if rb.LANG == "en" else [rb.n_books(1), rb.n_books(2)])
+
+
+MULTISTATUS = b"""<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+ <D:response><D:href>/dav/</D:href><D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat></D:response>
+ <D:response><D:href>/dav/Romans/</D:href><D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype>
+   <D:getlastmodified>Thu, 08 Oct 2026 10:00:00 GMT</D:getlastmodified></D:prop></D:propstat></D:response>
+ <D:response><D:href>/dav/.cache/</D:href><D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat></D:response>
+ <D:response><D:href>/dav/Un%20livre%20%2B%20un.epub</D:href><D:propstat><D:prop><D:resourcetype/>
+   <D:getcontentlength>1234567</D:getcontentlength><D:getlastmodified>Thu, 08 Oct 2026 10:00:00 GMT</D:getlastmodified></D:prop></D:propstat></D:response>
+ <D:response><D:href>/dav/notes.txt</D:href><D:propstat><D:prop><D:resourcetype/><D:getcontentlength>3</D:getcontentlength></D:prop></D:propstat></D:response>
+</D:multistatus>"""
+
+
+class FakeDrive:
+    """A drive of three folders that refuses the login until told otherwise, and one folder
+    that fails twice before it answers."""
+    def __init__(self):
+        self.locked = False
+        self.calls = {}
+
+    def roots(self):
+        return ["/"]
+
+    def list_all(self):
+        return None
+
+    def list(self, folder):
+        self.calls[folder] = self.calls.get(folder, 0) + 1
+        if self.locked:
+            raise rb.WrongLogin("wrong login")
+        if folder == "/b" and self.calls[folder] < 3:
+            raise IOError("HTTP 503")
+        if folder == "/broken":
+            raise IOError("HTTP 500")
+        tree = {"/": (["/a", "/b", "/broken"], []), "/a": ([], [self.book("a", "Un.epub")]), "/b": ([], [self.book("b", "Deux.epub"), self.book("b", "Trois.mobi")])}
+        return tree[folder]
+
+    @staticmethod
+    def book(folder, name):
+        return {"name": name, "folder": folder, "ref": folder + "/" + name, "size": 1, "modified": 0}
+
+
+class Drive(unittest.TestCase):
+    def test_a_webdav_answer(self):
+        dav = rb.WebDav("https://example.org/dav", "u", "p")
+        import io
+        items = dav._parse(io.BytesIO(MULTISTATUS), "https://example.org/dav/")
+        self.assertEqual([i[0] for i in items if i[1]], ["https://example.org/dav/Romans/", "https://example.org/dav/.cache/"])
+        books = [b for b in (dav._book(i) for i in items if not i[1]) if b]
+        self.assertEqual(len(books), 1)
+        self.assertEqual((books[0]["name"], books[0]["folder"], books[0]["size"]), ("Un livre + un.epub", "", 1234567))
+        self.assertEqual(books[0]["modified"], 1791453600000)
+        self.assertEqual(books[0]["ref"], "https://example.org/dav/Un%20livre%20%2B%20un.epub")
+
+    def scan(self, remote, drive, cfg, fresh):
+        original, rb.remote_for = rb.remote_for, lambda _cfg: drive
+        pause, rb.RETRY_PAUSE = rb.RETRY_PAUSE, 0.01
+        try:
+            remote.scan(cfg, fresh)
+            remote.thread.join(20)
+        finally:
+            rb.remote_for, rb.RETRY_PAUSE = original, pause
+
+    def test_a_scan_retries_notes_what_failed_and_carries_on_after_a_refused_login(self):
+        cfg = {"share": "", "url": "https://example.org/dav", "username": "u", "password": "p"}
+        drive, remote = FakeDrive(), rb.RemoteLibrary()
+        remote.forget()
+        drive.locked = True
+        self.scan(remote, drive, cfg, True)
+        self.assertIsInstance(remote.error, rb.WrongLogin)
+        self.assertFalse(remote.index["complete"])
+        self.assertEqual(remote.index["frontier"], ["/"])           # not lost: this is where it carries on
+        drive.locked = False
+        self.assertTrue(remote.matches(cfg))
+        self.scan(remote, drive, cfg, False)
+        self.assertIsNone(remote.error)
+        self.assertTrue(remote.index["complete"])
+        self.assertEqual(sorted(b["name"] for b in remote.index["books"]), ["Deux.epub", "Trois.mobi", "Un.epub"])
+        self.assertEqual((remote.index["failed"], remote.index["folders"], drive.calls["/b"]), (["/broken"], 3, 3))
+        self.assertEqual(remote.folders(), [("a", 1), ("b", 2)])
+        self.assertEqual(rb.RemoteLibrary().index["failed"], ["/broken"])       # and it is on disk
+
+
+if __name__ == "__main__":
+    unittest.main()

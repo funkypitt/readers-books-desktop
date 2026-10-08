@@ -1,0 +1,67 @@
+# Reader's Books (desktop)
+
+A shelf as a plain list; books as pages of text cut at whole lines, turned by a click or a key.
+EPUB, MOBI, FB2, TXT; the place in each book is kept. No store, no account; the network is used
+only if you set up a library on your own drive. The desktop twin of
+[Reader's Books for Android](https://github.com/funkypitt/readers-books): the same shelf, the same
+reader, the same library, the same wording.
+
+<img src="docs/capture-shelf.png" width="45%"> <img src="docs/capture-page.png" width="45%">
+
+## Key points
+
+* The shelf lists title, how far you are, when you last opened it. Click to read; right click for
+  chapters or to remove the book.
+* The right half of the window turns forward, the left half back; so do the arrow keys, the space
+  bar, Page Up/Down and the wheel. A right click, the ⋯ in the corner or the M key opens the menu:
+  chapters, larger or smaller text (+ and − do it too), book text in sans-serif or serif
+  (Literata), back to the shelf, remove. Esc goes back.
+* Add a book from the shelf (Ctrl+O), by dropping the file on the window, or from a file manager
+  ("open with"). Books are copied into the app, so the original can move.
+* The position is kept per book and survives a change of text size or window. The text sits in a
+  column no wider than a comfortable line, whatever the window. The screen stays awake while a
+  page is open, until fifteen minutes after the last turn (where the system lets a program ask).
+* Pictures in EPUBs are shown in the page, scaled to the text width and never cut; styles and
+  footnote links are dropped. MOBI means PalmDoc; no PDF.
+* A magazine issue (an EPUB whose contents page carries a section, a title and an author per
+  article, as the newspapers pipeline writes them) opens on its contents: sections, titles,
+  authors and cover pictures. An article is a chapter; back returns to the contents.
+* Optional library: the e-books kept on a drive (a public kDrive share link, or any WebDAV
+  address with a username and an application password, kDrive included), listed by folder and
+  then by name or by date, or all in one list by date, name, author or last opened (the author
+  is what precedes " - " in the file name, else the folder's name). Nothing is downloaded until
+  you click a book. A scan that is stopped, or cut short by closing the window, carries on
+  where it was. The account can be exported and imported as the Reader's credentials file shared
+  by the other Reader's apps (also `--export-credentials FILE` / `--import-credentials FILE`).
+* Six languages (English, French, German, Spanish, Portuguese, Russian), white on black or black
+  on white, three sizes for the lists.
+
+What the phone has and a computer has no use for is left out: the home-screen widget and the
+haptic tick.
+
+## Install
+
+    sudo apt install ./readers-books_1.0.0_all.deb     # Debian, Ubuntu, Pop!_OS
+    cd packaging && makepkg -si                         # Arch, Manjaro
+
+Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests).
+
+## Where things are kept
+
+`~/.local/share/readers-books/` holds the books of the shelf, `library.json` (the shelf and the
+place in each book) and the list of the drive's books; `~/.config/readers-books/config.json` holds
+the settings and the library's account, readable by your account only.
+
+## Tests
+
+    python3 tests/test_books.py
+
+They run on books made up by `tests/make_books.py`.
+
+## Crédits / Credits
+
+© 2026 Pierre Gallaz. Développé avec [Claude Code](https://claude.com/claude-code) (Anthropic).
+Licence MIT, voir `LICENSE`. Polices : Roboto (Apache 2.0), Literata (SIL OFL 1.1), voir `packaging/fonts`.
+
+© 2026 Pierre Gallaz. Developed with [Claude Code](https://claude.com/claude-code) (Anthropic).
+MIT licence, see `LICENSE`. Fonts: Roboto (Apache 2.0), Literata (SIL OFL 1.1), see `packaging/fonts`.

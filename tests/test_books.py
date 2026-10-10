@@ -314,8 +314,13 @@ class Highlights(unittest.TestCase):
         self.assertIsNone(rb.notes_account(dict(cfg, notes_url="")))
         self.assertEqual(rb.notes_account(dict(cfg, notes_username="n", notes_password="q")), ("https://dav.example/Notes/", "n", "q"))
         entry = {"id": "x", "source": "https://dav.example/Livres/Un.epub"}
-        self.assertEqual(rb.sidecar_address(cfg, entry), "https://dav.example/Livres/Un.epub.highlights.json")
-        self.assertIsNone(rb.sidecar_address(dict(cfg, share="https://kdrive.infomaniak.com/app/share/1/ab"), entry))
+        self.assertEqual(rb.sidecar_address(cfg, entry), ("https://dav.example/Livres/Un.epub.highlights.json", "u", "p"))
+        # a share link cannot be written to: the file then lies next to the note, when there is a notes folder
+        shared = dict(cfg, share="https://kdrive.infomaniak.com/app/share/1/ab")
+        book = {"id": "x", "source": "4242", "sourceName": "Deux: livres.epub"}
+        self.assertEqual(rb.sidecar_address(shared, book),
+                         ("https://dav.example/Notes/Reader%27s%20Books/Deux%20livres.highlights.json", "u", "p"))
+        self.assertIsNone(rb.sidecar_address(dict(shared, notes_url=""), book))
         self.assertIsNone(rb.sidecar_address(cfg, {"id": "x", "source": None}))
         text = json.dumps({"format": "readers-credentials", "readers-notes": {"server": "https://dav.example", "folder": "Mes notes", "username": "n", "password": "q"}})
         self.assertEqual(rb.read_notes_account(text), {"notes_url": "https://dav.example/Mes%20notes/", "notes_username": "n", "notes_password": "q"})

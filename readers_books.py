@@ -65,7 +65,7 @@ STRINGS = {
   "same as the library": "comme la bibliothèque",
   "username for the notes": "nom d'utilisateur pour les notes",
   "password for the notes": "mot de passe pour les notes",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Surlignages : dans un livre de la bibliothèque, glissez sur un passage pour le surligner, avec un commentaire si vous le voulez ; un clic sur un surlignage montre son commentaire. Ils suivent le livre sur vos autres appareils quand la bibliothèque est une adresse WebDAV (on ne peut pas écrire dans un lien de partage : ils restent alors sur cet ordinateur, et le menu du livre les exporte). Avec l'adresse WebDAV du dossier de Reader's Notes donnée ci-dessous, une note par livre reprend ses surlignages dans Reader's Notes.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Surlignages : dans un livre de la bibliothèque, glissez sur un passage pour le surligner, avec un commentaire si vous le voulez ; un clic sur un surlignage montre son commentaire. Ils suivent le livre sur vos autres appareils quand la bibliothèque est une adresse WebDAV, ou quand le dossier de Reader's Notes est donné ci-dessous ; sinon ils restent sur cet ordinateur. Le menu du livre les exporte. Avec l'adresse WebDAV du dossier de Reader's Notes, une note par livre reprend ses surlignages dans Reader's Notes.",
   "yesterday": "hier",
   "this file could not be read": "ce fichier n'a pas pu être lu",
   "+ open a book": "+ ouvrir un livre",
@@ -149,7 +149,7 @@ STRINGS = {
   "same as the library": "wie die Bibliothek",
   "username for the notes": "Benutzername für die Notizen",
   "password for the notes": "Passwort für die Notizen",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Markierungen: Ziehen Sie in einem Buch aus der Bibliothek über eine Stelle, um sie zu markieren, auf Wunsch mit Kommentar; ein Klick auf eine Markierung zeigt ihren Kommentar. Sie folgen dem Buch auf Ihre anderen Geräte, wenn die Bibliothek eine WebDAV-Adresse ist (in einen Freigabelink kann nicht geschrieben werden: sie bleiben dann auf diesem Computer, und das Menü des Buchs exportiert sie). Mit der unten angegebenen WebDAV-Adresse des Ordners von Reader's Notes führt eine Notiz pro Buch seine Markierungen in Reader's Notes auf.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Markierungen: Ziehen Sie in einem Buch aus der Bibliothek über eine Stelle, um sie zu markieren, auf Wunsch mit Kommentar; ein Klick auf eine Markierung zeigt ihren Kommentar. Sie folgen dem Buch auf Ihre anderen Geräte, wenn die Bibliothek eine WebDAV-Adresse ist oder wenn unten der Ordner von Reader's Notes angegeben ist; sonst bleiben sie auf diesem Computer. Das Menü des Buchs exportiert sie. Mit der WebDAV-Adresse des Ordners von Reader's Notes führt eine Notiz pro Buch seine Markierungen in Reader's Notes auf.",
   "yesterday": "gestern",
   "this file could not be read": "diese Datei konnte nicht gelesen werden",
   "+ open a book": "+ ein Buch öffnen",
@@ -234,7 +234,7 @@ STRINGS = {
   "same as the library": "como la biblioteca",
   "username for the notes": "usuario para las notas",
   "password for the notes": "contraseña para las notas",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Resaltados: en un libro de la biblioteca, arrastra sobre un pasaje para resaltarlo, con un comentario si quieres; un clic en un resaltado muestra su comentario. Siguen al libro en tus otros dispositivos cuando la biblioteca es una dirección WebDAV (en un enlace compartido no se puede escribir: entonces se quedan en este ordenador, y el menú del libro los exporta). Con la dirección WebDAV de la carpeta de Reader's Notes indicada abajo, una nota por libro recoge sus resaltados en Reader's Notes.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Resaltados: en un libro de la biblioteca, arrastra sobre un pasaje para resaltarlo, con un comentario si quieres; un clic en un resaltado muestra su comentario. Siguen al libro en tus otros dispositivos cuando la biblioteca es una dirección WebDAV, o cuando se indica abajo la carpeta de Reader's Notes; si no, se quedan en este ordenador. El menú del libro los exporta. Con la dirección WebDAV de la carpeta de Reader's Notes, una nota por libro recoge sus resaltados en Reader's Notes.",
   "yesterday": "ayer",
   "this file could not be read": "no se pudo leer este archivo",
   "+ open a book": "+ abrir un libro",
@@ -319,7 +319,7 @@ STRINGS = {
   "same as the library": "como a biblioteca",
   "username for the notes": "utilizador para as notas",
   "password for the notes": "palavra-passe para as notas",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Destaques: num livro da biblioteca, arraste sobre uma passagem para a destacar, com um comentário se quiser; um clique num destaque mostra o seu comentário. Acompanham o livro nos seus outros aparelhos quando a biblioteca é um endereço WebDAV (não se pode escrever numa ligação de partilha: ficam então neste computador, e o menu do livro exporta-os). Com o endereço WebDAV da pasta do Reader's Notes indicado abaixo, uma nota por livro reúne os seus destaques no Reader's Notes.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Destaques: num livro da biblioteca, arraste sobre uma passagem para a destacar, com um comentário se quiser; um clique num destaque mostra o seu comentário. Acompanham o livro nos seus outros aparelhos quando a biblioteca é um endereço WebDAV, ou quando a pasta do Reader's Notes é indicada abaixo; caso contrário ficam neste computador. O menu do livro exporta-os. Com o endereço WebDAV da pasta do Reader's Notes, uma nota por livro reúne os seus destaques no Reader's Notes.",
   "yesterday": "ontem",
   "this file could not be read": "não foi possível ler este ficheiro",
   "+ open a book": "+ abrir um livro",
@@ -404,7 +404,7 @@ STRINGS = {
   "same as the library": "как у библиотеки",
   "username for the notes": "имя пользователя для заметок",
   "password for the notes": "пароль для заметок",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Выделения: в книге из библиотеки проведите мышью по отрывку, чтобы выделить его, при желании с комментарием; щелчок по выделению показывает комментарий. Они следуют за книгой на другие ваши устройства, если библиотека задана адресом WebDAV (в общую ссылку писать нельзя: тогда они остаются на этом компьютере, а меню книги их экспортирует). Если ниже указан адрес WebDAV папки Reader's Notes, заметка для каждой книги перечисляет её выделения в Reader's Notes.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Выделения: в книге из библиотеки проведите мышью по отрывку, чтобы выделить его, при желании с комментарием; щелчок по выделению показывает комментарий. Они следуют за книгой на другие ваши устройства, если библиотека задана адресом WebDAV или если ниже указана папка Reader's Notes; иначе они остаются на этом компьютере. Меню книги их экспортирует. С адресом WebDAV папки Reader's Notes заметка для каждой книги перечисляет её выделения в Reader's Notes.",
   "yesterday": "вчера",
   "this file could not be read": "этот файл не удалось прочитать",
   "+ open a book": "+ открыть книгу",
@@ -1130,11 +1130,12 @@ class Library:
     def path(self, entry):
         return os.path.join(BOOKS_DIR, entry["fileName"])
 
-    def save_position(self, book_id, chapter, char_offset, progress):
+    def save_position(self, book_id, chapter, char_offset, progress, when=None):
+        """`when` is given for a place read on another device: it keeps the date it was read."""
         with self.lock:
             e = self.get(book_id)
             if e:
-                e.update(chapter=chapter, charOffset=char_offset, progress=progress, opened=_now())
+                e.update(chapter=chapter, charOffset=char_offset, progress=progress, opened=when or _now())
                 self._save()
 
     def remove(self, book_id):
@@ -1782,36 +1783,88 @@ def _dav_session(username, password):
 
 
 def sidecar_address(cfg, entry):
-    """Where the highlights of a book lie on the drive, or None when they cannot (a share link,
-    a book that did not come from the library)."""
+    """Where the highlights of a book are kept for every device to fold its own into, as
+    (address, username, password): next to the book when the library is a WebDAV address; else
+    (a share link cannot be written to) next to the book's note in the Reader's Notes folder,
+    when one is named; else None — they then stay on this computer."""
     source = entry.get("source") or ""
-    if cfg.get("share", "").strip() or not source.startswith(("http://", "https://")) or not library_configured(cfg):
+    if not source:
         return None
-    return source + HIGHLIGHTS_SUFFIX
+    if not cfg.get("share", "").strip() and source.startswith(("http://", "https://")) and library_configured(cfg):
+        return source + HIGHLIGHTS_SUFFIX, cfg["username"].strip(), cfg["password"]
+    account = notes_account(cfg)
+    if account:
+        name = note_file_name(book_file_name(entry))[:-4]
+        return account[0] + quote(BOOKS_FOLDER, safe="") + "/" + quote(name + HIGHLIGHTS_SUFFIX, safe=""), account[1], account[2]
+    return None
 
 
-def sync_sidecar(cfg, entry, highlights):
-    """Ours and the drive's folded together and written back where they differ. Blocking."""
-    address = sidecar_address(cfg, entry)
-    if not address:
-        return highlights
-    session = _dav_session(cfg["username"].strip(), cfg["password"])
+def position_of(entry):
+    """Where a book was left and when, as it travels: None when it was never opened."""
+    if not entry.get("opened"):
+        return None
+    return {"chapter": entry.get("chapter", 0), "charOffset": entry.get("charOffset", 0),
+            "progress": entry.get("progress", 0), "modified": entry["opened"]}
+
+
+def sync_sidecar(cfg, entry, highlights, name=None, position=None):
+    """Ours and the drive's folded together and written back where they differ: the highlights
+    one by one, and the place in the book, where the one read last wins. Returns (highlights,
+    whether the drive's highlights had to be written, the place, whether that place is the
+    drive's and newer than ours). Blocking."""
+    place = sidecar_address(cfg, dict(entry, sourceName=name) if name else entry)
+    if not place:
+        return highlights, False, position, False
+    address, username, password = place
+    session = _dav_session(username, password)
     r = session.get(address, timeout=(30, 60))
-    theirs = []
+    theirs, there = [], None
     if r.status_code != 404:
         _check(r)
         try:
             data = r.json()
             if isinstance(data, dict) and data.get("format") == HIGHLIGHTS_FORMAT:
                 theirs = [h for h in data.get("highlights", []) if isinstance(h, dict) and h.get("id")]
+                if isinstance(data.get("position"), dict) and isinstance(data["position"].get("modified"), int):
+                    there = data["position"]
         except ValueError:
             theirs = []
     merged = merge_highlights(highlights, theirs)
-    if merged != merge_highlights(theirs, []) and (merged or r.status_code != 404):
-        body = json.dumps({"format": HIGHLIGHTS_FORMAT, "version": 1, "book": book_file_name(entry),
-                           "highlights": merged}, ensure_ascii=False, indent=1).encode("utf-8")
-        _check(session.put(address, data=body, headers={"Content-Type": "application/json"}, timeout=(30, 60)))
-    return merged
+    marks = merged != merge_highlights(theirs, []) and bool(merged or r.status_code != 404)
+    ours_newer = bool(position) and (there is None or position["modified"] > there["modified"])
+    theirs_newer = there is not None and (not position or there["modified"] > position["modified"])
+    best = position if ours_newer or there is None else there
+    if not marks and not ours_newer:
+        return merged, False, best, theirs_newer
+    body = {"format": HIGHLIGHTS_FORMAT, "version": 1, "book": name or book_file_name(entry), "highlights": merged}
+    if best:
+        body["position"] = {k: best.get(k, 0) for k in ("chapter", "charOffset", "progress", "modified")}
+    body = json.dumps(body, ensure_ascii=False, indent=1).encode("utf-8")
+    r = session.put(address, data=body, headers={"Content-Type": "application/json"}, timeout=(30, 60))
+    if r.status_code in (404, 409):         # the folder next to the note is not there yet
+        made = session.request("MKCOL", address.rsplit("/", 1)[0] + "/", timeout=(30, 60))
+        if made.status_code not in (201, 405, 301):
+            _check(made)
+        r = session.put(address, data=body, headers={"Content-Type": "application/json"}, timeout=(30, 60))
+    _check(r)
+    return merged, marks, best, theirs_newer
+
+
+def sync_book(cfg, entry, name, position=None):
+    """One book brought in step with the drive: its highlights, its note in Reader's Notes, the
+    place it was left at. Returns (highlights, the drive's place when it is the newer one, else
+    None), or None when nothing here was to be kept (changed meanwhile). Blocking."""
+    before, dirty = load_highlights(entry)
+    merged, marks, best, theirs_newer = sync_sidecar(cfg, entry, before, name, position or position_of(entry))
+    # The note is written again whenever the drive's highlights were: two devices that met there
+    # at the same moment leave a note that lacks what one of them had.
+    if dirty or marks or merged != before:
+        write_note(cfg, name, merged)
+    if load_highlights(entry)[0] != before:         # changed here meanwhile: the next turn takes it
+        return None
+    if dirty or merged != before:
+        save_highlights(entry, merged, False)
+    return merged, (best if theirs_newer else None)
 
 
 def notes_account(cfg):
@@ -2466,6 +2519,7 @@ class Reader(QtWidgets.QWidget):
         self.highlights = []        # every highlight of the book, removed ones included
         self.shown = []             # those to draw, where their words are
         self.texts = {}             # chapter -> Text16
+        self.turns = 0              # pages turned since the book was opened
         self.pressed = None         # where the button went down
         self.selecting = None       # (from, to) in the chapter, while the mouse is dragged
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
@@ -2478,6 +2532,8 @@ class Reader(QtWidgets.QWidget):
         self.highlights, self.shown, self.texts, self.pressed, self.selecting = [], [], {}, None, None
         self.images = ImageStore(self.main.library.path(entry)) if entry["format"] == EPUB else None
         self.chapter, self.wanted, self.page = entry.get("chapter", 0), entry.get("charOffset", 0), 0
+        self.turns = 0
+        left_at = position_of(entry)        # before the first page drawn marks it as read just now
         book_id = entry["id"]
 
         def done(book, error):
@@ -2488,13 +2544,15 @@ class Reader(QtWidgets.QWidget):
                 self.chapter = min(max(0, self.chapter), len(book.chapters) - 1)
                 if entry.get("source"):
                     self.set_highlights(load_highlights(entry)[0])
-                    self.main.sync_highlights(entry)
+                    self.main.sync_highlights(entry, left_at, opening=True)
             self.update()
 
         self.main.run(lambda: self.main.library.book(entry), done)
         self.update()
 
     def close_book(self):
+        if self.entry and self.book and self.turns:
+            self.main.sync_place(self.entry["id"])      # where it was left, for the other devices
         self.entry = self.book = self.pages = self.key = None
         self.highlights, self.shown, self.texts = [], [], {}
 
@@ -2632,6 +2690,7 @@ class Reader(QtWidgets.QWidget):
         pages = self.layout_pages()
         if not pages:
             return
+        self.turns += 1
         self.main.turned()
         if forward:
             if self.page + 1 < len(pages):
@@ -2814,6 +2873,10 @@ class Main(QtWidgets.QMainWindow):
         self.poll = QtCore.QTimer(self)
         self.poll.timeout.connect(self.watch_scan)
         self.poll.start(400)
+        self.place_timer = QtCore.QTimer(self)
+        self.place_timer.setSingleShot(True)
+        self.place_timer.timeout.connect(lambda: self.sync_place())
+        QtCore.QTimer.singleShot(0, self.sync_shelf)
         self.sleep_timer = QtCore.QTimer(self)
         self.sleep_timer.setSingleShot(True)
         self.sleep_timer.timeout.connect(lambda: self.awake.set(False))
@@ -3154,8 +3217,14 @@ class Main(QtWidgets.QMainWindow):
 
     # ---- the reader's menu, the chapters ----
 
+    def sync_place(self, book_id=None):
+        entry = self.library.get(book_id or (self.reader.entry or {}).get("id", ""))
+        if entry:
+            self.sync_highlights(entry)
+
     def turned(self):
         """The screen stays awake while a page is open, until fifteen minutes after the last turn."""
+        self.place_timer.start(30 * 1000)       # and the place goes to the drive once the reading pauses
         if self.cfg.get("keep_awake", True):
             self.awake.set(True)
             self.sleep_timer.start(15 * 60 * 1000)
@@ -3260,37 +3329,73 @@ class Main(QtWidgets.QMainWindow):
         self.reader.set_highlights(highlights)
         self.sync_highlights(entry)
 
-    def sync_highlights(self, entry):
-        """The book's highlights folded with those on the drive, and its note written in Reader's
-        Notes — in the background; what could not be sent is sent the next time."""
+    def sync_highlights(self, entry, position=None, opening=False):
+        """One book brought in step with the drive, in the background: its highlights, its note
+        in Reader's Notes, the place it was left at. `position` is the place to speak for (the one
+        the book had before it was opened, when it is being opened); what could not be sent is
+        sent the next time."""
         key = highlight_key(entry)
+        if not entry.get("source") or (not sidecar_address(self.cfg, entry) and not notes_account(self.cfg)):
+            return
         if key in self.syncing:
             self.sync_again.add(key)
             return
-        if not sidecar_address(self.cfg, entry) and not notes_account(self.cfg):
-            return
         self.syncing.add(key)
-        cfg = dict(self.cfg)
-        before, dirty = load_highlights(entry)
+        cfg, book_id = dict(self.cfg), entry["id"]
         name = book_file_name(entry, self.remote.index["books"])
+        snapshot = dict(entry)
 
-        def job():
-            merged = sync_sidecar(cfg, entry, before)
-            if dirty or merged != before:
-                write_note(cfg, name, merged)
-            return merged
-
-        def done(merged, error):
+        def done(result, error):
             self.syncing.discard(key)
-            if error is None:
-                now, _dirty = load_highlights(entry)
-                if now == before:                   # nothing was changed here meanwhile
-                    save_highlights(entry, merged, False)
-                    if merged != before and self.reader.entry and highlight_key(self.reader.entry) == key:
-                        self.reader.set_highlights(merged)
+            if error is None and result is not None:
+                self.synced(book_id, key, result, opening)
             if key in self.sync_again:
                 self.sync_again.discard(key)
-                self.sync_highlights(entry)
+                now = self.library.get(book_id)
+                if now:
+                    self.sync_highlights(now)
+
+        self.run(lambda: sync_book(cfg, snapshot, name, position), done)
+
+    def synced(self, book_id, key, result, opening=False):
+        """What a sync brought: highlights made elsewhere, and a place read later elsewhere —
+        taken for the shelf, and for the page itself when the book is just being opened."""
+        merged, there = result
+        reader = self.reader
+        reading = reader.entry is not None and highlight_key(reader.entry) == key
+        if reading and merged != reader.highlights:
+            reader.set_highlights(merged)
+        if there and self.library.get(book_id):
+            if reading and not (opening and reader.turns == 0):
+                return                              # being read here: this page is the newer place
+            self.library.save_position(book_id, there["chapter"], there["charOffset"], there.get("progress", 0), there["modified"])
+            if reading:
+                reader.go_to(there["chapter"], there["charOffset"])
+            elif self.screen[0] == SHELF:
+                self.show_screen()
+
+    def sync_shelf(self):
+        """At the start: every book of the shelf that came from the library, one after the
+        other, so that the shelf says how far each one is wherever it was last read."""
+        cfg = dict(self.cfg)
+        books = [dict(b) for b in self.library.books if b.get("source") and (sidecar_address(cfg, b) or notes_account(cfg))]
+        if not books:
+            return
+        index = self.remote.index["books"]
+
+        def job():
+            out = []
+            for b in books:
+                try:
+                    out.append((b["id"], highlight_key(b), sync_book(cfg, b, book_file_name(b, index))))
+                except Exception:
+                    pass
+            return out
+
+        def done(results, _error):
+            for book_id, key, result in results or []:
+                if result is not None:
+                    self.synced(book_id, key, result)
 
         self.run(job, done)
 
@@ -3608,6 +3713,8 @@ class Main(QtWidgets.QMainWindow):
 
     def closeEvent(self, event):
         self.reader.remember()
+        self.place_timer.stop()
+        self.reader.close_book()
         self.awake.set(False)
         self.remote.cancel()
         g = self.geometry()
@@ -3628,7 +3735,7 @@ def _after(values, current):
 
 
 def HIGHLIGHTS_HINT():
-    return _("Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.")
+    return _("Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.")
 
 
 def LIBRARY_HINT():

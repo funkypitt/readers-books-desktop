@@ -21,11 +21,16 @@ reader, the same library, the same wording.
   or "comment". A highlight is a grey band behind the words, with a line under it when it
   carries a comment; a click on it shows the comment, changes it or removes the highlight. They
   are kept in a file next to the book on the drive (`<book file>.highlights.json`) when the
-  library is a WebDAV address, so every device that opens the book has them; with a share link
-  they stay on this computer and the book's menu exports them as text. Given the WebDAV address
-  of the Reader's Notes folder, the app also keeps a note per book there (folder `Reader's
-  Books`): the passages between quotation marks, in the order of the book, each followed by its
-  comment — Reader's Notes shows it read-only.
+  library is a WebDAV address, so every device that opens the book has them. Given the WebDAV
+  address of the Reader's Notes folder, the app also keeps a note per book there (folder
+  `Reader's Books`): the passages between quotation marks, in the order of the book, each
+  followed by its comment — Reader's Notes shows it read-only. With a share link, which cannot
+  be written to, that file lies next to the note instead; with neither, highlights stay on this
+  computer and the book's menu exports them as text.
+* The same file carries the place the book was left at: a book of the library opens where it was
+  last read, on whichever device, and the shelf says how far it is. It is exchanged when the app
+  starts, when a book is opened, at each highlight, half a minute after the last page turned and
+  on leaving the book.
 * Add a book from the shelf (Ctrl+O), by dropping the file on the window, or from a file manager
   ("open with"). Books are copied into the app, so the original can move.
 * The position is kept per book and survives a change of text size or window. The text sits in a

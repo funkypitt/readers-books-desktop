@@ -26,7 +26,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -1218,6 +1218,7 @@ def _base36(n):
 # ------------------------------------------------------------------------------------------
 
 BOOK_EXTENSIONS = ("epub", "mobi", "azw", "azw3", "fb2")     # no PDF; no TXT, a drive is full of them
+TRANSCRIPTS_FOLDER = "transcriptions"       # where Reader's Podcasts puts what was said in an episode, a small book each
 MAX_FOLDERS, PARALLEL, ATTEMPTS, RETRY_PAUSE = 20000, 3, 3, 2      # the pause grows: 2 s, then 8 s
 
 
@@ -1412,6 +1413,7 @@ class RemoteLibrary:
         self.thread = None
         self.stop = threading.Event()
         self.changed = 0            # bumped at every step, for the window to notice
+        self.refreshing = False
 
     @property
     def scanning(self):
@@ -1446,6 +1448,42 @@ class RemoteLibrary:
         self.stop.set()
         self.progress = None
         self.changed += 1
+
+    def refresh_folder(self, cfg, name=TRANSCRIPTS_FOLDER):
+        """One folder of the drive looked at again, without walking the rest: the one Reader's
+        Podcasts sends its transcripts to, so that a transcript made this morning is in the
+        library when it is opened, with no scan to ask for. In the background."""
+        remote = remote_for(cfg)
+        if remote is None or self.scanning or not self.matches(cfg) or not self.index["complete"] or self.refreshing:
+            return
+        self.refreshing = True
+        source = self.index["source"]
+
+        def run():
+            try:
+                found, queue = [], [remote.base + quote(name, safe="") + "/"]
+                while queue and len(found) < 20000:
+                    folder = queue.pop(0)
+                    try:
+                        dirs, books = remote.list(folder)
+                    except IOError as exc:
+                        if folder.endswith("/" + quote(name, safe="") + "/") and "404" in str(exc):
+                            break                   # no such folder (yet, or any more): nothing in it
+                        return                      # could not be read: what was known stays
+                    queue.extend(dirs)
+                    found.extend(books)
+                if self.scanning or self.index["source"] != source:
+                    return
+                kept = [b for b in self.index["books"] if b["folder"] != name and not b["folder"].startswith(name + "/")]
+                merged = kept + found
+                if sorted(b["ref"] for b in merged) != sorted(b["ref"] for b in self.index["books"]):
+                    self._save(dict(self.index, books=merged))
+            except Exception:
+                pass
+            finally:
+                self.refreshing = False
+
+        threading.Thread(target=run, daemon=True).start()
 
     def forget(self):
         self.cancel()
@@ -3513,6 +3551,8 @@ class Main(QtWidgets.QMainWindow):
             self.remote.scan(self.cfg, True)
         elif not self.remote.index["complete"] and self.remote.error is None:
             self.remote.scan(self.cfg, False)
+        else:
+            self.remote.refresh_folder(self.cfg)
 
     def watch_scan(self):
         if self.remote.changed != self.seen_change:

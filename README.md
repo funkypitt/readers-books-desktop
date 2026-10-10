@@ -48,6 +48,10 @@ reader, the same library, the same wording.
   the window, carries on where it was. The account can be exported and imported as the Reader's
   credentials file shared by the other Reader's apps (also `--export-credentials FILE` /
   `--import-credentials FILE`).
+* The transcripts made in Reader's Podcasts arrive by themselves: it sends each one, as a small
+  book, to a `transcriptions` folder at the top of the library (a folder per channel), and that
+  folder is looked at again every time the library is opened — no scan to ask for. They are
+  books like the others: read, highlighted, commented, with their note in Reader's Notes.
 * Six languages (English, French, German, Spanish, Portuguese, Russian), white on black or black
   on white, three sizes for the lists.
 
@@ -56,7 +60,7 @@ haptic tick.
 
 ## Install
 
-    sudo apt install ./readers-books_1.1.0_all.deb     # Debian, Ubuntu, Pop!_OS
+    sudo apt install ./readers-books_1.1.1_all.deb     # Debian, Ubuntu, Pop!_OS
     cd packaging && makepkg -si                         # Arch, Manjaro
 
 Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests).

@@ -264,6 +264,37 @@ class Drive(unittest.TestCase):
         self.assertEqual(remote.folders(), [("a", 1), ("b", 2)])
         self.assertEqual(rb.RemoteLibrary().index["failed"], ["/broken"])       # and it is on disk
 
+    def test_the_transcripts_folder_is_looked_at_again_without_a_scan(self):
+        cfg = {"url": "https://example.org/dav", "username": "u", "password": "p"}
+
+        class Drive:
+            base = "https://example.org/dav/"
+
+            def list(self, folder):
+                if folder == self.base + "transcriptions/":
+                    return [self.base + "transcriptions/Une%20cha%C3%AEne/"], []
+                if folder.endswith("/Une%20cha%C3%AEne/"):
+                    return [], [{"name": "Nouveau.epub", "folder": "transcriptions/Une chaîne", "ref": "new", "size": 1, "modified": 0}]
+                raise IOError("HTTP 404")
+
+        remote = rb.RemoteLibrary()
+        remote.index = dict(rb.EMPTY_INDEX, source=rb.source_key(cfg), scannedAt=1, books=[
+            {"name": "Roman.epub", "folder": "Romans", "ref": "r", "size": 1, "modified": 0},
+            {"name": "Parti.epub", "folder": "transcriptions/Ancien", "ref": "old", "size": 1, "modified": 0}])
+        original, rb.remote_for = rb.remote_for, lambda _cfg: Drive()
+        try:
+            remote.refresh_folder(cfg)
+            for _i in range(100):
+                if not remote.refreshing:
+                    break
+                rb.time.sleep(0.02)
+            self.assertEqual(sorted(b["ref"] for b in remote.index["books"]), ["new", "r"])
+            remote.refresh_folder(cfg, "nowhere")          # a folder that is not there takes nothing else with it
+            rb.time.sleep(0.2)
+            self.assertEqual(sorted(b["ref"] for b in remote.index["books"]), ["new", "r"])
+        finally:
+            rb.remote_for = original
+
 
 class Highlights(unittest.TestCase):
     def test_a_place_in_the_chapter_and_its_place_on_the_page(self):

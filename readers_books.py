@@ -13,18 +13,20 @@ import shutil
 import struct
 import sys
 import threading
+import uuid
 import time
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
-from urllib.parse import unquote, urljoin, urlparse
+from hashlib import sha1
+from urllib.parse import quote, unquote, urljoin, urlparse
 
 import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -44,6 +46,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 LIBRARY_FILE = os.path.join(DATA_DIR, "library.json")
 BOOKS_DIR = os.path.join(DATA_DIR, "books")
 INDEX_FILE = os.path.join(DATA_DIR, "library-index.json")
+HIGHLIGHTS_DIR = os.path.join(DATA_DIR, "highlights")
 
 # ------------------------------------------------------------------------------------------
 # Six languages, the English text as the key — the same wording as the phone
@@ -51,6 +54,18 @@ INDEX_FILE = os.path.join(DATA_DIR, "library-index.json")
 
 STRINGS = {
  "fr": {
+  "highlight": "surligner",
+  "comment": "commenter",
+  "add a comment": "ajouter un commentaire",
+  "edit the comment": "modifier le commentaire",
+  "remove the highlight": "retirer le surlignage",
+  "export the highlights": "exporter les surlignages",
+  "highlights": "surlignages",
+  "Reader's Notes folder": "dossier de Reader's Notes",
+  "same as the library": "comme la bibliothèque",
+  "username for the notes": "nom d'utilisateur pour les notes",
+  "password for the notes": "mot de passe pour les notes",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Surlignages : dans un livre de la bibliothèque, glissez sur un passage pour le surligner, avec un commentaire si vous le voulez ; un clic sur un surlignage montre son commentaire. Ils suivent le livre sur vos autres appareils quand la bibliothèque est une adresse WebDAV (on ne peut pas écrire dans un lien de partage : ils restent alors sur cet ordinateur, et le menu du livre les exporte). Avec l'adresse WebDAV du dossier de Reader's Notes donnée ci-dessous, une note par livre reprend ses surlignages dans Reader's Notes.",
   "yesterday": "hier",
   "this file could not be read": "ce fichier n'a pas pu être lu",
   "+ open a book": "+ ouvrir un livre",
@@ -123,6 +138,18 @@ STRINGS = {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Des livres gardés sur un drive, listés par dossier ; un livre n'est téléchargé que lorsqu'on clique dessus. Collez le lien d'un partage kDrive public, ou donnez l'adresse WebDAV du drive avec un nom d'utilisateur et un mot de passe d'application. Le drive est alors parcouru à la recherche de fichiers epub, mobi, azw et fb2.",
  },
  "de": {
+  "highlight": "markieren",
+  "comment": "kommentieren",
+  "add a comment": "Kommentar hinzufügen",
+  "edit the comment": "Kommentar ändern",
+  "remove the highlight": "Markierung entfernen",
+  "export the highlights": "Markierungen exportieren",
+  "highlights": "Markierungen",
+  "Reader's Notes folder": "Ordner von Reader's Notes",
+  "same as the library": "wie die Bibliothek",
+  "username for the notes": "Benutzername für die Notizen",
+  "password for the notes": "Passwort für die Notizen",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Markierungen: Ziehen Sie in einem Buch aus der Bibliothek über eine Stelle, um sie zu markieren, auf Wunsch mit Kommentar; ein Klick auf eine Markierung zeigt ihren Kommentar. Sie folgen dem Buch auf Ihre anderen Geräte, wenn die Bibliothek eine WebDAV-Adresse ist (in einen Freigabelink kann nicht geschrieben werden: sie bleiben dann auf diesem Computer, und das Menü des Buchs exportiert sie). Mit der unten angegebenen WebDAV-Adresse des Ordners von Reader's Notes führt eine Notiz pro Buch seine Markierungen in Reader's Notes auf.",
   "yesterday": "gestern",
   "this file could not be read": "diese Datei konnte nicht gelesen werden",
   "+ open a book": "+ ein Buch öffnen",
@@ -196,6 +223,18 @@ STRINGS = {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Bücher auf einem Drive, nach Ordnern aufgelistet; ein Buch wird erst heruntergeladen, wenn Sie es anklicken. Fügen Sie den Link einer öffentlichen kDrive-Freigabe ein, oder geben Sie die WebDAV-Adresse des Drives mit Benutzername und Anwendungspasswort an. Das Drive wird dann nach epub-, mobi-, azw- und fb2-Dateien durchsucht.",
  },
  "es": {
+  "highlight": "resaltar",
+  "comment": "comentar",
+  "add a comment": "añadir un comentario",
+  "edit the comment": "editar el comentario",
+  "remove the highlight": "quitar el resaltado",
+  "export the highlights": "exportar los resaltados",
+  "highlights": "resaltados",
+  "Reader's Notes folder": "carpeta de Reader's Notes",
+  "same as the library": "como la biblioteca",
+  "username for the notes": "usuario para las notas",
+  "password for the notes": "contraseña para las notas",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Resaltados: en un libro de la biblioteca, arrastra sobre un pasaje para resaltarlo, con un comentario si quieres; un clic en un resaltado muestra su comentario. Siguen al libro en tus otros dispositivos cuando la biblioteca es una dirección WebDAV (en un enlace compartido no se puede escribir: entonces se quedan en este ordenador, y el menú del libro los exporta). Con la dirección WebDAV de la carpeta de Reader's Notes indicada abajo, una nota por libro recoge sus resaltados en Reader's Notes.",
   "yesterday": "ayer",
   "this file could not be read": "no se pudo leer este archivo",
   "+ open a book": "+ abrir un libro",
@@ -269,6 +308,18 @@ STRINGS = {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Libros guardados en un drive, listados por carpeta; un libro solo se descarga cuando haces clic en él. Pega el enlace de un recurso compartido público de kDrive, o indica la dirección WebDAV del drive con un nombre de usuario y una contraseña de aplicación. Entonces se recorre el drive buscando archivos epub, mobi, azw y fb2.",
  },
  "pt": {
+  "highlight": "destacar",
+  "comment": "comentar",
+  "add a comment": "adicionar um comentário",
+  "edit the comment": "editar o comentário",
+  "remove the highlight": "retirar o destaque",
+  "export the highlights": "exportar os destaques",
+  "highlights": "destaques",
+  "Reader's Notes folder": "pasta do Reader's Notes",
+  "same as the library": "como a biblioteca",
+  "username for the notes": "utilizador para as notas",
+  "password for the notes": "palavra-passe para as notas",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Destaques: num livro da biblioteca, arraste sobre uma passagem para a destacar, com um comentário se quiser; um clique num destaque mostra o seu comentário. Acompanham o livro nos seus outros aparelhos quando a biblioteca é um endereço WebDAV (não se pode escrever numa ligação de partilha: ficam então neste computador, e o menu do livro exporta-os). Com o endereço WebDAV da pasta do Reader's Notes indicado abaixo, uma nota por livro reúne os seus destaques no Reader's Notes.",
   "yesterday": "ontem",
   "this file could not be read": "não foi possível ler este ficheiro",
   "+ open a book": "+ abrir um livro",
@@ -342,6 +393,18 @@ STRINGS = {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Livros guardados numa drive, listados por pasta; um livro só é descarregado quando clica nele. Cole a ligação de uma partilha pública kDrive, ou indique o endereço WebDAV da drive com um nome de utilizador e uma palavra-passe de aplicação. A drive é então percorrida à procura de ficheiros epub, mobi, azw e fb2.",
  },
  "ru": {
+  "highlight": "выделить",
+  "comment": "комментировать",
+  "add a comment": "добавить комментарий",
+  "edit the comment": "изменить комментарий",
+  "remove the highlight": "убрать выделение",
+  "export the highlights": "экспортировать выделения",
+  "highlights": "выделения",
+  "Reader's Notes folder": "папка Reader's Notes",
+  "same as the library": "как у библиотеки",
+  "username for the notes": "имя пользователя для заметок",
+  "password for the notes": "пароль для заметок",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Выделения: в книге из библиотеки проведите мышью по отрывку, чтобы выделить его, при желании с комментарием; щелчок по выделению показывает комментарий. Они следуют за книгой на другие ваши устройства, если библиотека задана адресом WebDAV (в общую ссылку писать нельзя: тогда они остаются на этом компьютере, а меню книги их экспортирует). Если ниже указан адрес WebDAV папки Reader's Notes, заметка для каждой книги перечисляет её выделения в Reader's Notes.",
   "yesterday": "вчера",
   "this file could not be read": "этот файл не удалось прочитать",
   "+ open a book": "+ открыть книгу",
@@ -1116,7 +1179,8 @@ class Library:
             entry = {"id": book_id, "fileName": file_name, "title": book.title, "format": fmt, "added": _now(),
                      "opened": same["opened"] if same else 0, "chapter": same["chapter"] if same else 0,
                      "charOffset": same["charOffset"] if same else 0, "progress": same["progress"] if same else 0,
-                     "magazine": book.magazine is not None, "source": source or (same.get("source") if same else None)}
+                     "magazine": book.magazine is not None, "source": source or (same.get("source") if same else None),
+                     "sourceName": display_name if source else (same.get("sourceName") if same else None)}
             if same:
                 try:
                     os.remove(self.path(same))
@@ -1558,6 +1622,234 @@ class RemoteLibrary:
 
 
 # ------------------------------------------------------------------------------------------
+# Highlights and comments, for the books of the library. A highlight is a passage of one
+# chapter — (chapter, first character, the one after the last), counted as the phone counts
+# them — with the words themselves and, if one was written, a comment.
+#
+# They travel in a file that lies next to the book on the drive, "<book file>.highlights.json",
+# when the library is a WebDAV address (a share link cannot be written to: they then stay on
+# this computer). And a note per book lists them in Reader's Notes: a plain-text file written
+# into the folder "Reader's Books" of the notes folder, which Reader's Notes shows read-only.
+# ------------------------------------------------------------------------------------------
+
+HIGHLIGHTS_FORMAT = "readers-highlights"
+HIGHLIGHTS_SUFFIX = ".highlights.json"
+BOOKS_FOLDER = "Reader's Books"
+OBJECT = "\ufffc"          # the place of a picture in the text of a chapter
+
+
+def chapter_text(chapter):
+    """The text of a chapter as its characters are counted: every paragraph followed by a line
+    break, a picture standing for one character."""
+    return "".join("".join(p.text + "\n" for p in b.paragraphs) if isinstance(b, TextBlock) else OBJECT
+                   for b in chapter.blocks)
+
+
+class Text16:
+    """A text addressed in UTF-16 units, which is how places in a book are counted."""
+    def __init__(self, text):
+        self.data = text.encode("utf-16-le")
+        self.length = len(self.data) // 2
+
+    def cut(self, start, end):
+        return self.data[2 * max(0, start):2 * max(0, end)].decode("utf-16-le", "ignore")
+
+    def is_word(self, i):
+        c = self.cut(i, i + 1)
+        return bool(c) and (c.isalnum() or c in "'’-" or 0xD800 <= ord(c[0]) <= 0xDFFF)
+
+    def words(self, start, end):
+        """The passage widened to whole words, and narrowed to what is not blank at its ends."""
+        start, end = max(0, min(start, end)), min(self.length, max(start, end))
+        while start > 0 and self.is_word(start - 1) and self.is_word(start):
+            start -= 1
+        while end < self.length and end > 0 and self.is_word(end - 1) and self.is_word(end):
+            end += 1
+        while start < end and not self.cut(start, start + 1).strip():
+            start += 1
+        while end > start and not self.cut(end - 1, end).strip():
+            end -= 1
+        return start, end
+
+
+def highlight_key(entry):
+    return sha1((entry.get("source") or entry["id"]).encode("utf-8")).hexdigest()
+
+
+def book_file_name(entry, index_books=()):
+    """The name of the book's file on the drive: kept when it was fetched, else read from its
+    address, else from the list of the drive's books."""
+    if entry.get("sourceName"):
+        return entry["sourceName"]
+    source = entry.get("source") or ""
+    if source.startswith(("http://", "https://")):
+        return unquote(urlparse(source).path.rstrip("/").rsplit("/", 1)[-1])
+    return next((b["name"] for b in index_books if b["ref"] == source), entry["title"])
+
+
+def load_highlights(entry):
+    try:
+        with open(os.path.join(HIGHLIGHTS_DIR, highlight_key(entry) + ".json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        return [h for h in data.get("highlights", []) if isinstance(h, dict) and h.get("id")], bool(data.get("dirty"))
+    except Exception:
+        return [], False
+
+
+def save_highlights(entry, highlights, dirty):
+    try:
+        _write_private(os.path.join(HIGHLIGHTS_DIR, highlight_key(entry) + ".json"),
+                       json.dumps({"format": HIGHLIGHTS_FORMAT, "version": 1, "highlights": highlights, "dirty": dirty},
+                                  ensure_ascii=False, indent=1))
+    except OSError:
+        pass
+
+
+def new_highlight(chapter, start, end, text, comment=""):
+    now = _now()
+    return {"id": uuid.uuid4().hex[:12], "chapter": chapter, "start": start, "end": end, "text": text,
+            "comment": comment, "created": now, "modified": now, "deleted": False}
+
+
+def merge_highlights(ours, theirs):
+    """Both lists folded into one: the same highlight (same id) is the one changed last, and one
+    removed stays in the list as removed, so that it does not come back from the other side."""
+    merged = {}
+    for h in list(theirs) + list(ours):
+        old = merged.get(h["id"])
+        if old is None or (h.get("modified", 0), bool(h.get("deleted"))) > (old.get("modified", 0), bool(old.get("deleted"))):
+            merged[h["id"]] = h
+    return sorted(merged.values(), key=lambda h: (h.get("chapter", 0), h.get("start", 0), h["id"]))
+
+
+def live_highlights(highlights):
+    """What is shown: not removed, in the order of the book."""
+    return sorted((h for h in highlights if not h.get("deleted")), key=lambda h: (h.get("chapter", 0), h.get("start", 0)))
+
+
+def anchor_highlights(highlights, book):
+    """A highlight whose words are no longer where it says (a book file replaced by another
+    edition) is looked for in its chapter; found, it follows them. Returns the list to show."""
+    texts = {}
+    out = []
+    for h in live_highlights(highlights):
+        c = h.get("chapter", 0)
+        if not 0 <= c < len(book.chapters):
+            continue
+        if c not in texts:
+            texts[c] = Text16(chapter_text(book.chapters[c]))
+        t, words = texts[c], h.get("text", "")
+        if words and t.cut(h["start"], h["end"]) != words:
+            raw = chapter_text(book.chapters[c])
+            at = raw.find(words)
+            if at < 0:
+                continue
+            start = u16(raw[:at])
+            h = dict(h, start=start, end=start + u16(words))
+        out.append(h)
+    return out
+
+
+_QUOTES = {"fr": ("«\u00a0", "\u00a0»"), "en": ("“", "”"), "de": ("„", "“")}
+
+
+def note_text(book_name, highlights):
+    """The note Reader's Notes shows for a book: its name, then every passage between quotation
+    marks, in the order of the book, each followed by its comment when it has one."""
+    name = book_name.rsplit(".", 1)[0] if "." in book_name else book_name
+    opening, closing = _QUOTES.get(LANG, ("«", "»"))
+    parts = [name]
+    for h in live_highlights(highlights):
+        parts.append(opening + " ".join(h.get("text", "").split()) + closing)
+        if (h.get("comment") or "").strip():
+            parts.append(h["comment"].strip())
+    return "\n\n".join(parts) + "\n"
+
+
+def note_file_name(book_name):
+    """The same rule as Reader's Notes for the name of a note's file."""
+    name = book_name.rsplit(".", 1)[0] if "." in book_name else book_name
+    base = re.sub(r'[\\/:*?"<>|\x00-\x1f\x7f]', " ", name)
+    base = re.sub(r"[ \t\n\x0b\f\r]+", " ", base).strip().rstrip(".")
+    return (base or "untitled") + ".txt"
+
+
+def _dav_session(username, password):
+    session = requests.Session()
+    session.auth = (username.encode("utf-8"), password.encode("utf-8"))
+    session.headers["User-Agent"] = AGENT
+    return session
+
+
+def sidecar_address(cfg, entry):
+    """Where the highlights of a book lie on the drive, or None when they cannot (a share link,
+    a book that did not come from the library)."""
+    source = entry.get("source") or ""
+    if cfg.get("share", "").strip() or not source.startswith(("http://", "https://")) or not library_configured(cfg):
+        return None
+    return source + HIGHLIGHTS_SUFFIX
+
+
+def sync_sidecar(cfg, entry, highlights):
+    """Ours and the drive's folded together and written back where they differ. Blocking."""
+    address = sidecar_address(cfg, entry)
+    if not address:
+        return highlights
+    session = _dav_session(cfg["username"].strip(), cfg["password"])
+    r = session.get(address, timeout=(30, 60))
+    theirs = []
+    if r.status_code != 404:
+        _check(r)
+        try:
+            data = r.json()
+            if isinstance(data, dict) and data.get("format") == HIGHLIGHTS_FORMAT:
+                theirs = [h for h in data.get("highlights", []) if isinstance(h, dict) and h.get("id")]
+        except ValueError:
+            theirs = []
+    merged = merge_highlights(highlights, theirs)
+    if merged != merge_highlights(theirs, []) and (merged or r.status_code != 404):
+        body = json.dumps({"format": HIGHLIGHTS_FORMAT, "version": 1, "book": book_file_name(entry),
+                           "highlights": merged}, ensure_ascii=False, indent=1).encode("utf-8")
+        _check(session.put(address, data=body, headers={"Content-Type": "application/json"}, timeout=(30, 60)))
+    return merged
+
+
+def notes_account(cfg):
+    """The folder of Reader's Notes and the login for it — the library's unless another is given.
+    None when no folder is named."""
+    address = cfg.get("notes_url", "").strip()
+    if not address:
+        return None
+    username = cfg.get("notes_username", "").strip() or cfg.get("username", "").strip()
+    password = cfg.get("notes_password") or cfg.get("password", "")
+    if not username or not password:
+        return None
+    return (address if address.endswith("/") else address + "/"), username, password
+
+
+def write_note(cfg, book_name, highlights):
+    """The book's note in Reader's Notes: written when there is something to say, removed when
+    there is nothing left. Blocking."""
+    account = notes_account(cfg)
+    if not account:
+        return
+    address, username, password = account
+    session = _dav_session(username, password)
+    folder = address + quote(BOOKS_FOLDER, safe="") + "/"
+    target = folder + quote(note_file_name(book_name), safe="")
+    if not live_highlights(highlights):
+        r = session.delete(target, timeout=(30, 60))
+        if r.status_code != 404:
+            _check(r)
+        return
+    r = session.request("MKCOL", folder, timeout=(30, 60))
+    if r.status_code not in (201, 405, 301):         # made, or there already
+        _check(r)
+    _check(session.put(target, data=note_text(book_name, highlights).encode("utf-8"),
+                       headers={"Content-Type": "text/plain; charset=utf-8"}, timeout=(30, 60)))
+
+
+# ------------------------------------------------------------------------------------------
 # The Reader's credentials file, the same for every Reader's app: one JSON file, one section
 # per app. Exporting merges our section into a file that may hold the others'. It holds the
 # password.
@@ -1568,6 +1860,7 @@ CREDENTIALS_SECTION = "readers-books"
 CREDENTIALS_FALLBACK = "magazine-reader"          # reaches the same kind of drive
 SERVER_FALLBACKS = ("readers-scanner", "readers-notes", "readers-recorder")   # their "server", never their folder
 CREDENTIAL_KEYS = ("share", "url", "username", "password")
+NOTES_KEYS = ("notes_url", "notes_username", "notes_password")
 
 
 class NotCredentials(Exception):
@@ -1590,7 +1883,7 @@ def export_credentials(cfg, path):
         if not isinstance(data, dict) or data.get("format") != CREDENTIALS_FORMAT:
             raise NotCredentials()
     data["format"], data["version"] = CREDENTIALS_FORMAT, 1
-    data[CREDENTIALS_SECTION] = {k: cfg[k] for k in CREDENTIAL_KEYS if cfg.get(k)}
+    data[CREDENTIALS_SECTION] = {k: cfg[k] for k in CREDENTIAL_KEYS + NOTES_KEYS if cfg.get(k)}
     _write_private(path, json.dumps(data, ensure_ascii=False, indent=2))
 
 
@@ -1633,10 +1926,39 @@ def apply_credentials(cfg, account):
                    password=account["password"] if account["password"] is not None else cfg.get("password", ""))
 
 
+def read_notes_account(text):
+    """The folder of Reader's Notes as a credentials file names it: in our own section, or in
+    Reader's Notes' (its server and its folder make the address). {} when it says nothing."""
+    try:
+        root = json.loads(text)
+    except Exception:
+        return {}
+    ours = root.get(CREDENTIALS_SECTION) if isinstance(root, dict) else None
+    if isinstance(ours, dict) and isinstance(ours.get("notes_url"), str):
+        return {k: ours[k] for k in NOTES_KEYS if isinstance(ours.get(k), str)}
+    notes = root.get("readers-notes") if isinstance(root, dict) else None
+    if isinstance(notes, dict) and isinstance(notes.get("server"), str) and notes["server"].strip():
+        folder = (notes.get("folder") if isinstance(notes.get("folder"), str) else "") or "Notes"
+        folder = folder.strip().strip("/") or "Notes"
+        return {"notes_url": notes["server"].strip().rstrip("/") + "/" + "/".join(quote(p, safe="") for p in folder.split("/")) + "/",
+                "notes_username": notes.get("username") if isinstance(notes.get("username"), str) else "",
+                "notes_password": notes.get("password") if isinstance(notes.get("password"), str) else ""}
+    return {}
+
+
 def import_credentials(cfg, path):
     with open(os.path.expanduser(path), encoding="utf-8") as fh:
-        account, fallback = read_credentials(fh.read())
-    apply_credentials(cfg, account)
+        text = fh.read()
+    notes = read_notes_account(text)
+    try:
+        account, fallback = read_credentials(text)
+    except NothingForUs:
+        if not notes:
+            raise
+        account, fallback = None, True
+    if account is not None:
+        apply_credentials(cfg, account)
+    cfg.update(notes)
     return fallback
 
 
@@ -1646,6 +1968,7 @@ def import_credentials(cfg, path):
 
 DEFAULTS = {"dark": True, "font": "sans", "text_size": "M", "reader_pt": 0, "book_serif": False,
             "keep_awake": True, "share": "", "url": "", "username": "", "password": "",
+            "notes_url": "", "notes_username": "", "notes_password": "",
             "library_sort": "NAME", "all_books_sort": "NEWEST"}
 AUTO_READER_PT = 13
 MIN_READER_PT, MAX_READER_PT = 8, 30
@@ -1778,7 +2101,9 @@ class LaidBlock:
     One string for the whole run: the paragraphs are separated by line separators and indented
     with em spaces, headings, leads and small print are formats on that same string."""
 
-    def __init__(self, block, font, dim, width):
+    def __init__(self, block, font, dim, width, base=0):
+        self.base = base            # the place of the block's first character in its chapter
+        self.indents = []           # where, in the laid-out string, an indent was put in
         parts, formats, pos = [], [], 0
         for i, p in enumerate(block.paragraphs):
             if i:
@@ -1787,6 +2112,11 @@ class LaidBlock:
             indent = i > 0 and p.kind == NORMAL and block.paragraphs[i - 1].kind == NORMAL
             text = (INDENT if indent else "") + p.text.replace("\n", LINE_BREAK + (INDENT if indent else ""))
             length = u16(text)
+            if indent:
+                at = pos
+                for piece in p.text.split("\n"):
+                    self.indents.append(at)
+                    at += 2 + u16(piece) + 1
             if p.kind != NORMAL:
                 fmt = QtGui.QTextCharFormat()
                 f = QtGui.QFont(font)
@@ -1827,11 +2157,31 @@ class LaidBlock:
             self.bottoms.append(y)
         self.layout.endLayout()
 
+    def to_chapter(self, laid):
+        """A place in the laid-out string as a place in the chapter (the indents are not text)."""
+        c = laid
+        for at in self.indents:
+            if at + 2 <= laid:
+                c -= 2
+            elif at < laid:
+                c -= laid - at
+        return self.base + c
+
+    def to_laid(self, place):
+        laid = place - self.base
+        for at in self.indents:
+            if at <= laid:
+                laid += 2
+            else:
+                break
+        return laid
+
 
 def paginate(chapter, font, dim, width, page_height, images):
     pages, pieces = [], []
     state = {"y": 0}
     char_base = 0
+    place = 0                   # the same count, for highlights: see chapter_text
     gap = int(font.pixelSize() * 0.8)
 
     def new_page():
@@ -1842,7 +2192,7 @@ def paginate(chapter, font, dim, width, page_height, images):
 
     for block in chapter.blocks:
         if isinstance(block, TextBlock):
-            laid = LaidBlock(block, font, dim, width)
+            laid = LaidBlock(block, font, dim, width, place)
             if state["y"] > 0:
                 state["y"] += gap
             line, count = 0, len(laid.tops)
@@ -1876,6 +2226,7 @@ def paginate(chapter, font, dim, width, page_height, images):
                 pieces.append(Picture(state["y"], char_base, block.source, w, h))
                 state["y"] += h
         char_base += block.length
+        place += block.length
     new_page()
     return pages or [[]]
 
@@ -2112,6 +2463,11 @@ class Reader(QtWidgets.QWidget):
         self.page = 0
         self.pages = None
         self.key = None
+        self.highlights = []        # every highlight of the book, removed ones included
+        self.shown = []             # those to draw, where their words are
+        self.texts = {}             # chapter -> Text16
+        self.pressed = None         # where the button went down
+        self.selecting = None       # (from, to) in the chapter, while the mouse is dragged
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
 
@@ -2119,6 +2475,7 @@ class Reader(QtWidgets.QWidget):
 
     def open(self, entry):
         self.entry, self.book, self.failed, self.pages, self.key = entry, None, False, None, None
+        self.highlights, self.shown, self.texts, self.pressed, self.selecting = [], [], {}, None, None
         self.images = ImageStore(self.main.library.path(entry)) if entry["format"] == EPUB else None
         self.chapter, self.wanted, self.page = entry.get("chapter", 0), entry.get("charOffset", 0), 0
         book_id = entry["id"]
@@ -2129,6 +2486,9 @@ class Reader(QtWidgets.QWidget):
             self.book, self.failed = book, error is not None
             if book:
                 self.chapter = min(max(0, self.chapter), len(book.chapters) - 1)
+                if entry.get("source"):
+                    self.set_highlights(load_highlights(entry)[0])
+                    self.main.sync_highlights(entry)
             self.update()
 
         self.main.run(lambda: self.main.library.book(entry), done)
@@ -2136,6 +2496,83 @@ class Reader(QtWidgets.QWidget):
 
     def close_book(self):
         self.entry = self.book = self.pages = self.key = None
+        self.highlights, self.shown, self.texts = [], [], {}
+
+    # ---- highlights ----
+
+    def set_highlights(self, highlights):
+        self.highlights = highlights
+        self.shown = anchor_highlights(highlights, self.book) if self.book else []
+        self.update()
+
+    def text_of(self, chapter):
+        if chapter not in self.texts:
+            self.texts[chapter] = Text16(chapter_text(self.book.chapters[chapter]))
+        return self.texts[chapter]
+
+    def place_at(self, pos):
+        """The place in the chapter of the character under a point of the page, or None."""
+        if not self.pages:
+            return None
+        _font, area = self.frame()
+        x, y = pos.x() - area.left(), pos.y() - area.top()
+        for piece in self.pages[self.page]:
+            if not isinstance(piece, Lines):
+                continue
+            block = piece.block
+            top = block.tops[piece.first]
+            if not piece.y <= y < piece.y + block.bottoms[piece.last] - top:
+                continue
+            for i in range(piece.first, piece.last + 1):
+                if y < piece.y + block.bottoms[i] - top:
+                    line = block.layout.lineAt(i)
+                    return block.to_chapter(line.xToCursor(max(0.0, min(float(x), line.naturalTextWidth()))))
+        return None
+
+    def highlight_at(self, pos):
+        place = self.place_at(pos)
+        if place is None:
+            return None
+        return next((h for h in self.shown if h["chapter"] == self.chapter and h["start"] <= place < h["end"]), None)
+
+    def selection(self):
+        if not self.selecting:
+            return None
+        start, end = self.text_of(self.chapter).words(*self.selecting)
+        return (start, end) if end > start else None
+
+    def paint_marks(self, p, area, fg):
+        """The band behind what is highlighted, a line under what carries a comment, and a
+        stronger band behind what is being selected."""
+        marks = [(h["start"], h["end"], 0.22, bool((h.get("comment") or "").strip()))
+                 for h in self.shown if h["chapter"] == self.chapter]
+        chosen = self.selection()
+        if chosen:
+            marks.append((chosen[0], chosen[1], 0.45, False))
+        if not marks:
+            return
+        for piece in self.pages[self.page]:
+            if not isinstance(piece, Lines):
+                continue
+            block = piece.block
+            top = area.top() + piece.y - block.tops[piece.first]
+            for i in range(piece.first, piece.last + 1):
+                line = block.layout.lineAt(i)
+                first = block.to_chapter(line.textStart())
+                last = block.to_chapter(line.textStart() + line.textLength())
+                for start, end, strength, commented in marks:
+                    if end <= first or start >= last:
+                        continue
+                    x1 = line.cursorToX(block.to_laid(max(start, first)))[0]
+                    x2 = line.cursorToX(block.to_laid(min(end, last)))[0] if end < last else line.naturalTextWidth()
+                    if x2 <= x1:
+                        continue
+                    band = QtGui.QColor(fg)
+                    band.setAlphaF(strength)
+                    rect = QtCore.QRectF(area.left() + x1, top + line.y(), x2 - x1, line.height())
+                    p.fillRect(rect, band)
+                    if commented:
+                        p.fillRect(QtCore.QRectF(rect.left(), rect.bottom() - 1, rect.width(), 2), fg)
 
     # ---- geometry and fonts ----
 
@@ -2221,7 +2658,43 @@ class Reader(QtWidgets.QWidget):
         if e.button() == QtCore.Qt.RightButton or self.menu_zone().contains(e.pos()):
             self.main.reader_menu(e.globalPos())
         elif e.button() == QtCore.Qt.LeftButton:
-            self.turn(e.x() > self.width() / 2)
+            self.pressed, self.selecting = e.pos(), None
+
+    def mouseMoveEvent(self, e):
+        """Dragging across the text of a book from the library selects a passage."""
+        if self.pressed is None or not (self.entry and self.entry.get("source") and self.book):
+            return
+        if self.selecting is None and (e.pos() - self.pressed).manhattanLength() < QtWidgets.QApplication.startDragDistance():
+            return
+        start = self.selecting[0] if self.selecting else self.place_at(self.pressed)
+        end = self.place_at(e.pos())
+        if start is not None and end is not None:
+            self.selecting = (start, end)
+            self.update()
+
+    def mouseReleaseEvent(self, e):
+        if e.button() != QtCore.Qt.LeftButton or self.pressed is None:
+            return
+        self.pressed = None
+        chosen = self.selection()
+        if self.selecting is not None:
+            if chosen:
+                self.main.selection_menu(e.globalPos(), self.chapter, chosen[0], chosen[1])
+            self.selecting = None
+            self.update()
+            return
+        found = self.highlight_at(e.pos())
+        if found:
+            return self.main.highlight_menu(e.globalPos(), found)
+        # As on a reading tablet: the left third goes back, the right third forward, the
+        # middle opens the book's menu.
+        third = self.width() / 3.0
+        if e.x() < third:
+            self.turn(False)
+        elif e.x() > 2 * third:
+            self.turn(True)
+        else:
+            self.main.reader_menu(e.globalPos())
 
     def wheelEvent(self, e):
         if e.angleDelta().y():
@@ -2273,6 +2746,7 @@ class Reader(QtWidgets.QWidget):
                    fs.elidedText(self.book.title, QtCore.Qt.ElideRight, area.width() - 40))
         p.setFont(self.main.big_font())
         p.drawText(QtCore.QRect(area.right() - 39, 20, 40, fs.height()), QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter, "⋯")
+        self.paint_marks(p, area, fg)
         for piece in page:
             if isinstance(piece, Lines):
                 p.setPen(fg)
@@ -2319,6 +2793,7 @@ class Main(QtWidgets.QMainWindow):
         self.threads = []
         self.importing = False
         self.import_failed = False
+        self.syncing, self.sync_again = set(), set()    # highlights on their way to the drive
         self.fetching = None            # the drive reference of the book being downloaded
         self.fetch_error = ""
         self.credentials_message = ""
@@ -2704,10 +3179,135 @@ class Main(QtWidgets.QMainWindow):
             ("%s  ·  %s → %s" % (_("book text"), _("serif") if serif else _("sans-serif"), _("sans-serif") if serif else _("serif")),
              lambda: self.set("book_serif", not serif)),
             (_("remove from the shelf"), lambda: self.remove(book_id)),
+        ] + ([(_("export the highlights"), self.export_highlights)] if live_highlights(self.reader.highlights) else []) + [
             None,
             (_("books"), self.pop),
             self.theme_item(),
         ], where, entry["title"])
+
+    # ---- highlights and comments ----
+
+    def selection_menu(self, where, chapter, start, end):
+        text = self.reader.text_of(chapter).cut(start, end)
+        self.popup([(_("highlight"), lambda: self.add_highlight(chapter, start, end, text, False)),
+                    (_("comment"), lambda: self.add_highlight(chapter, start, end, text, True)),
+                    None, (_("cancel"), lambda: None)], where)
+
+    def ask_comment(self, initial=""):
+        dialog = QtWidgets.QInputDialog(self)
+        dialog.setWindowTitle("Reader's Books")
+        dialog.setLabelText(_("comment"))
+        dialog.setOption(QtWidgets.QInputDialog.UsePlainTextEditForTextInput, True)
+        dialog.setOkButtonText(_("ok"))
+        dialog.setCancelButtonText(_("cancel"))
+        dialog.setTextValue(initial)
+        for box in dialog.findChildren(QtWidgets.QPlainTextEdit):
+            box.setMinimumWidth(box.fontMetrics().averageCharWidth() * 50)
+        return dialog.textValue().strip() if dialog.exec_() == QtWidgets.QDialog.Accepted else None
+
+    def add_highlight(self, chapter, start, end, text, with_comment):
+        comment = ""
+        if with_comment:
+            comment = self.ask_comment()
+            if comment is None:
+                return
+        self.change_highlights(self.reader.highlights + [new_highlight(chapter, start, end, text, comment)])
+
+    def highlight_menu(self, where, found):
+        """A click on a highlight: its comment if it has one, and what can be done with it."""
+        comment = (found.get("comment") or "").strip()
+
+        def edit():
+            text = self.ask_comment(comment)
+            if text is not None:
+                self.change_highlights([dict(h, comment=text, modified=_now()) if h["id"] == found["id"] else h
+                                        for h in self.reader.highlights])
+
+        def remove():
+            # Kept in the list as removed: that is what tells the other devices.
+            self.change_highlights([dict(h, deleted=True, text="", comment="", modified=_now()) if h["id"] == found["id"] else h
+                                    for h in self.reader.highlights])
+
+        if not comment:
+            return self.popup([(_("add a comment"), edit), (_("remove the highlight"), remove)], where)
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Reader's Books")
+        box = QtWidgets.QVBoxLayout(dialog)
+        label = QtWidgets.QLabel(comment)
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        label.setMinimumWidth(label.fontMetrics().averageCharWidth() * 50)
+        box.addWidget(label)
+        buttons = QtWidgets.QDialogButtonBox()
+        closing = buttons.addButton(_("ok"), QtWidgets.QDialogButtonBox.AcceptRole)
+        editing = buttons.addButton(_("edit the comment"), QtWidgets.QDialogButtonBox.ActionRole)
+        removing = buttons.addButton(_("remove the highlight"), QtWidgets.QDialogButtonBox.ActionRole)
+        closing.setDefault(True)
+        choice = []
+        closing.clicked.connect(dialog.accept)
+        editing.clicked.connect(lambda: (choice.append(edit), dialog.accept()))
+        removing.clicked.connect(lambda: (choice.append(remove), dialog.accept()))
+        box.addWidget(buttons)
+        dialog.exec_()
+        if choice:
+            choice[0]()
+
+    def change_highlights(self, highlights):
+        entry = self.reader.entry
+        if not entry:
+            return
+        save_highlights(entry, highlights, True)
+        self.reader.set_highlights(highlights)
+        self.sync_highlights(entry)
+
+    def sync_highlights(self, entry):
+        """The book's highlights folded with those on the drive, and its note written in Reader's
+        Notes — in the background; what could not be sent is sent the next time."""
+        key = highlight_key(entry)
+        if key in self.syncing:
+            self.sync_again.add(key)
+            return
+        if not sidecar_address(self.cfg, entry) and not notes_account(self.cfg):
+            return
+        self.syncing.add(key)
+        cfg = dict(self.cfg)
+        before, dirty = load_highlights(entry)
+        name = book_file_name(entry, self.remote.index["books"])
+
+        def job():
+            merged = sync_sidecar(cfg, entry, before)
+            if dirty or merged != before:
+                write_note(cfg, name, merged)
+            return merged
+
+        def done(merged, error):
+            self.syncing.discard(key)
+            if error is None:
+                now, _dirty = load_highlights(entry)
+                if now == before:                   # nothing was changed here meanwhile
+                    save_highlights(entry, merged, False)
+                    if merged != before and self.reader.entry and highlight_key(self.reader.entry) == key:
+                        self.reader.set_highlights(merged)
+            if key in self.sync_again:
+                self.sync_again.discard(key)
+                self.sync_highlights(entry)
+
+        self.run(job, done)
+
+    def export_highlights(self):
+        entry = self.reader.entry
+        if not entry:
+            return
+        name = book_file_name(entry, self.remote.index["books"])
+        path, _sel = QtWidgets.QFileDialog.getSaveFileName(
+            self, _("export the highlights"), os.path.join(self.cfg.get("last_dir") or os.path.expanduser("~"), note_file_name(name)),
+            "%s (*.txt);;* (*)" % _("highlights"))
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(note_text(name, self.reader.highlights))
+            except OSError:
+                pass
 
     def images_of(self, entry):
         if entry["fileName"] not in self.image_stores:
@@ -2774,6 +3374,10 @@ class Main(QtWidgets.QMainWindow):
         rows += self.account_rows() + self.credentials_rows()
         if library_started(cfg):
             rows.append(Row(_("forget the library"), _("removes the link, the login and the list of books; the shelf is kept"), self.forget_library))
+        rows += [Row(kind=RULE), Row(HIGHLIGHTS_HINT(), kind=HINT),
+                 Row(cfg.get("notes_url") or _("Reader's Notes folder"), _("Reader's Notes folder"), lambda: self.ask("notes_url")),
+                 Row(cfg.get("notes_username") or _("same as the library"), _("username for the notes"), lambda: self.ask("notes_username")),
+                 Row("••••••••" if cfg.get("notes_password") else _("same as the library"), _("password for the notes"), lambda: self.ask("notes_password"))]
         rows += [Row(kind=RULE),
                  Row("Reader's Books %s" % VERSION, _("reads epub, mobi, fb2 and txt files")),
                  Row(_("Pierre Gallaz · developed with Claude Code")),
@@ -2793,22 +3397,26 @@ class Main(QtWidgets.QMainWindow):
         ]
 
     def ask(self, field):
-        labels = {"share": _("kDrive share link"), "url": _("WebDAV address"), "username": _("username"), "password": _("password")}
+        labels = {"share": _("kDrive share link"), "url": _("WebDAV address"), "username": _("username"), "password": _("password"),
+                  "notes_url": _("Reader's Notes folder"), "notes_username": _("username for the notes"), "notes_password": _("password for the notes")}
         dialog = QtWidgets.QInputDialog(self)
         dialog.setWindowTitle("Reader's Books")
         dialog.setLabelText(labels[field])
         dialog.setOkButtonText(_("ok"))
         dialog.setCancelButtonText(_("cancel"))
-        dialog.setTextEchoMode(QtWidgets.QLineEdit.Password if field == "password" else QtWidgets.QLineEdit.Normal)
-        dialog.setTextValue("" if field == "password" else self.cfg.get(field, ""))
+        secret = field.endswith("password")
+        dialog.setTextEchoMode(QtWidgets.QLineEdit.Password if secret else QtWidgets.QLineEdit.Normal)
+        dialog.setTextValue("" if secret else self.cfg.get(field, ""))
         # An address is long: the field is as wide as fifty characters of the text it holds.
         for line in dialog.findChildren(QtWidgets.QLineEdit):
             line.setMinimumWidth(line.fontMetrics().averageCharWidth() * 50)
         if dialog.exec_() != QtWidgets.QDialog.Accepted:
             return
         value = dialog.textValue()
-        self.cfg[field] = value if field == "password" else value.strip()
+        self.cfg[field] = value if secret else value.strip()
         save_config(self.cfg)
+        if field.startswith("notes_"):
+            return self.show_screen()
         self.account_changed()
 
     def account_changed(self):
@@ -3017,6 +3625,10 @@ class Main(QtWidgets.QMainWindow):
 
 def _after(values, current):
     return values[(values.index(current) + 1) % len(values)] if current in values else values[0]
+
+
+def HIGHLIGHTS_HINT():
+    return _("Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address (a share link cannot be written to: they then stay on this computer, and the book's menu exports them). With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.")
 
 
 def LIBRARY_HINT():

@@ -12,10 +12,20 @@ reader, the same library, the same wording.
 
 * The shelf lists title, how far you are, when you last opened it. Click to read; right click for
   chapters or to remove the book.
-* The right half of the window turns forward, the left half back; so do the arrow keys, the space
-  bar, Page Up/Down and the wheel. A right click, the ⋯ in the corner or the M key opens the menu:
-  chapters, larger or smaller text (+ and − do it too), book text in sans-serif or serif
-  (Literata), back to the shelf, remove. Esc goes back.
+* The right third of the window turns forward, the left third back, a click in the middle opens
+  the book's menu; the arrow keys, the space bar, Page Up/Down and the wheel turn pages too. The
+  menu (also a right click, the ⋯ in the corner or the M key): chapters, larger or smaller text
+  (+ and − do it too), book text in sans-serif or serif (Literata), back to the shelf, remove.
+  Esc goes back.
+* Highlights and comments, in the books of the library: drag across a passage, then "highlight"
+  or "comment". A highlight is a grey band behind the words, with a line under it when it
+  carries a comment; a click on it shows the comment, changes it or removes the highlight. They
+  are kept in a file next to the book on the drive (`<book file>.highlights.json`) when the
+  library is a WebDAV address, so every device that opens the book has them; with a share link
+  they stay on this computer and the book's menu exports them as text. Given the WebDAV address
+  of the Reader's Notes folder, the app also keeps a note per book there (folder `Reader's
+  Books`): the passages between quotation marks, in the order of the book, each followed by its
+  comment — Reader's Notes shows it read-only.
 * Add a book from the shelf (Ctrl+O), by dropping the file on the window, or from a file manager
   ("open with"). Books are copied into the app, so the original can move.
 * The position is kept per book and survives a change of text size or window. The text sits in a
@@ -41,7 +51,7 @@ haptic tick.
 
 ## Install
 
-    sudo apt install ./readers-books_1.0.0_all.deb     # Debian, Ubuntu, Pop!_OS
+    sudo apt install ./readers-books_1.1.0_all.deb     # Debian, Ubuntu, Pop!_OS
     cd packaging && makepkg -si                         # Arch, Manjaro
 
 Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests).

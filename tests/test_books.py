@@ -259,5 +259,67 @@ class Drive(unittest.TestCase):
         self.assertEqual(rb.RemoteLibrary().index["failed"], ["/broken"])       # and it is on disk
 
 
+class Highlights(unittest.TestCase):
+    def test_a_place_in_the_chapter_and_its_place_on_the_page(self):
+        block = rb.TextBlock([rb.Para("Un"), rb.Para("Deux\ntrois"), rb.Para("Quatre 😀 cinq")])
+        font = rb.QtGui.QFont(rb.SANS_FAMILY)
+        font.setPixelSize(16)
+        laid = rb.LaidBlock(block, font, rb.QtGui.QColor("#888"), 400, base=100)
+        text = rb.Text16(laid.layout.text())
+        chapter = rb.Text16(rb.chapter_text(rb.Chapter("c", [block])))
+        self.assertEqual(chapter.length, block.length)
+        for word in ("Un", "Deux", "trois", "Quatre", "cinq"):
+            at = rb.u16(rb.chapter_text(rb.Chapter("c", [block])).split(word)[0])
+            self.assertEqual(text.cut(laid.to_laid(100 + at), laid.to_laid(100 + at) + len(word)), word)
+            self.assertEqual(laid.to_chapter(laid.to_laid(100 + at)), 100 + at)
+        # a place inside an indent is the character that follows it
+        self.assertEqual(laid.to_chapter(laid.indents[0] + 1), laid.to_chapter(laid.indents[0] + 2))
+
+    def test_a_passage_is_widened_to_whole_words(self):
+        t = rb.Text16("Il pleuvait sur la ville, aujourd'hui.\n")
+        self.assertEqual(t.cut(*t.words(5, 13)), "pleuvait sur")
+        self.assertEqual(t.cut(*t.words(13, 5)), "pleuvait sur")
+        self.assertEqual(t.cut(*t.words(27, 30)), "aujourd'hui")
+        self.assertEqual(t.cut(*t.words(24, 26)), ",")
+
+    def test_two_devices_fold_their_highlights(self):
+        a = rb.new_highlight(1, 10, 20, "dix mots")
+        b = rb.new_highlight(0, 5, 9, "cinq")
+        newer = dict(a, comment="vu", modified=a["modified"] + 5)
+        removed = dict(b, deleted=True, text="", modified=b["modified"] + 9)
+        merged = rb.merge_highlights([a, b], [newer, removed])
+        self.assertEqual([(h["id"], h.get("comment"), h["deleted"]) for h in merged], [(b["id"], "", True), (a["id"], "vu", False)])
+        self.assertEqual(rb.merge_highlights([newer, removed], [a, b]), merged)         # whichever side asks
+        self.assertEqual([h["id"] for h in rb.live_highlights(merged)], [a["id"]])
+
+    def test_the_note_lists_the_passages_in_the_order_of_the_book(self):
+        hs = [rb.new_highlight(2, 5, 9, "plus  loin\ndans le livre", "Une remarque."), rb.new_highlight(0, 50, 60, "au début"),
+              dict(rb.new_highlight(0, 1, 2, "ôté"), deleted=True)]
+        opening, closing = rb._QUOTES.get(rb.LANG, ("«", "»"))
+        self.assertEqual(rb.note_text("Simenon - Le chien jaune.epub", hs),
+                         "Simenon - Le chien jaune\n\n%sau début%s\n\n%splus loin dans le livre%s\n\nUne remarque.\n" % (opening, closing, opening, closing))
+        self.assertEqual(rb.note_file_name('Un: "titre"?.epub'), "Un titre.txt")
+
+    def test_a_highlight_follows_its_words(self):
+        book = rb.Book("b", [rb.Chapter("c", [rb.TextBlock([rb.Para("Un mot de plus. Il pleuvait sur la ville.")])])])
+        good = rb.new_highlight(0, 16, 27, "Il pleuvait")
+        moved = rb.new_highlight(0, 0, 11, "Il pleuvait")
+        lost = rb.new_highlight(0, 0, 5, "absent")
+        shown = rb.anchor_highlights([good, moved, lost], book)
+        self.assertEqual([(h["start"], h["end"]) for h in shown], [(16, 27), (16, 27)])
+
+    def test_where_the_notes_go(self):
+        cfg = {"share": "", "url": "https://dav.example/", "username": "u", "password": "p", "notes_url": "https://dav.example/Notes"}
+        self.assertEqual(rb.notes_account(cfg), ("https://dav.example/Notes/", "u", "p"))
+        self.assertIsNone(rb.notes_account(dict(cfg, notes_url="")))
+        self.assertEqual(rb.notes_account(dict(cfg, notes_username="n", notes_password="q")), ("https://dav.example/Notes/", "n", "q"))
+        entry = {"id": "x", "source": "https://dav.example/Livres/Un.epub"}
+        self.assertEqual(rb.sidecar_address(cfg, entry), "https://dav.example/Livres/Un.epub.highlights.json")
+        self.assertIsNone(rb.sidecar_address(dict(cfg, share="https://kdrive.infomaniak.com/app/share/1/ab"), entry))
+        self.assertIsNone(rb.sidecar_address(cfg, {"id": "x", "source": None}))
+        text = json.dumps({"format": "readers-credentials", "readers-notes": {"server": "https://dav.example", "folder": "Mes notes", "username": "n", "password": "q"}})
+        self.assertEqual(rb.read_notes_account(text), {"notes_url": "https://dav.example/Mes%20notes/", "notes_username": "n", "notes_password": "q"})
+
+
 if __name__ == "__main__":
     unittest.main()

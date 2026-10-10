@@ -20,13 +20,12 @@ reader, the same library, the same wording.
 * Highlights and comments, in the books of the library: drag across a passage, then "highlight"
   or "comment". A highlight is a grey band behind the words, with a line under it when it
   carries a comment; a click on it shows the comment, changes it or removes the highlight. They
-  are kept in a file next to the book on the drive (`<book file>.highlights.json`) when the
-  library is a WebDAV address, so every device that opens the book has them. Given the WebDAV
-  address of the Reader's Notes folder, the app also keeps a note per book there (folder
+  are kept in a file next to the book on the drive (`<book file>.highlights.json`), so every
+  device that opens the book has them: each device folds its own into that file, highlight by
+  highlight, the one changed last winning. The book's menu exports them as text. Given the
+  WebDAV address of the Reader's Notes folder, the app also keeps a note per book there (folder
   `Reader's Books`): the passages between quotation marks, in the order of the book, each
-  followed by its comment — Reader's Notes shows it read-only. With a share link, which cannot
-  be written to, that file lies next to the note instead; with neither, highlights stay on this
-  computer and the book's menu exports them as text.
+  followed by its comment — Reader's Notes shows it read-only.
 * The same file carries the place the book was left at: a book of the library opens where it was
   last read, on whichever device, and the shelf says how far it is. It is exchanged when the app
   starts, when a book is opened, at each highlight, half a minute after the last page turned and
@@ -41,13 +40,14 @@ reader, the same library, the same wording.
 * A magazine issue (an EPUB whose contents page carries a section, a title and an author per
   article, as the newspapers pipeline writes them) opens on its contents: sections, titles,
   authors and cover pictures. An article is a chapter; back returns to the contents.
-* Optional library: the e-books kept on a drive (a public kDrive share link, or any WebDAV
-  address with a username and an application password, kDrive included), listed by folder and
-  then by name or by date, or all in one list by date, name, author or last opened (the author
-  is what precedes " - " in the file name, else the folder's name). Nothing is downloaded until
-  you click a book. A scan that is stopped, or cut short by closing the window, carries on
-  where it was. The account can be exported and imported as the Reader's credentials file shared
-  by the other Reader's apps (also `--export-credentials FILE` / `--import-credentials FILE`).
+* Optional library: the e-books kept on a drive, at a WebDAV address with a username and an
+  application password (kDrive, Nextcloud, any WebDAV server) that the app may read and write,
+  listed by folder and then by name or by date, or all in one list by date, name, author or
+  last opened (the author is what precedes " - " in the file name, else the folder's name).
+  Nothing is downloaded until you click a book. A scan that is stopped, or cut short by closing
+  the window, carries on where it was. The account can be exported and imported as the Reader's
+  credentials file shared by the other Reader's apps (also `--export-credentials FILE` /
+  `--import-credentials FILE`).
 * Six languages (English, French, German, Spanish, Portuguese, Russian), white on black or black
   on white, three sizes for the lists.
 
@@ -70,8 +70,12 @@ the settings and the library's account, readable by your account only.
 ## Tests
 
     python3 tests/test_books.py
+    python3 tests/bench_sync.py
 
-They run on books made up by `tests/make_books.py`.
+The first runs on books made up by `tests/make_books.py`. The second is the synchronisation in
+all its forms — two and three devices sharing one drive, highlights, comments, removals, the
+place in the book, logins refused, the note in Reader's Notes — against a real WebDAV server
+(`rclone serve webdav`, which it starts itself).
 
 ## Crédits / Credits
 

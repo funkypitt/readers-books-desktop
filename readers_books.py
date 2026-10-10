@@ -3,7 +3,7 @@
 
 The desktop twin of the Android app: the same shelf, the same reader (EPUB, MOBI, FB2, TXT; the
 place in each book kept), the same magazine contents, the same optional library on a drive (a
-public kDrive share link or a WebDAV address), the same credentials file. One file, PyQt5.
+WebDAV address), the same highlights, the same credentials file. One file, PyQt5.
 """
 import json
 import locale
@@ -54,6 +54,8 @@ HIGHLIGHTS_DIR = os.path.join(DATA_DIR, "highlights")
 
 STRINGS = {
  "fr": {
+  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Des livres gardés sur un drive, listés par dossier ; un livre n'est téléchargé que lorsqu'on clique dessus. Donnez l'adresse WebDAV du drive avec un nom d'utilisateur et un mot de passe d'application (kDrive, Nextcloud, tout serveur WebDAV). Le drive est alors parcouru à la recherche de fichiers epub, mobi, azw et fb2. Les surlignages et la page où vous êtes sont écrits à côté de chaque livre : le compte doit pouvoir y écrire.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Surlignages : dans un livre de la bibliothèque, glissez sur un passage pour le surligner, avec un commentaire si vous le voulez ; un clic sur un surlignage montre son commentaire. Ils sont gardés à côté du livre sur le drive, avec la page où vous êtes, et le suivent sur vos autres appareils. Le menu du livre les exporte. Avec l'adresse WebDAV du dossier de Reader's Notes donnée ci-dessous, une note par livre reprend ses surlignages dans Reader's Notes.",
   "highlight": "surligner",
   "comment": "commenter",
   "add a comment": "ajouter un commentaire",
@@ -65,7 +67,6 @@ STRINGS = {
   "same as the library": "comme la bibliothèque",
   "username for the notes": "nom d'utilisateur pour les notes",
   "password for the notes": "mot de passe pour les notes",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Surlignages : dans un livre de la bibliothèque, glissez sur un passage pour le surligner, avec un commentaire si vous le voulez ; un clic sur un surlignage montre son commentaire. Ils suivent le livre sur vos autres appareils quand la bibliothèque est une adresse WebDAV, ou quand le dossier de Reader's Notes est donné ci-dessous ; sinon ils restent sur cet ordinateur. Le menu du livre les exporte. Avec l'adresse WebDAV du dossier de Reader's Notes, une note par livre reprend ses surlignages dans Reader's Notes.",
   "yesterday": "hier",
   "this file could not be read": "ce fichier n'a pas pu être lu",
   "+ open a book": "+ ouvrir un livre",
@@ -99,7 +100,6 @@ STRINGS = {
   "removes the link, the login and the list of books; the shelf is kept": "retire le lien, l'identifiant et la liste des livres ; l'étagère est gardée",
   "reads epub, mobi, fb2 and txt files": "lit les fichiers epub, mobi, fb2 et txt",
   "Pierre Gallaz · developed with Claude Code": "Pierre Gallaz · développé avec Claude Code",
-  "kDrive share link": "lien de partage kDrive",
   "WebDAV address": "adresse WebDAV",
   "username": "nom d'utilisateur",
   "password": "mot de passe",
@@ -135,9 +135,10 @@ STRINGS = {
   "on the shelf": "sur l'étagère",
   "opened %s": "ouvert %s",
   "the book could not be fetched: %s": "le livre n'a pas pu être récupéré : %s",
-  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Des livres gardés sur un drive, listés par dossier ; un livre n'est téléchargé que lorsqu'on clique dessus. Collez le lien d'un partage kDrive public, ou donnez l'adresse WebDAV du drive avec un nom d'utilisateur et un mot de passe d'application. Le drive est alors parcouru à la recherche de fichiers epub, mobi, azw et fb2.",
  },
  "de": {
+  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Bücher auf einem Drive, nach Ordnern aufgelistet; ein Buch wird erst heruntergeladen, wenn Sie es anklicken. Geben Sie die WebDAV-Adresse des Drives mit Benutzername und Anwendungspasswort an (kDrive, Nextcloud, jeder WebDAV-Server). Das Drive wird dann nach epub-, mobi-, azw- und fb2-Dateien durchsucht. Markierungen und die Seite, auf der Sie sind, werden neben jedes Buch geschrieben: das Konto muss dort schreiben dürfen.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Markierungen: Ziehen Sie in einem Buch aus der Bibliothek über eine Stelle, um sie zu markieren, auf Wunsch mit Kommentar; ein Klick auf eine Markierung zeigt ihren Kommentar. Sie liegen neben dem Buch auf dem Drive, mit der Seite, auf der Sie sind, und folgen ihm auf Ihre anderen Geräte. Das Menü des Buchs exportiert sie. Mit der unten angegebenen WebDAV-Adresse des Ordners von Reader's Notes führt eine Notiz pro Buch seine Markierungen in Reader's Notes auf.",
   "highlight": "markieren",
   "comment": "kommentieren",
   "add a comment": "Kommentar hinzufügen",
@@ -149,7 +150,6 @@ STRINGS = {
   "same as the library": "wie die Bibliothek",
   "username for the notes": "Benutzername für die Notizen",
   "password for the notes": "Passwort für die Notizen",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Markierungen: Ziehen Sie in einem Buch aus der Bibliothek über eine Stelle, um sie zu markieren, auf Wunsch mit Kommentar; ein Klick auf eine Markierung zeigt ihren Kommentar. Sie folgen dem Buch auf Ihre anderen Geräte, wenn die Bibliothek eine WebDAV-Adresse ist oder wenn unten der Ordner von Reader's Notes angegeben ist; sonst bleiben sie auf diesem Computer. Das Menü des Buchs exportiert sie. Mit der WebDAV-Adresse des Ordners von Reader's Notes führt eine Notiz pro Buch seine Markierungen in Reader's Notes auf.",
   "yesterday": "gestern",
   "this file could not be read": "diese Datei konnte nicht gelesen werden",
   "+ open a book": "+ ein Buch öffnen",
@@ -184,7 +184,6 @@ STRINGS = {
   "removes the link, the login and the list of books; the shelf is kept": "entfernt Link, Anmeldung und Bücherliste; das Regal bleibt",
   "reads epub, mobi, fb2 and txt files": "liest epub-, mobi-, fb2- und txt-Dateien",
   "Pierre Gallaz · developed with Claude Code": "Pierre Gallaz · entwickelt mit Claude Code",
-  "kDrive share link": "kDrive-Freigabelink",
   "WebDAV address": "WebDAV-Adresse",
   "username": "Benutzername",
   "password": "Passwort",
@@ -220,9 +219,10 @@ STRINGS = {
   "on the shelf": "im Regal",
   "opened %s": "geöffnet %s",
   "the book could not be fetched: %s": "das Buch konnte nicht geholt werden: %s",
-  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Bücher auf einem Drive, nach Ordnern aufgelistet; ein Buch wird erst heruntergeladen, wenn Sie es anklicken. Fügen Sie den Link einer öffentlichen kDrive-Freigabe ein, oder geben Sie die WebDAV-Adresse des Drives mit Benutzername und Anwendungspasswort an. Das Drive wird dann nach epub-, mobi-, azw- und fb2-Dateien durchsucht.",
  },
  "es": {
+  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Libros guardados en un drive, listados por carpeta; un libro solo se descarga cuando haces clic en él. Indica la dirección WebDAV del drive con un nombre de usuario y una contraseña de aplicación (kDrive, Nextcloud, cualquier servidor WebDAV). Entonces se recorre el drive buscando archivos epub, mobi, azw y fb2. Los resaltados y la página en la que estás se escriben junto a cada libro: la cuenta debe poder escribir allí.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Resaltados: en un libro de la biblioteca, arrastra sobre un pasaje para resaltarlo, con un comentario si quieres; un clic en un resaltado muestra su comentario. Se guardan junto al libro en el drive, con la página en la que estás, y lo siguen en tus otros dispositivos. El menú del libro los exporta. Con la dirección WebDAV de la carpeta de Reader's Notes indicada abajo, una nota por libro recoge sus resaltados en Reader's Notes.",
   "highlight": "resaltar",
   "comment": "comentar",
   "add a comment": "añadir un comentario",
@@ -234,7 +234,6 @@ STRINGS = {
   "same as the library": "como la biblioteca",
   "username for the notes": "usuario para las notas",
   "password for the notes": "contraseña para las notas",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Resaltados: en un libro de la biblioteca, arrastra sobre un pasaje para resaltarlo, con un comentario si quieres; un clic en un resaltado muestra su comentario. Siguen al libro en tus otros dispositivos cuando la biblioteca es una dirección WebDAV, o cuando se indica abajo la carpeta de Reader's Notes; si no, se quedan en este ordenador. El menú del libro los exporta. Con la dirección WebDAV de la carpeta de Reader's Notes, una nota por libro recoge sus resaltados en Reader's Notes.",
   "yesterday": "ayer",
   "this file could not be read": "no se pudo leer este archivo",
   "+ open a book": "+ abrir un libro",
@@ -269,7 +268,6 @@ STRINGS = {
   "removes the link, the login and the list of books; the shelf is kept": "quita el enlace, el usuario y la lista de libros; la estantería se conserva",
   "reads epub, mobi, fb2 and txt files": "lee archivos epub, mobi, fb2 y txt",
   "Pierre Gallaz · developed with Claude Code": "Pierre Gallaz · desarrollado con Claude Code",
-  "kDrive share link": "enlace compartido de kDrive",
   "WebDAV address": "dirección WebDAV",
   "username": "nombre de usuario",
   "password": "contraseña",
@@ -305,9 +303,10 @@ STRINGS = {
   "on the shelf": "en la estantería",
   "opened %s": "abierto %s",
   "the book could not be fetched: %s": "no se pudo obtener el libro: %s",
-  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Libros guardados en un drive, listados por carpeta; un libro solo se descarga cuando haces clic en él. Pega el enlace de un recurso compartido público de kDrive, o indica la dirección WebDAV del drive con un nombre de usuario y una contraseña de aplicación. Entonces se recorre el drive buscando archivos epub, mobi, azw y fb2.",
  },
  "pt": {
+  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Livros guardados numa drive, listados por pasta; um livro só é descarregado quando clica nele. Indique o endereço WebDAV da drive com um nome de utilizador e uma palavra-passe de aplicação (kDrive, Nextcloud, qualquer servidor WebDAV). A drive é então percorrida à procura de ficheiros epub, mobi, azw e fb2. Os destaques e a página em que está são escritos ao lado de cada livro: a conta tem de poder escrever aí.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Destaques: num livro da biblioteca, arraste sobre uma passagem para a destacar, com um comentário se quiser; um clique num destaque mostra o seu comentário. Ficam ao lado do livro na drive, com a página em que está, e acompanham-no nos seus outros aparelhos. O menu do livro exporta-os. Com o endereço WebDAV da pasta do Reader's Notes indicado abaixo, uma nota por livro reúne os seus destaques no Reader's Notes.",
   "highlight": "destacar",
   "comment": "comentar",
   "add a comment": "adicionar um comentário",
@@ -319,7 +318,6 @@ STRINGS = {
   "same as the library": "como a biblioteca",
   "username for the notes": "utilizador para as notas",
   "password for the notes": "palavra-passe para as notas",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Destaques: num livro da biblioteca, arraste sobre uma passagem para a destacar, com um comentário se quiser; um clique num destaque mostra o seu comentário. Acompanham o livro nos seus outros aparelhos quando a biblioteca é um endereço WebDAV, ou quando a pasta do Reader's Notes é indicada abaixo; caso contrário ficam neste computador. O menu do livro exporta-os. Com o endereço WebDAV da pasta do Reader's Notes, uma nota por livro reúne os seus destaques no Reader's Notes.",
   "yesterday": "ontem",
   "this file could not be read": "não foi possível ler este ficheiro",
   "+ open a book": "+ abrir um livro",
@@ -354,7 +352,6 @@ STRINGS = {
   "removes the link, the login and the list of books; the shelf is kept": "remove a ligação, o utilizador e a lista de livros; a estante mantém-se",
   "reads epub, mobi, fb2 and txt files": "lê ficheiros epub, mobi, fb2 e txt",
   "Pierre Gallaz · developed with Claude Code": "Pierre Gallaz · desenvolvido com Claude Code",
-  "kDrive share link": "ligação de partilha kDrive",
   "WebDAV address": "endereço WebDAV",
   "username": "nome de utilizador",
   "password": "palavra-passe",
@@ -390,9 +387,10 @@ STRINGS = {
   "on the shelf": "na estante",
   "opened %s": "aberto %s",
   "the book could not be fetched: %s": "não foi possível obter o livro: %s",
-  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Livros guardados numa drive, listados por pasta; um livro só é descarregado quando clica nele. Cole a ligação de uma partilha pública kDrive, ou indique o endereço WebDAV da drive com um nome de utilizador e uma palavra-passe de aplicação. A drive é então percorrida à procura de ficheiros epub, mobi, azw e fb2.",
  },
  "ru": {
+  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Книги на диске, перечисленные по папкам; книга загружается только когда вы щёлкаете по ней. Укажите адрес WebDAV диска с именем пользователя и паролем приложения (kDrive, Nextcloud, любой сервер WebDAV). Затем диск просматривается в поисках файлов epub, mobi, azw и fb2. Выделения и страница, на которой вы остановились, записываются рядом с каждой книгой: учётной записи должна быть разрешена запись.",
+  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Выделения: в книге из библиотеки проведите мышью по отрывку, чтобы выделить его, при желании с комментарием; щелчок по выделению показывает комментарий. Они хранятся рядом с книгой на диске вместе со страницей, на которой вы остановились, и следуют за ней на другие ваши устройства. Меню книги их экспортирует. Если ниже указан адрес WebDAV папки Reader's Notes, заметка для каждой книги перечисляет её выделения в Reader's Notes.",
   "highlight": "выделить",
   "comment": "комментировать",
   "add a comment": "добавить комментарий",
@@ -404,7 +402,6 @@ STRINGS = {
   "same as the library": "как у библиотеки",
   "username for the notes": "имя пользователя для заметок",
   "password for the notes": "пароль для заметок",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.": "Выделения: в книге из библиотеки проведите мышью по отрывку, чтобы выделить его, при желании с комментарием; щелчок по выделению показывает комментарий. Они следуют за книгой на другие ваши устройства, если библиотека задана адресом WebDAV или если ниже указана папка Reader's Notes; иначе они остаются на этом компьютере. Меню книги их экспортирует. С адресом WebDAV папки Reader's Notes заметка для каждой книги перечисляет её выделения в Reader's Notes.",
   "yesterday": "вчера",
   "this file could not be read": "этот файл не удалось прочитать",
   "+ open a book": "+ открыть книгу",
@@ -439,7 +436,6 @@ STRINGS = {
   "removes the link, the login and the list of books; the shelf is kept": "удаляет ссылку, учётные данные и список книг; полка сохраняется",
   "reads epub, mobi, fb2 and txt files": "читает файлы epub, mobi, fb2 и txt",
   "Pierre Gallaz · developed with Claude Code": "Pierre Gallaz · разработано с Claude Code",
-  "kDrive share link": "ссылка kDrive",
   "WebDAV address": "адрес WebDAV",
   "username": "имя пользователя",
   "password": "пароль",
@@ -476,7 +472,6 @@ STRINGS = {
   "on the shelf": "на полке",
   "opened %s": "открыта %s",
   "the book could not be fetched: %s": "не удалось получить книгу: %s",
-  "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.": "Книги на диске, перечисленные по папкам; книга загружается только когда вы щёлкаете по ней. Вставьте ссылку на публичную папку kDrive или укажите адрес WebDAV диска с именем пользователя и паролем приложения. Затем диск просматривается в поисках файлов epub, mobi, azw и fb2.",
  },
 }
 
@@ -1357,60 +1352,6 @@ class WebDav:
             _save_stream(r, dest, progress)
 
 
-class KDriveShare:
-    """A public kDrive share link (https://kdrive.infomaniak.com/app/share/<drive>/<uuid>): no
-    login. A folder reference is "<id>|<path>"."""
-    BASE = "https://kdrive.infomaniak.com"
-
-    def __init__(self, link):
-        m = re.search(r"/app/share/(\d+)/([a-z0-9-]+)", link.strip())
-        if not m:
-            raise ValueError("not a kDrive share link")
-        self.drive, self.uuid = m.group(1), m.group(2)
-        self.session = requests.Session()
-        self.session.headers["User-Agent"] = AGENT
-
-    def _get(self, url):
-        r = self.session.get(url, timeout=(30, 90))
-        _check(r)
-        return r.json()
-
-    def roots(self):
-        data = self._get("%s/2/app/%s/share/%s/init" % (self.BASE, self.drive, self.uuid)).get("data") or {}
-        if not data.get("file_id"):
-            raise IOError("no file id")
-        return ["%s|" % data["file_id"]]
-
-    def list_all(self):
-        return None
-
-    def list(self, folder):
-        fid, _sep, path = folder.partition("|")
-        dirs, books, cursor = [], [], None
-        while True:
-            url = "%s/3/app/%s/share/%s/files/%s/files?limit=200" % (self.BASE, self.drive, self.uuid, fid)
-            answer = self._get(url + ("&cursor=" + cursor if cursor else ""))
-            for o in answer.get("data") or []:
-                name, oid = o.get("name"), o.get("id")
-                if not name or oid is None:
-                    continue
-                if o.get("type") == "dir":
-                    if not skip_folder(name):
-                        dirs.append("%s|%s" % (oid, name if not path else path + "/" + name))
-                elif _ext(name) in BOOK_EXTENSIONS:
-                    books.append({"name": name, "folder": path, "ref": str(oid), "size": int(o.get("size") or 0),
-                                  "modified": int(o.get("last_modified_at") or 0) * 1000})
-            cursor = answer.get("cursor") if answer.get("has_more") else None
-            if not cursor:
-                return dirs, books
-
-    def download(self, book, dest, progress=None):
-        url = "%s/2/app/%s/share/%s/files/%s/download" % (self.BASE, self.drive, self.uuid, book["ref"])
-        with self.session.get(url, stream=True, timeout=(30, 90)) as r:
-            _check(r)
-            _save_stream(r, dest, progress)
-
-
 def _save_stream(response, dest, progress):
     total = int(response.headers.get("Content-Length") or 0)
     done = 0
@@ -1423,19 +1364,17 @@ def _save_stream(response, dest, progress):
 
 
 def library_configured(cfg):
-    """A share link alone, or an address with a login: either reaches the library."""
-    return bool(cfg.get("share", "").strip() or (cfg.get("url", "").strip() and cfg.get("username", "").strip() and cfg.get("password")))
+    """An address with a login: the library is a WebDAV folder the app may read and write."""
+    return bool(cfg.get("url", "").strip() and cfg.get("username", "").strip() and cfg.get("password"))
 
 
 def library_started(cfg):
-    return bool(cfg.get("share") or cfg.get("url") or cfg.get("username") or cfg.get("password"))
+    return bool(cfg.get("url") or cfg.get("username") or cfg.get("password"))
 
 
 def remote_for(cfg):
-    """The share link wins over the address; None when nothing usable is set."""
+    """None when nothing usable is set."""
     try:
-        if cfg.get("share", "").strip():
-            return KDriveShare(cfg["share"])
         if library_configured(cfg):
             return WebDav(cfg["url"], cfg["username"].strip(), cfg["password"])
     except Exception:
@@ -1444,9 +1383,12 @@ def remote_for(cfg):
 
 
 def source_key(cfg):
-    if cfg.get("share", "").strip():
-        return "share:" + cfg["share"].strip()
     return "dav:%s@%s" % (cfg.get("url", "").strip(), cfg.get("username", "").strip())
+
+
+def from_library(entry):
+    """A book fetched from the drive: the one kind that has highlights, and a place that travels."""
+    return (entry.get("source") or "").startswith(("http://", "https://"))
 
 
 EMPTY_INDEX = {"scannedAt": 0, "source": "", "books": [], "complete": True, "frontier": [], "failed": [], "folders": 0}
@@ -1628,9 +1570,9 @@ class RemoteLibrary:
 # them — with the words themselves and, if one was written, a comment.
 #
 # They travel in a file that lies next to the book on the drive, "<book file>.highlights.json",
-# when the library is a WebDAV address (a share link cannot be written to: they then stay on
-# this computer). And a note per book lists them in Reader's Notes: a plain-text file written
-# into the folder "Reader's Books" of the notes folder, which Reader's Notes shows read-only.
+# with the place the book was left at. And a note per book lists them in Reader's Notes: a
+# plain-text file written into the folder "Reader's Books" of the notes folder, which Reader's
+# Notes shows read-only.
 # ------------------------------------------------------------------------------------------
 
 HIGHLIGHTS_FORMAT = "readers-highlights"
@@ -1783,20 +1725,11 @@ def _dav_session(username, password):
 
 
 def sidecar_address(cfg, entry):
-    """Where the highlights of a book are kept for every device to fold its own into, as
-    (address, username, password): next to the book when the library is a WebDAV address; else
-    (a share link cannot be written to) next to the book's note in the Reader's Notes folder,
-    when one is named; else None — they then stay on this computer."""
-    source = entry.get("source") or ""
-    if not source:
+    """Where the highlights of a book and the place it was left at are kept for every device:
+    in a file next to the book. None for a book that did not come from the library."""
+    if not from_library(entry) or not library_configured(cfg):
         return None
-    if not cfg.get("share", "").strip() and source.startswith(("http://", "https://")) and library_configured(cfg):
-        return source + HIGHLIGHTS_SUFFIX, cfg["username"].strip(), cfg["password"]
-    account = notes_account(cfg)
-    if account:
-        name = note_file_name(book_file_name(entry))[:-4]
-        return account[0] + quote(BOOKS_FOLDER, safe="") + "/" + quote(name + HIGHLIGHTS_SUFFIX, safe=""), account[1], account[2]
-    return None
+    return entry["source"] + HIGHLIGHTS_SUFFIX
 
 
 def position_of(entry):
@@ -1812,11 +1745,10 @@ def sync_sidecar(cfg, entry, highlights, name=None, position=None):
     one by one, and the place in the book, where the one read last wins. Returns (highlights,
     whether the drive's highlights had to be written, the place, whether that place is the
     drive's and newer than ours). Blocking."""
-    place = sidecar_address(cfg, dict(entry, sourceName=name) if name else entry)
-    if not place:
+    address = sidecar_address(cfg, entry)
+    if not address:
         return highlights, False, position, False
-    address, username, password = place
-    session = _dav_session(username, password)
+    session = _dav_session(cfg["username"].strip(), cfg["password"])
     r = session.get(address, timeout=(30, 60))
     theirs, there = [], None
     if r.status_code != 404:
@@ -1840,13 +1772,7 @@ def sync_sidecar(cfg, entry, highlights, name=None, position=None):
     if best:
         body["position"] = {k: best.get(k, 0) for k in ("chapter", "charOffset", "progress", "modified")}
     body = json.dumps(body, ensure_ascii=False, indent=1).encode("utf-8")
-    r = session.put(address, data=body, headers={"Content-Type": "application/json"}, timeout=(30, 60))
-    if r.status_code in (404, 409):         # the folder next to the note is not there yet
-        made = session.request("MKCOL", address.rsplit("/", 1)[0] + "/", timeout=(30, 60))
-        if made.status_code not in (201, 405, 301):
-            _check(made)
-        r = session.put(address, data=body, headers={"Content-Type": "application/json"}, timeout=(30, 60))
-    _check(r)
+    _check(session.put(address, data=body, headers={"Content-Type": "application/json"}, timeout=(30, 60)))
     return merged, marks, best, theirs_newer
 
 
@@ -1855,6 +1781,8 @@ def sync_book(cfg, entry, name, position=None):
     place it was left at. Returns (highlights, the drive's place when it is the newer one, else
     None), or None when nothing here was to be kept (changed meanwhile). Blocking."""
     before, dirty = load_highlights(entry)
+    if not sidecar_address(cfg, entry):         # not a book of the library: nothing of it leaves this computer
+        return before, None
     merged, marks, best, theirs_newer = sync_sidecar(cfg, entry, before, name, position or position_of(entry))
     # The note is written again whenever the drive's highlights were: two devices that met there
     # at the same moment leave a note that lacks what one of them had.
@@ -1912,7 +1840,7 @@ CREDENTIALS_FORMAT = "readers-credentials"
 CREDENTIALS_SECTION = "readers-books"
 CREDENTIALS_FALLBACK = "magazine-reader"          # reaches the same kind of drive
 SERVER_FALLBACKS = ("readers-scanner", "readers-notes", "readers-recorder")   # their "server", never their folder
-CREDENTIAL_KEYS = ("share", "url", "username", "password")
+CREDENTIAL_KEYS = ("url", "username", "password")
 NOTES_KEYS = ("notes_url", "notes_username", "notes_password")
 
 
@@ -1941,7 +1869,7 @@ def export_credentials(cfg, path):
 
 
 def read_credentials(text):
-    """What a file brings for us: ({share, url, username, password} with None for what it does
+    """What a file brings for us: ({url, username, password} with None for what it does
     not say, whether it came from another app's section)."""
     try:
         root = json.loads(text)
@@ -1963,20 +1891,16 @@ def read_credentials(text):
     for name in SERVER_FALLBACKS:
         s = root.get(name)
         if isinstance(s, dict) and text_of(s, "server") is not None:
-            return {"share": None, "url": text_of(s, "server"), "username": text_of(s, "username"),
+            return {"url": text_of(s, "server"), "username": text_of(s, "username"),
                     "password": text_of(s, "password")}, True
     raise NothingForUs()
 
 
 def apply_credentials(cfg, account):
-    """A file that names a share link replaces the whole account: a link and an address never
-    both apply."""
-    if account["share"] is not None:
-        cfg.update(share=account["share"].strip(), url="", username="", password="")
-    else:
-        cfg.update(share="", url=(account["url"] if account["url"] is not None else cfg.get("url", "")).strip(),
-                   username=(account["username"] if account["username"] is not None else cfg.get("username", "")).strip(),
-                   password=account["password"] if account["password"] is not None else cfg.get("password", ""))
+    """What the file names replaces what is set; what it leaves out stays."""
+    cfg.update(url=(account["url"] if account["url"] is not None else cfg.get("url", "")).strip(),
+               username=(account["username"] if account["username"] is not None else cfg.get("username", "")).strip(),
+               password=account["password"] if account["password"] is not None else cfg.get("password", ""))
 
 
 def read_notes_account(text):
@@ -2020,7 +1944,7 @@ def import_credentials(cfg, path):
 # ------------------------------------------------------------------------------------------
 
 DEFAULTS = {"dark": True, "font": "sans", "text_size": "M", "reader_pt": 0, "book_serif": False,
-            "keep_awake": True, "share": "", "url": "", "username": "", "password": "",
+            "keep_awake": True, "url": "", "username": "", "password": "",
             "notes_url": "", "notes_username": "", "notes_password": "",
             "library_sort": "NAME", "all_books_sort": "NEWEST"}
 AUTO_READER_PT = 13
@@ -2542,7 +2466,7 @@ class Reader(QtWidgets.QWidget):
             self.book, self.failed = book, error is not None
             if book:
                 self.chapter = min(max(0, self.chapter), len(book.chapters) - 1)
-                if entry.get("source"):
+                if from_library(entry):
                     self.set_highlights(load_highlights(entry)[0])
                     self.main.sync_highlights(entry, left_at, opening=True)
             self.update()
@@ -2721,7 +2645,7 @@ class Reader(QtWidgets.QWidget):
 
     def mouseMoveEvent(self, e):
         """Dragging across the text of a book from the library selects a passage."""
-        if self.pressed is None or not (self.entry and self.entry.get("source") and self.book):
+        if self.pressed is None or not (self.entry and from_library(self.entry) and self.book):
             return
         if self.selecting is None and (e.pos() - self.pressed).manhattanLength() < QtWidgets.QApplication.startDragDistance():
             return
@@ -3275,11 +3199,18 @@ class Main(QtWidgets.QMainWindow):
         return dialog.textValue().strip() if dialog.exec_() == QtWidgets.QDialog.Accepted else None
 
     def add_highlight(self, chapter, start, end, text, with_comment):
+        # The very passage is highlighted already: nothing to add, or its comment to write.
+        same = next((h for h in self.reader.shown if (h["chapter"], h["start"], h["end"]) == (chapter, start, end)), None)
         comment = ""
         if with_comment:
-            comment = self.ask_comment()
+            comment = self.ask_comment((same or {}).get("comment", ""))
             if comment is None:
                 return
+        if same:
+            if with_comment:
+                self.change_highlights([dict(h, comment=comment, modified=_now()) if h["id"] == same["id"] else h
+                                        for h in self.reader.highlights])
+            return
         self.change_highlights(self.reader.highlights + [new_highlight(chapter, start, end, text, comment)])
 
     def highlight_menu(self, where, found):
@@ -3335,7 +3266,7 @@ class Main(QtWidgets.QMainWindow):
         the book had before it was opened, when it is being opened); what could not be sent is
         sent the next time."""
         key = highlight_key(entry)
-        if not entry.get("source") or (not sidecar_address(self.cfg, entry) and not notes_account(self.cfg)):
+        if not sidecar_address(self.cfg, entry):
             return
         if key in self.syncing:
             self.sync_again.add(key)
@@ -3378,7 +3309,7 @@ class Main(QtWidgets.QMainWindow):
         """At the start: every book of the shelf that came from the library, one after the
         other, so that the shelf says how far each one is wherever it was last read."""
         cfg = dict(self.cfg)
-        books = [dict(b) for b in self.library.books if b.get("source") and (sidecar_address(cfg, b) or notes_account(cfg))]
+        books = [dict(b) for b in self.library.books if sidecar_address(cfg, b)]
         if not books:
             return
         index = self.remote.index["books"]
@@ -3495,14 +3426,13 @@ class Main(QtWidgets.QMainWindow):
     def account_rows(self):
         cfg = self.cfg
         return [
-            Row(cfg.get("share") or _("kDrive share link"), _("kDrive share link"), lambda: self.ask("share")),
             Row(cfg.get("url") or _("WebDAV address"), _("WebDAV address"), lambda: self.ask("url")),
             Row(cfg.get("username") or _("username"), _("username"), lambda: self.ask("username")),
             Row("••••••••" if cfg.get("password") else _("password"), _("password"), lambda: self.ask("password")),
         ]
 
     def ask(self, field):
-        labels = {"share": _("kDrive share link"), "url": _("WebDAV address"), "username": _("username"), "password": _("password"),
+        labels = {"url": _("WebDAV address"), "username": _("username"), "password": _("password"),
                   "notes_url": _("Reader's Notes folder"), "notes_username": _("username for the notes"), "notes_password": _("password for the notes")}
         dialog = QtWidgets.QInputDialog(self)
         dialog.setWindowTitle("Reader's Books")
@@ -3568,7 +3498,7 @@ class Main(QtWidgets.QMainWindow):
 
     def forget_library(self):
         self.remote.forget()
-        self.cfg.update(share="", url="", username="", password="")
+        self.cfg.update(url="", username="", password="")
         save_config(self.cfg)
         self.show_screen()
 
@@ -3735,11 +3665,11 @@ def _after(values, current):
 
 
 def HIGHLIGHTS_HINT():
-    return _("Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They follow the book to your other devices when the library is a WebDAV address, or when the Reader's Notes folder is given below; otherwise they stay on this computer. The book's menu exports them. With the WebDAV address of the Reader's Notes folder, a note per book lists its highlights in Reader's Notes.")
+    return _("Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.")
 
 
 def LIBRARY_HINT():
-    return _("Books kept on a drive, listed by folder; a book is downloaded only when you click it. Paste the link of a public kDrive share, or give the WebDAV address of the drive with a username and an application password. The drive is then scanned for epub, mobi, azw and fb2 files.")
+    return _("Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.")
 
 
 SANS_FAMILY = "sans-serif"   # "Roboto" once the bundled font is loaded (load_bundled_fonts)

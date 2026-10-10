@@ -151,16 +151,22 @@ class Credentials(unittest.TestCase):
         target = path("cred.json")
         with open(target, "w") as fh:
             json.dump({"format": "readers-credentials", "version": 1, "readers-notes": {"server": "https://dav.example/", "folder": "notes", "username": "u", "password": "p"}}, fh)
-        cfg = {"share": "", "url": "", "username": "", "password": ""}
+        cfg = {"url": "", "username": "", "password": ""}
         self.assertTrue(rb.import_credentials(cfg, target))             # from a neighbour
         self.assertEqual((cfg["url"], cfg["username"], cfg["password"]), ("https://dav.example/", "u", "p"))
-        rb.export_credentials({"share": "https://kdrive.infomaniak.com/app/share/1/ab-cd", "url": "", "username": "", "password": ""}, target)
+        self.assertEqual(cfg["notes_url"], "https://dav.example/notes/")
+        rb.export_credentials({"url": "https://drive.example/dav", "username": "moi", "password": "s", "notes_url": "https://drive.example/dav/Notes"}, target)
         with open(target) as fh:
             data = json.load(fh)
-        self.assertEqual(data["readers-books"], {"share": "https://kdrive.infomaniak.com/app/share/1/ab-cd"})
+        self.assertEqual(data["readers-books"], {"url": "https://drive.example/dav", "username": "moi", "password": "s", "notes_url": "https://drive.example/dav/Notes"})
         self.assertIn("readers-notes", data)
         self.assertFalse(rb.import_credentials(cfg, target))
-        self.assertEqual((cfg["share"], cfg["url"], cfg["password"]), ("https://kdrive.infomaniak.com/app/share/1/ab-cd", "", ""))
+        self.assertEqual((cfg["url"], cfg["username"], cfg["notes_url"]), ("https://drive.example/dav", "moi", "https://drive.example/dav/Notes"))
+        # a file that only names a share link says nothing a library can be made of
+        with open(path("share.json"), "w") as fh:
+            json.dump({"format": "readers-credentials", "readers-books": {"share": "https://kdrive.infomaniak.com/app/share/1/ab"}}, fh)
+        with self.assertRaises(rb.NothingForUs):
+            rb.import_credentials(dict(cfg), path("share.json"))
         with open(path("other.json"), "w") as fh:
             fh.write('{"hello": 1}')
         with self.assertRaises(rb.NotCredentials):
@@ -240,7 +246,7 @@ class Drive(unittest.TestCase):
             rb.remote_for, rb.RETRY_PAUSE = original, pause
 
     def test_a_scan_retries_notes_what_failed_and_carries_on_after_a_refused_login(self):
-        cfg = {"share": "", "url": "https://example.org/dav", "username": "u", "password": "p"}
+        cfg = {"url": "https://example.org/dav", "username": "u", "password": "p"}
         drive, remote = FakeDrive(), rb.RemoteLibrary()
         remote.forget()
         drive.locked = True
@@ -309,19 +315,16 @@ class Highlights(unittest.TestCase):
         self.assertEqual([(h["start"], h["end"]) for h in shown], [(16, 27), (16, 27)])
 
     def test_where_the_notes_go(self):
-        cfg = {"share": "", "url": "https://dav.example/", "username": "u", "password": "p", "notes_url": "https://dav.example/Notes"}
+        cfg = {"url": "https://dav.example/", "username": "u", "password": "p", "notes_url": "https://dav.example/Notes"}
         self.assertEqual(rb.notes_account(cfg), ("https://dav.example/Notes/", "u", "p"))
         self.assertIsNone(rb.notes_account(dict(cfg, notes_url="")))
         self.assertEqual(rb.notes_account(dict(cfg, notes_username="n", notes_password="q")), ("https://dav.example/Notes/", "n", "q"))
         entry = {"id": "x", "source": "https://dav.example/Livres/Un.epub"}
-        self.assertEqual(rb.sidecar_address(cfg, entry), ("https://dav.example/Livres/Un.epub.highlights.json", "u", "p"))
-        # a share link cannot be written to: the file then lies next to the note, when there is a notes folder
-        shared = dict(cfg, share="https://kdrive.infomaniak.com/app/share/1/ab")
-        book = {"id": "x", "source": "4242", "sourceName": "Deux: livres.epub"}
-        self.assertEqual(rb.sidecar_address(shared, book),
-                         ("https://dav.example/Notes/Reader%27s%20Books/Deux%20livres.highlights.json", "u", "p"))
-        self.assertIsNone(rb.sidecar_address(dict(shared, notes_url=""), book))
+        self.assertEqual(rb.sidecar_address(cfg, entry), "https://dav.example/Livres/Un.epub.highlights.json")
+        # a book opened from a file, or fetched through a share link by an older version, has none
         self.assertIsNone(rb.sidecar_address(cfg, {"id": "x", "source": None}))
+        self.assertIsNone(rb.sidecar_address(cfg, {"id": "x", "source": "4242"}))
+        self.assertIsNone(rb.sidecar_address(dict(cfg, password=""), entry))
         text = json.dumps({"format": "readers-credentials", "readers-notes": {"server": "https://dav.example", "folder": "Mes notes", "username": "n", "password": "q"}})
         self.assertEqual(rb.read_notes_account(text), {"notes_url": "https://dav.example/Mes%20notes/", "notes_username": "n", "notes_password": "q"})
 

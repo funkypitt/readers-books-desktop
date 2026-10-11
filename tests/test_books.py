@@ -1,9 +1,14 @@
-"""The parsers, the shelf, the credentials file and the pager, on books made up for the purpose."""
+"""The parsers, the shelf, the credentials file, the pager and the library page, on books made up
+for the purpose. The library page is driven against a small drive served by `rclone serve webdav`
+(skipped without rclone); its screenshots go to $READERS_BOOKS_SHOTS when that is set."""
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -205,6 +210,12 @@ class FakeDrive:
     def roots(self):
         return ["/"]
 
+    def folder_ref(self, path):
+        return "/" + path
+
+    def folder_path(self, ref):
+        return ref.strip("/")
+
     def list_all(self):
         return None
 
@@ -261,7 +272,8 @@ class Drive(unittest.TestCase):
         self.assertTrue(remote.index["complete"])
         self.assertEqual(sorted(b["name"] for b in remote.index["books"]), ["Deux.epub", "Trois.mobi", "Un.epub"])
         self.assertEqual((remote.index["failed"], remote.index["folders"], drive.calls["/b"]), (["/broken"], 3, 3))
-        self.assertEqual(remote.folders(), [("a", 1), ("b", 2)])
+        self.assertEqual(remote.folders(cfg), [("a", 1), ("b", 2)])
+        self.assertEqual(remote.folders(dict(cfg, library_folders=["b"])), [("b", 2)])
         self.assertEqual(rb.RemoteLibrary().index["failed"], ["/broken"])       # and it is on disk
 
     def test_the_transcripts_folder_is_looked_at_again_without_a_scan(self):
@@ -269,6 +281,9 @@ class Drive(unittest.TestCase):
 
         class Drive:
             base = "https://example.org/dav/"
+
+            def folder_ref(self, path):
+                return self.base + rb.quote(path, safe="") + "/"
 
             def list(self, folder):
                 if folder == self.base + "transcriptions/":
@@ -358,6 +373,170 @@ class Highlights(unittest.TestCase):
         self.assertIsNone(rb.sidecar_address(dict(cfg, password=""), entry))
         text = json.dumps({"format": "readers-credentials", "readers-notes": {"server": "https://dav.example", "folder": "Mes notes", "username": "n", "password": "q"}})
         self.assertEqual(rb.read_notes_account(text), {"notes_url": "https://dav.example/Mes%20notes/", "notes_username": "n", "notes_password": "q"})
+
+
+def book(folder, name):
+    return {"name": name, "folder": folder, "ref": "ref:%s/%s" % (folder, name), "size": 1, "modified": 1}
+
+
+class Folders(unittest.TestCase):
+    """The choice of folders and the merge of one folder listed again into the books known so far."""
+    def test_nothing_chosen_is_the_whole_drive(self):
+        self.assertTrue(rb.in_library([], ""))
+        self.assertTrue(rb.in_library([], "a/b"))
+        self.assertEqual(rb.library_roots([]), [""])
+
+    def test_a_chosen_folder_stands_for_what_is_inside(self):
+        chosen = ["Books"]
+        self.assertTrue(rb.in_library(chosen, "Books"))
+        self.assertTrue(rb.in_library(chosen, "Books/Maigret"))
+        self.assertFalse(rb.in_library(chosen, "Bookshelf"))        # a prefix of the name is not inside
+        self.assertFalse(rb.in_library(chosen, ""))
+        self.assertEqual(rb.part_of(chosen, "Books/Maigret"), "Books")
+        self.assertIsNone(rb.part_of(chosen, "Books"))
+        self.assertIsNone(rb.part_of(chosen, "Other"))
+
+    def test_the_transcripts_folder_always_stays(self):
+        chosen, t = ["Books"], rb.TRANSCRIPTS_FOLDER
+        self.assertTrue(rb.in_library(chosen, t))
+        self.assertTrue(rb.in_library(chosen, t + "/Huberman"))
+        self.assertEqual(rb.part_of(chosen, t + "/Huberman"), t)
+        self.assertEqual(rb.library_roots(chosen), ["Books", t])
+        self.assertEqual(rb.library_roots([t]), [t])
+
+    def test_listing_a_folder_again_replaces_its_own_books_only(self):
+        known = [book("a", "old.epub"), book("a", "kept.epub"), book("a/sub", "deep.epub"), book("b", "other.epub")]
+        merged = rb.merge_folder(known, "a", ["a/sub"], [book("a", "kept.epub"), book("a", "new.epub")])
+        self.assertEqual(sorted(b["folder"] + "/" + b["name"] for b in merged), sorted(["a/sub/deep.epub", "b/other.epub", "a/kept.epub", "a/new.epub"]))
+
+    def test_a_subfolder_gone_from_the_drive_takes_its_books_away(self):
+        known = [book("a/gone", "x.epub"), book("a/gone/deeper", "y.epub"), book("a/sub", "z.epub"), book("b", "w.epub")]
+        merged = rb.merge_folder(known, "a", ["a/sub"], [])
+        self.assertEqual(sorted(b["folder"] + "/" + b["name"] for b in merged), ["a/sub/z.epub", "b/w.epub"])
+
+    def test_the_top_of_the_drive_merges_the_same_way(self):
+        known = [book("", "top.epub"), book("gone", "x.epub"), book("stays", "y.epub")]
+        merged = rb.merge_folder(known, "", ["stays"], [book("", "top2.epub")])
+        self.assertEqual(sorted(b["folder"] + "/" + b["name"] for b in merged), ["/top2.epub", "stays/y.epub"])
+
+    def test_books_found_elsewhere_are_not_mixed_in(self):
+        # a listing only ever carries the folder's own books; anything else in `found` is ignored
+        merged = rb.merge_folder([], "a", [], [book("a", "ok.epub"), book("b", "stray.epub")])
+        self.assertEqual([b["folder"] + "/" + b["name"] for b in merged], ["a/ok.epub"])
+
+    def test_another_drive_drops_the_choice(self):
+        cfg = {"url": "https://a.example/", "library_folders": ["Books"], "library_folders_asked": True}
+        rb.set_library_url(cfg, "https://a.example/ ")
+        self.assertEqual(cfg["library_folders"], ["Books"])
+        rb.set_library_url(cfg, "https://b.example/")
+        self.assertEqual((cfg["url"], cfg["library_folders"], cfg["library_folders_asked"]), ("https://b.example/", [], False))
+
+
+class LibraryPage(unittest.TestCase):
+    """The library page against a drive of four folders served by rclone: the sync-now row, the
+    offer to keep only some folders, the choice kept to, the whole drive back."""
+    PORT = 8093
+    BASE = "http://127.0.0.1:%d" % PORT
+    FILES = ("Romans/Maigret/Le chien jaune.epub", "Romans/Un roman.epub", "Essais/Un essai.epub", "transcriptions/Une chaîne/Un épisode.epub")
+
+    @classmethod
+    def setUpClass(cls):
+        if not shutil.which("rclone"):
+            raise unittest.SkipTest("rclone is needed to serve the test drive")
+        drive = path("drive")
+        for f in cls.FILES:
+            os.makedirs(os.path.dirname(os.path.join(drive, f)), exist_ok=True)
+            open(os.path.join(drive, f), "wb").close()
+        cls.server = subprocess.Popen(["rclone", "serve", "webdav", drive, "--addr", "127.0.0.1:%d" % cls.PORT, "--user", "u", "--pass", "p"],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _i in range(100):
+            try:
+                rb.requests.get(cls.BASE, timeout=1)
+                return
+            except Exception:
+                time.sleep(0.1)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.terminate()
+        cls.server.wait()
+
+    def settle(self, main, until, what):
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            APP.processEvents()
+            if until():
+                APP.processEvents()
+                return
+            time.sleep(0.05)
+        self.fail("still waiting for " + what)
+
+    def synced(self, main):
+        self.settle(main, lambda: not main.remote.scanning and main.remote.index["complete"] and main.remote.index["scannedAt"] > 0, "the sync")
+        main.show_screen()
+
+    def shot(self, main, name):
+        where = os.environ.get("READERS_BOOKS_SHOTS")
+        if where:
+            APP.processEvents()
+            main.grab().save(os.path.join(where, name + ".png"))
+
+    def test_the_library_page_offers_the_folders_and_keeps_to_the_choice(self):
+        rb.save_config(dict(rb.DEFAULTS, url=self.BASE, username="u", password="p"))
+        try:
+            os.remove(rb.INDEX_FILE)
+        except OSError:
+            pass
+        main = rb.Main()
+        main.resize(760, 900)
+        main.show()
+        main.push((rb.LIBRARY,))
+        self.assertEqual(main.rows[0].title, rb._("sync now"))
+        self.synced(main)
+        titles = [r.title for r in main.rows]
+        self.assertEqual(titles[0], rb._("sync now"))
+        self.assertEqual(main.rows[0].secondary, rb._("scanned on %s", rb.date_label(main.remote.index["scannedAt"])))
+        self.assertIn(rb._("keep only some folders?"), titles)
+        self.assertEqual([t for t in titles if "/" in t or t in ("Essais", "Romans")], ["Essais", "Romans", "Romans/Maigret", "transcriptions/Une chaîne"])
+        self.assertEqual(next(r.secondary for r in main.rows if r.title == rb._("all books")), rb.n_books(4))
+        self.shot(main, "library")
+        # the offer opens the chooser, with the whole drive chosen
+        next(r for r in main.rows if r.title == rb._("keep only some folders?")).action()
+        self.assertEqual(main.screen[0], rb.LIBRARY_FOLDERS)
+        self.assertTrue(main.cfg["library_folders_asked"])
+        self.assertEqual((main.rows[1].title, main.rows[1].inverted), (rb._("the whole drive"), True))
+        next(r for r in main.rows if r.title == "Essais").action()
+        self.assertEqual(main.cfg["library_folders"], ["Essais"])
+        by_title = {r.title: r for r in main.rows}
+        self.assertEqual([(t, by_title[t].inverted) for t in ("Essais", "Romans", "Romans/Maigret", "transcriptions/Une chaîne")],
+                         [("Essais", True), ("Romans", False), ("Romans/Maigret", False), ("transcriptions/Une chaîne", True)])
+        self.assertEqual(by_title["transcriptions/Une chaîne"].secondary, rb.n_books(1) + " · " + rb._("in %s", rb.TRANSCRIPTS_FOLDER))
+        self.assertFalse(main.rows[1].inverted)
+        self.shot(main, "folders")
+        # back in the library: a quiet sync of the chosen folders, and only their books
+        before = main.remote.index["scannedAt"]
+        main.pop()
+        self.assertEqual(main.screen[0], rb.LIBRARY)
+        self.synced(main)
+        self.assertGreater(main.remote.index["scannedAt"], before)
+        titles = [r.title for r in main.rows]
+        self.assertNotIn(rb._("keep only some folders?"), titles)
+        self.assertEqual([t for t in titles if "/" in t or t in ("Essais", "Romans")], ["Essais", "transcriptions/Une chaîne"])
+        self.assertEqual(next(r.secondary for r in main.rows if r.title == rb._("all books")), rb.n_books(2))
+        self.assertEqual(len(main.remote.index["books"]), 4)           # the others are known still, for the chooser
+        main.push((rb.ALL_BOOKS,))
+        self.assertEqual(sorted(r.title for r in main.rows if r.kind == rb.ROW), ["Un essai", "Un épisode"])
+        main.pop()
+        # the whole drive brings them back
+        main.push((rb.LIBRARY_FOLDERS,))
+        main.rows[1].action()
+        self.assertEqual(main.cfg["library_folders"], [])
+        main.pop()
+        self.synced(main)
+        titles = [r.title for r in main.rows]
+        self.assertEqual([t for t in titles if "/" in t or t in ("Essais", "Romans")], ["Essais", "Romans", "Romans/Maigret", "transcriptions/Une chaîne"])
+        self.assertNotIn(rb._("keep only some folders?"), titles)      # offered once
+        main.close()
 
 
 if __name__ == "__main__":

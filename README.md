@@ -44,14 +44,19 @@ reader, the same library, the same wording.
   application password (kDrive, Nextcloud, any WebDAV server) that the app may read and write,
   listed by folder and then by name or by date, or all in one list by date, name, author or
   last opened (the author is what precedes " - " in the file name, else the folder's name).
-  Nothing is downloaded until you click a book. A scan that is stopped, or cut short by closing
-  the window, carries on where it was. The account can be exported and imported as the Reader's
-  credentials file shared by the other Reader's apps (also `--export-credentials FILE` /
-  `--import-credentials FILE`).
+  Nothing is downloaded until you click a book. The library syncs by itself when opened after
+  ten minutes or more, and at once with the "sync now" row at its top; what is known stays on
+  the screen while the drive is walked, new books appear, books gone from the drive go. A sync
+  that is stopped, or cut short by closing the window, carries on where it was. Once the drive
+  has been walked, the library offers to keep only some of its folders (with everything inside
+  them): fewer folders, faster syncs — the choice is in the library's menu and in the settings.
+  The account can be exported and imported as the Reader's credentials file shared by the other
+  Reader's apps (also `--export-credentials FILE` / `--import-credentials FILE`).
 * The transcripts made in Reader's Podcasts arrive by themselves: it sends each one, as a small
   book, to a `transcriptions` folder at the top of the library (a folder per channel), and that
-  folder is looked at again every time the library is opened — no scan to ask for. They are
-  books like the others: read, highlighted, commented, with their note in Reader's Notes.
+  folder is looked at again every time the library is opened, whatever folders are chosen — no
+  sync to ask for. They are books like the others: read, highlighted, commented, with their note
+  in Reader's Notes.
 * Six languages (English, French, German, Spanish, Portuguese, Russian), white on black or black
   on white, three sizes for the lists.
 
@@ -60,7 +65,7 @@ haptic tick.
 
 ## Install
 
-    sudo apt install ./readers-books_1.1.2_all.deb     # Debian, Ubuntu, Pop!_OS
+    sudo apt install ./readers-books_1.2.0_all.deb     # Debian, Ubuntu, Pop!_OS
     cd packaging && makepkg -si                         # Arch, Manjaro
 
 Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests).
@@ -76,10 +81,12 @@ the settings and the library's account, readable by your account only.
     python3 tests/test_books.py
     python3 tests/bench_sync.py
 
-The first runs on books made up by `tests/make_books.py`. The second is the synchronisation in
-all its forms — two and three devices sharing one drive, highlights, comments, removals, the
-place in the book, logins refused, the note in Reader's Notes — against a real WebDAV server
-(`rclone serve webdav`, which it starts itself).
+The first runs on books made up by `tests/make_books.py`; its last case drives the library page
+against a small drive it serves itself (`rclone serve webdav`, skipped without rclone) and
+saves its screenshots in `$READERS_BOOKS_SHOTS` when that is set. The second is the
+synchronisation in all its forms — two and three devices sharing one drive, highlights,
+comments, removals, the place in the book, logins refused, the note in Reader's Notes — against
+a real WebDAV server (`rclone serve webdav`, which it starts itself).
 
 ## Crédits / Credits
 

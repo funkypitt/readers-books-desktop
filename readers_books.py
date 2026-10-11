@@ -26,7 +26,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.1.2"
+VERSION = "1.2.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -126,6 +126,13 @@ STRINGS = {
   "scanned on %s": "parcouru le %s",
   "stop the scan": "arrêter le parcours",
   "scan the drive again": "parcourir le drive à nouveau",
+  "sync now": "synchroniser maintenant",
+  "folders of the library": "dossiers de la bibliothèque",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "Tout le drive est dans la bibliothèque. Choisissez des dossiers pour ne garder que ceux-là, avec tout ce qu'ils contiennent : la bibliothèque se synchronise alors plus vite. Les transcriptions de Reader's Podcasts restent dans tous les cas.",
+  "the whole drive": "tout le drive",
+  "in %s": "dans %s",
+  "keep only some folders?": "ne garder que certains dossiers ?",
+  "%d folders hold books — choose the ones for the library, or leave the whole drive": "%d dossiers contiennent des livres — choisissez ceux de la bibliothèque, ou gardez tout le drive",
   "by name": "par nom",
   "newest first": "les plus récents d'abord",
   "oldest first": "les plus anciens d'abord",
@@ -210,6 +217,13 @@ STRINGS = {
   "scanned on %s": "durchsucht am %s",
   "stop the scan": "Suche anhalten",
   "scan the drive again": "Drive erneut durchsuchen",
+  "sync now": "jetzt synchronisieren",
+  "folders of the library": "Ordner der Bibliothek",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "Das ganze Drive ist in der Bibliothek. Wählen Sie Ordner, um nur diese zu behalten, mit allem darin: die Bibliothek wird dann schneller synchronisiert. Die Transkriptionen von Reader's Podcasts bleiben in jedem Fall.",
+  "the whole drive": "das ganze Drive",
+  "in %s": "in %s",
+  "keep only some folders?": "nur einige Ordner behalten?",
+  "%d folders hold books — choose the ones for the library, or leave the whole drive": "%d Ordner enthalten Bücher — wählen Sie die der Bibliothek, oder behalten Sie das ganze Drive",
   "by name": "nach Name",
   "newest first": "neueste zuerst",
   "oldest first": "älteste zuerst",
@@ -294,6 +308,13 @@ STRINGS = {
   "scanned on %s": "recorrido el %s",
   "stop the scan": "detener el recorrido",
   "scan the drive again": "recorrer el drive de nuevo",
+  "sync now": "sincronizar ahora",
+  "folders of the library": "carpetas de la biblioteca",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "Todo el drive está en la biblioteca. Elija carpetas para quedarse solo con esas, con todo lo que contienen: la biblioteca se sincroniza entonces más rápido. Las transcripciones de Reader's Podcasts se quedan en todo caso.",
+  "the whole drive": "todo el drive",
+  "in %s": "en %s",
+  "keep only some folders?": "¿quedarse solo con algunas carpetas?",
+  "%d folders hold books — choose the ones for the library, or leave the whole drive": "%d carpetas contienen libros — elija las de la biblioteca, o deje todo el drive",
   "by name": "por nombre",
   "newest first": "los más recientes primero",
   "oldest first": "los más antiguos primero",
@@ -378,6 +399,13 @@ STRINGS = {
   "scanned on %s": "percorrida a %s",
   "stop the scan": "parar o percurso",
   "scan the drive again": "percorrer a drive de novo",
+  "sync now": "sincronizar agora",
+  "folders of the library": "pastas da biblioteca",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "Toda a drive está na biblioteca. Escolha pastas para ficar só com essas, com tudo o que contêm: a biblioteca sincroniza-se então mais depressa. As transcrições do Reader's Podcasts ficam em todo o caso.",
+  "the whole drive": "toda a drive",
+  "in %s": "em %s",
+  "keep only some folders?": "ficar só com algumas pastas?",
+  "%d folders hold books — choose the ones for the library, or leave the whole drive": "%d pastas contêm livros — escolha as da biblioteca, ou deixe toda a drive",
   "by name": "por nome",
   "newest first": "mais recentes primeiro",
   "oldest first": "mais antigos primeiro",
@@ -463,6 +491,13 @@ STRINGS = {
   "scanned on %s": "просмотрено %s",
   "stop the scan": "остановить просмотр",
   "scan the drive again": "просмотреть диск заново",
+  "sync now": "синхронизировать сейчас",
+  "folders of the library": "папки библиотеки",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "В библиотеке весь диск. Выберите папки, чтобы оставить только их, со всем содержимым: библиотека тогда синхронизируется быстрее. Расшифровки Reader's Podcasts остаются в любом случае.",
+  "the whole drive": "весь диск",
+  "in %s": "в %s",
+  "keep only some folders?": "оставить только некоторые папки?",
+  "%d folders hold books — choose the ones for the library, or leave the whole drive": "в %d папках есть книги — выберите папки библиотеки или оставьте весь диск",
   "by name": "по имени",
   "newest first": "сначала новые",
   "oldest first": "сначала старые",
@@ -479,6 +514,12 @@ PLURALS = {
  "en": ("%d book", "%d books"), "fr": ("%d livre", "%d livres"), "de": ("%d Buch", "%d Bücher"),
  "es": ("%d libro", "%d libros"), "pt": ("%d livro", "%d livros"),
  "ru": ("%d книга", "%d книги", "%d книг"),
+}
+FOLDERS_CHOSEN = {
+ "en": ("%d folder chosen", "%d folders chosen"), "fr": ("%d dossier choisi", "%d dossiers choisis"),
+ "de": ("%d Ordner gewählt", "%d Ordner gewählt"), "es": ("%d carpeta elegida", "%d carpetas elegidas"),
+ "pt": ("%d pasta escolhida", "%d pastas escolhidas"),
+ "ru": ("%d папка выбрана", "%d папки выбраны", "%d папок выбрано"),
 }
 
 
@@ -508,7 +549,16 @@ def _(key, *args):
 
 def n_books(n):
     """« 1 book », « 3 books » — with the three Russian forms."""
-    forms = PLURALS.get(LANG) or PLURALS["en"]
+    return _plural(PLURALS, n)
+
+
+def n_folders_chosen(n):
+    """« 1 folder chosen », « 3 folders chosen »."""
+    return _plural(FOLDERS_CHOSEN, n)
+
+
+def _plural(table, n):
+    forms = table.get(LANG) or table["en"]
     if LANG == "ru":
         if n % 10 == 1 and n % 100 != 11:
             form = forms[0]
@@ -1271,6 +1321,14 @@ class WebDav:
     def roots(self):
         return [self.base]
 
+    def folder_ref(self, path):
+        """The address of a folder named by its path below the top of the drive ("" = the top)."""
+        return self.base + "".join(quote(p, safe="") + "/" for p in path.split("/") if p)
+
+    def folder_path(self, ref):
+        """The path below the top of the drive of a folder's address, decoded."""
+        return "/".join(unquote(p) for p in self._relative(ref).split("/") if p)
+
     def list_all(self):
         """One request for the whole tree. Many servers refuse it, or quietly answer for one
         level only."""
@@ -1392,15 +1450,70 @@ def from_library(entry):
     return (entry.get("source") or "").startswith(("http://", "https://"))
 
 
+# Which folders of the drive make the library. Empty = the whole drive. A chosen folder stands
+# for everything inside it; the folder Reader's Podcasts sends its transcripts to is always in.
+# The choice is kept in the settings; a sync walks only these folders, and only their books are shown.
+
+def chosen_folders(cfg):
+    """The folders chosen in the settings: paths below the top of the drive, sorted."""
+    return sorted(f for f in (cfg.get("library_folders") or []) if isinstance(f, str) and f)
+
+
+def folder_under(parent, folder):
+    return parent == "" or folder == parent or folder.startswith(parent + "/")
+
+
+def in_library(chosen, folder):
+    return not chosen or folder_under(TRANSCRIPTS_FOLDER, folder) or any(folder_under(c, folder) for c in chosen)
+
+
+def part_of(chosen, folder):
+    """The chosen folder a folder is part of without being chosen itself; None otherwise."""
+    for c in chosen:
+        if c != folder and folder_under(c, folder):
+            return c
+    if chosen and folder != TRANSCRIPTS_FOLDER and folder_under(TRANSCRIPTS_FOLDER, folder):
+        return TRANSCRIPTS_FOLDER
+    return None
+
+
+def library_roots(chosen):
+    """Where a sync starts: the chosen folders and the transcripts', or the top of the drive."""
+    return list(dict.fromkeys(chosen + [TRANSCRIPTS_FOLDER])) if chosen else [""]
+
+
+def merge_folder(books, folder, subfolders, found):
+    """The books after one folder was listed again: its own books are replaced by what was
+    found, and the books of subfolders the drive no longer has (not in `subfolders`) are
+    dropped, with everything below them. Books elsewhere stay as they were."""
+    kept_sub = set(subfolders)
+    kept = []
+    for b in books:
+        if b["folder"] == folder:
+            continue
+        if not folder_under(folder, b["folder"]):
+            kept.append(b)
+            continue
+        below = b["folder"] if folder == "" else b["folder"][len(folder) + 1:]
+        child = below.split("/", 1)[0] if folder == "" else folder + "/" + below.split("/", 1)[0]
+        if child in kept_sub:
+            kept.append(b)
+    return kept + [b for b in found if b["folder"] == folder]
+
+
 EMPTY_INDEX = {"scannedAt": 0, "source": "", "books": [], "complete": True, "frontier": [], "failed": [], "folders": 0}
+STALE_AFTER_MS = 10 * 60 * 1000        # opened later than this after the last sync, the library syncs again by itself
 
 
 class RemoteLibrary:
     """The drive's e-books as scanned so far, kept on disk so the library opens at once.
 
-    `complete` = the whole tree was walked; otherwise `frontier` holds the folders still to
-    list, so a scan that was stopped (window closed, network gone) carries on where it was.
-    `failed` = folders the server would not list after three tries."""
+    A sync walks the tree (the chosen folders only, when some are chosen) and merges each folder
+    as it is listed: what is known stays on the screen, new books appear, books gone from the
+    drive go, and the list never empties while the drive is walked. `complete` = the whole walk
+    was done; otherwise `frontier` holds the folders still to list, so a sync that was stopped
+    (window closed, network gone) carries on where it was. `failed` = folders the server would
+    not list after three tries."""
 
     def __init__(self):
         try:
@@ -1422,26 +1535,55 @@ class RemoteLibrary:
     def matches(self, cfg):
         return self.index["source"] == source_key(cfg) and self.index["scannedAt"] > 0
 
-    def folders(self):
+    def shown(self, cfg):
+        """The books in the library: those of the chosen folders, or all of them."""
+        chosen = chosen_folders(cfg)
+        return [b for b in self.index["books"] if in_library(chosen, b["folder"])]
+
+    def folders(self, cfg):
+        return self._counted(self.shown(cfg))
+
+    def known_folders(self):
+        """Every folder the drive was seen to hold books in, chosen or not: what the choice is made from."""
+        return self._counted(self.index["books"])
+
+    @staticmethod
+    def _counted(books):
         counts = {}
-        for b in self.index["books"]:
+        for b in books:
             counts[b["folder"]] = counts.get(b["folder"], 0) + 1
         return sorted(counts.items(), key=lambda kv: kv[0].lower())
 
     def books(self, folder):
         return [b for b in self.index["books"] if b["folder"] == folder]
 
+    def stale(self, now=None):
+        """True when the last sync is old enough for the library to sync again by itself at its opening."""
+        return (now if now is not None else _now()) - self.index["scannedAt"] > STALE_AFTER_MS
+
+    def sync_quietly(self, cfg):
+        """The sync at the opening of the library, or after the folders were chosen: the same walk, by itself."""
+        if not self.scanning and self.matches(cfg):
+            self.scan(cfg, False)
+
     def scan(self, cfg, fresh):
-        """From scratch, or carrying on from the saved frontier and the folders that failed."""
+        """From scratch when `fresh` (or when the account changed); else carrying on an
+        unfinished walk; else the whole library again."""
         remote = remote_for(cfg)
         if self.scanning or remote is None:
             return
         fresh = fresh or not self.matches(cfg)
-        start = dict(EMPTY_INDEX, source=source_key(cfg), complete=False) if fresh else dict(self.index)
+        if fresh:
+            start = dict(EMPTY_INDEX, source=source_key(cfg), complete=False)
+        elif not self.index["complete"]:
+            start = dict(self.index)
+        else:
+            start = dict(self.index, complete=False, frontier=[], folders=0)
+        from_top = fresh or self.index["complete"]
         self.error = None
         self.stop = threading.Event()
         self.progress = (start["folders"], len(start["books"]), len(start["failed"]))
-        self.thread = threading.Thread(target=self._run, args=(remote, start, fresh, self.stop), daemon=True)
+        self.thread = threading.Thread(target=self._run, args=(remote, start, from_top, chosen_folders(cfg), self.stop), daemon=True)
         self.thread.start()
 
     def cancel(self):
@@ -1461,13 +1603,14 @@ class RemoteLibrary:
 
         def run():
             try:
-                found, queue = [], [remote.base + quote(name, safe="") + "/"]
+                top = remote.folder_ref(name)
+                found, queue = [], [top]
                 while queue and len(found) < 20000:
                     folder = queue.pop(0)
                     try:
                         dirs, books = remote.list(folder)
                     except IOError as exc:
-                        if folder.endswith("/" + quote(name, safe="") + "/") and "404" in str(exc):
+                        if folder == top and "404" in str(exc):
                             break                   # no such folder (yet, or any more): nothing in it
                         return                      # could not be read: what was known stays
                     queue.extend(dirs)
@@ -1501,9 +1644,9 @@ class RemoteLibrary:
             pass
         self.changed += 1
 
-    def _run(self, remote, start, fresh, stop):
+    def _run(self, remote, start, from_top, chosen, stop):
         try:
-            self._walk(remote, start, fresh, stop)
+            self._walk(remote, start, from_top, chosen, stop)
         except Exception as exc:
             if not stop.is_set():
                 self.error = exc
@@ -1512,16 +1655,19 @@ class RemoteLibrary:
                 self.progress = None
             self.changed += 1
 
-    def _walk(self, remote, index, fresh, stop):
-        if fresh:
-            everything = remote.list_all()
+    def _walk(self, remote, index, from_top, chosen, stop):
+        roots = [remote.folder_ref(p) for p in library_roots(chosen)]
+        if from_top:
+            # the whole tree at once, when the server allows it and the whole drive is wanted
+            everything = remote.list_all() if not chosen else None
             if everything is not None:
                 self._save(dict(index, books=everything, complete=True, frontier=[], failed=[],
                                 folders=len({b["folder"] for b in everything}), scannedAt=_now()))
                 return
-            index = dict(index, frontier=remote.roots())
+            index = dict(index, frontier=roots)
         # A pool of workers over one queue, so a slow folder holds nobody else back. Folders that
-        # failed last time get another chance now.
+        # failed last time get another chance now. Each folder listed is merged into the books
+        # known so far, so the library stays whole on the screen while the drive is walked.
         lock = threading.Lock()
         books = list(index["books"])
         queue = list(dict.fromkeys(index["frontier"] + index["failed"]))
@@ -1554,13 +1700,17 @@ class RemoteLibrary:
                     in_flight.discard(folder)
                     if result:
                         queue.extend(result[0])
-                        books.extend(result[1])
+                        books[:] = merge_folder(books, remote.folder_path(folder), [remote.folder_path(d) for d in result[0]], result[1])
                         state["folders"] += 1
                     elif isinstance(error, WrongLogin):
                         # Back on the list: once the login is put right, the scan carries on
                         # from this very folder instead of finding nothing left to do.
                         state["fatal"] = error
                         queue.insert(0, folder)
+                    elif folder in roots and "404" in str(error):
+                        # A chosen folder the drive no longer has (or no transcripts folder yet) is simply empty.
+                        path = remote.folder_path(folder)
+                        books[:] = [b for b in books if not folder_under(path, b["folder"])]
                     else:
                         failed.append(folder)
                     state["dirty"] = True
@@ -1589,7 +1739,7 @@ class RemoteLibrary:
 
     def _list_with_retries(self, remote, folder, stop):
         """Servers hiccup (timeouts, 429, 5xx): three tries with a pause; a refused login stops
-        everything."""
+        everything, and a folder that is not there (404) is not asked for again."""
         attempt = 0
         while True:
             try:
@@ -1598,7 +1748,7 @@ class RemoteLibrary:
                 return None, exc
             except (IOError, requests.RequestException, ET.ParseError, ValueError) as exc:
                 attempt += 1
-                if attempt >= ATTEMPTS or stop.wait(RETRY_PAUSE * attempt * attempt):
+                if "404" in str(exc) or attempt >= ATTEMPTS or stop.wait(RETRY_PAUSE * attempt * attempt):
                     return None, exc
 
 
@@ -1936,9 +2086,16 @@ def read_credentials(text):
 
 def apply_credentials(cfg, account):
     """What the file names replaces what is set; what it leaves out stays."""
-    cfg.update(url=(account["url"] if account["url"] is not None else cfg.get("url", "")).strip(),
-               username=(account["username"] if account["username"] is not None else cfg.get("username", "")).strip(),
+    set_library_url(cfg, account["url"] if account["url"] is not None else cfg.get("url", ""))
+    cfg.update(username=(account["username"] if account["username"] is not None else cfg.get("username", "")).strip(),
                password=account["password"] if account["password"] is not None else cfg.get("password", ""))
+
+
+def set_library_url(cfg, url):
+    """The library's address. Another drive: its folders are not these, and the choice is to be offered again."""
+    if url.strip() != cfg.get("url", "").strip():
+        cfg.update(library_folders=[], library_folders_asked=False)
+    cfg["url"] = url.strip()
 
 
 def read_notes_account(text):
@@ -1984,7 +2141,9 @@ def import_credentials(cfg, path):
 DEFAULTS = {"dark": True, "font": "sans", "text_size": "M", "reader_pt": 0, "book_serif": False,
             "keep_awake": True, "url": "", "username": "", "password": "",
             "notes_url": "", "notes_username": "", "notes_password": "",
-            "library_sort": "NAME", "all_books_sort": "NEWEST"}
+            "library_sort": "NAME", "all_books_sort": "NEWEST",
+            # the folders of the drive that make the library (empty = the whole drive); whether the choice was offered
+            "library_folders": [], "library_folders_asked": False}
 AUTO_READER_PT = 13
 MIN_READER_PT, MAX_READER_PT = 8, 30
 
@@ -2324,9 +2483,11 @@ THUMB = 64
 
 
 class Row:
-    def __init__(self, title="", secondary="", action=None, menu=None, kind=ROW, current=False, lines=2, thumb=None):
+    """`current` = the row one stands on (the list opens on it); `inverted` = drawn the same way
+    without being it (a folder chosen for the library)."""
+    def __init__(self, title="", secondary="", action=None, menu=None, kind=ROW, current=False, lines=2, thumb=None, inverted=False):
         self.title, self.secondary, self.action, self.menu = title, secondary, action, menu
-        self.kind, self.current, self.lines, self.thumb = kind, current, lines, thumb
+        self.kind, self.current, self.lines, self.thumb, self.inverted = kind, current, lines, thumb, inverted
 
 
 def wrap(text, font, width, max_lines):
@@ -2386,7 +2547,7 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
     def paint(self, p, option, index):
         row = self._row(index)
         p.save()
-        inverted = row.kind == ROW and (row.current or bool(option.state & QtWidgets.QStyle.State_Selected))
+        inverted = row.kind == ROW and (row.current or row.inverted or bool(option.state & QtWidgets.QStyle.State_Selected))
         fg, bg = (self.bg, self.fg) if inverted else (self.fg, self.bg)
         p.fillRect(option.rect, bg)
         dim = QtGui.QColor(fg)
@@ -2797,7 +2958,7 @@ class Reader(QtWidgets.QWidget):
 # The window
 # ------------------------------------------------------------------------------------------
 
-SHELF, BOOK, CHAPTERS, SETTINGS, LIBRARY, FOLDER, ALL_BOOKS = "shelf", "book", "chapters", "settings", "library", "folder", "all"
+SHELF, BOOK, CHAPTERS, SETTINGS, LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS = "shelf", "book", "chapters", "settings", "library", "folder", "all", "library_folders"
 UI_SIZES = {"S": 11, "M": 13, "L": 15}
 
 
@@ -2820,6 +2981,7 @@ class Main(QtWidgets.QMainWindow):
         self.credentials_message = ""
         self.image_stores = {}
         self.seen_change = -1
+        self.folders_before = []        # the library's folders as they were when their page was opened
         self.colors = {"bg": "#000000", "fg": "#ffffff"}
         self.setWindowTitle("Reader's Books")
         self.setAcceptDrops(True)
@@ -3007,13 +3169,18 @@ class Main(QtWidgets.QMainWindow):
 
     def push(self, screen):
         self.fetch_error = ""
+        if screen[0] == LIBRARY_FOLDERS:
+            self.folders_before = chosen_folders(self.cfg)
         self.stack.append(screen)
         self.show_screen(reset=True)
 
     def pop(self):
         if len(self.stack) > 1:
             self.fetch_error = ""
-            self.stack.pop()
+            left = self.stack.pop()
+            # the folders of the library left changed: it syncs quietly, so folders taken back in are read again
+            if left[0] == LIBRARY_FOLDERS and chosen_folders(self.cfg) != self.folders_before:
+                self.remote.sync_quietly(self.cfg)
             self.show_screen(reset=True)
 
     def home(self):
@@ -3445,7 +3612,11 @@ class Main(QtWidgets.QMainWindow):
             Row(kind=RULE),
             Row(LIBRARY_HINT(), kind=HINT),
         ]
-        rows += self.account_rows() + self.credentials_rows()
+        rows += self.account_rows()
+        if library_configured(cfg):
+            chosen = chosen_folders(cfg)
+            rows.append(Row(_("folders of the library"), n_folders_chosen(len(chosen)) if chosen else _("the whole drive"), lambda: self.push((LIBRARY_FOLDERS,))))
+        rows += self.credentials_rows()
         if library_started(cfg):
             rows.append(Row(_("forget the library"), _("removes the link, the login and the list of books; the shelf is kept"), self.forget_library))
         rows += [Row(kind=RULE), Row(HIGHLIGHTS_HINT(), kind=HINT),
@@ -3486,7 +3657,10 @@ class Main(QtWidgets.QMainWindow):
         if dialog.exec_() != QtWidgets.QDialog.Accepted:
             return
         value = dialog.textValue()
-        self.cfg[field] = value if secret else value.strip()
+        if field == "url":
+            set_library_url(self.cfg, value)
+        else:
+            self.cfg[field] = value if secret else value.strip()
         save_config(self.cfg)
         if field.startswith("notes_"):
             return self.show_screen()
@@ -3536,7 +3710,8 @@ class Main(QtWidgets.QMainWindow):
 
     def forget_library(self):
         self.remote.forget()
-        self.cfg.update(url="", username="", password="")
+        set_library_url(self.cfg, "")
+        self.cfg.update(username="", password="")
         save_config(self.cfg)
         self.show_screen()
 
@@ -3544,20 +3719,34 @@ class Main(QtWidgets.QMainWindow):
 
     def enter_library(self):
         """A drive just set up, or set up differently, is walked at once; a walk cut short
-        carries on."""
+        carries on; a library not synced for a while is synced again quietly; a fresh one
+        only looks for new transcripts."""
         if not library_configured(self.cfg) or self.remote.scanning:
             return
         if not self.remote.matches(self.cfg):
             self.remote.scan(self.cfg, True)
         elif not self.remote.index["complete"] and self.remote.error is None:
             self.remote.scan(self.cfg, False)
+        elif self.remote.stale() and self.remote.error is None:
+            self.remote.sync_quietly(self.cfg)
         else:
             self.remote.refresh_folder(self.cfg)
+
+    def set_library_folders(self, folders):
+        """The folders that make the library; chosen, the choice is no longer to be offered."""
+        self.cfg.update(library_folders=sorted(set(f for f in folders if f)), library_folders_asked=True)
+        save_config(self.cfg)
+        self.show_screen()
+
+    def offer_folders(self):
+        self.cfg["library_folders_asked"] = True
+        save_config(self.cfg)
+        self.push((LIBRARY_FOLDERS,))
 
     def watch_scan(self):
         if self.remote.changed != self.seen_change:
             self.seen_change = self.remote.changed
-            if self.screen[0] in (LIBRARY, FOLDER, ALL_BOOKS):
+            if self.screen[0] in (LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS):
                 self.show_screen()
 
     def scan(self, fresh):
@@ -3573,33 +3762,59 @@ class Main(QtWidgets.QMainWindow):
         if not library_configured(cfg):
             return _("library"), [Row(LIBRARY_HINT(), kind=HINT)] + self.account_rows() + [Row(kind=RULE)] + self.credentials_rows(), None
         index, progress, error = remote.index, remote.progress if remote.scanning else None, remote.error
-        rows = []
-        if progress:
-            rows.append(Row(_("scanning… %d folders, %d books", progress[0], progress[1]), kind=HINT))
+        # the sync, by hand, with where it is or when it last ran
+        state = (_("scanning… %d folders, %d books", progress[0], progress[1]) if progress
+                 else _("scanned on %s", date_label(index["scannedAt"])) if index["scannedAt"] > 0 else "")
+        rows = [Row(_("sync now"), state, lambda: None if remote.scanning else self.scan(False))]
         if error is not None and not progress:
             rows.append(Row(_("the drive refused the login") if isinstance(error, WrongLogin)
                             else _("the drive could not be read: %s", str(error)[:160] or type(error).__name__), kind=HINT))
+        # once the drive was walked: keep only some of its folders?
+        known = [f for f in remote.known_folders() if f[0]]
+        if (not progress and index["complete"] and index["scannedAt"] > 0 and not cfg.get("library_folders_asked")
+                and not chosen_folders(cfg) and len(known) > 1):
+            rows.append(Row(_("keep only some folders?"), _("%d folders hold books — choose the ones for the library, or leave the whole drive", len(known)), self.offer_folders))
         unfinished = not progress and not index["complete"] and index["scannedAt"] > 0
         if unfinished:
             rows.append(Row(_("continue the scan"), _("the scan stopped after %d folders · %d books so far", index["folders"], len(index["books"])),
                             lambda: self.scan(False)))
         if not progress and index["complete"] and index["failed"]:
             rows.append(Row(_("continue the scan"), _("%d folders could not be read", len(index["failed"])), lambda: self.scan(False)))
-        folders = remote.folders()
+        folders, shown = remote.folders(cfg), remote.shown(cfg)
         if not folders and not progress and error is None and index["complete"] and index["scannedAt"] > 0:
             rows.append(Row(_("no e-book found on the drive (epub, mobi, azw, fb2)"), kind=HINT))
-        if index["books"]:
-            rows.append(Row(_("all books"), n_books(len(index["books"])), lambda: self.push((ALL_BOOKS,))))
+        if shown:
+            rows.append(Row(_("all books"), n_books(len(shown)), lambda: self.push((ALL_BOOKS,))))
         for path, count in folders:
             rows.append(Row(path or _("top of the drive"), n_books(count), lambda path=path: self.push((FOLDER, path)), lines=1))
-        if index["scannedAt"] > 0 and not progress and index["complete"]:
-            rows.append(Row(_("scanned on %s", date_label(index["scannedAt"])), kind=HINT))
         menu = []
         if not progress and (not index["complete"] or index["failed"]):
             menu.append((_("continue the scan"), lambda: self.scan(False)))
         menu.append((_("stop the scan"), self.stop_scan) if progress else (_("scan the drive again"), lambda: self.scan(True)))
+        menu.append((_("folders of the library"), lambda: self.push((LIBRARY_FOLDERS,))))
         menu.append((_("settings"), lambda: self.push((SETTINGS,))))
         return _("library"), rows, menu
+
+    def screen_library_folders(self):
+        """The folders of the drive that make the library: every folder seen to hold books, the
+        chosen ones inverted along with what is inside them; a click chooses or un-chooses."""
+        chosen = chosen_folders(self.cfg)
+        rows = [Row(_("The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case."), kind=HINT),
+                Row(_("the whole drive"), "", lambda: self.set_library_folders([]) if chosen else None, inverted=not chosen)]
+        for path, count in self.remote.known_folders():
+            if not path:
+                continue
+            part = part_of(chosen, path)
+            secondary = n_books(count) + (" · " + _("in %s", part) if part else "")
+
+            def choose(path=path, part=part):
+                if path in chosen:
+                    self.set_library_folders([f for f in chosen if f != path])
+                elif part is None:
+                    self.set_library_folders(chosen + [path])
+
+            rows.append(Row(path, secondary, choose, lines=1, inverted=bool(chosen) and in_library(chosen, path)))
+        return _("folders of the library"), rows, None
 
     def screen_folder(self):
         path = self.screen[1]
@@ -3618,7 +3833,7 @@ class Main(QtWidgets.QMainWindow):
         order = self.cfg.get("all_books_sort", "NEWEST")
         # When each book was last opened here, by its reference on the drive.
         opened = {b["source"]: max(b.get("opened", 0), b.get("added", 0)) for b in self.library.books if b.get("source")}
-        books = list(self.remote.index["books"])
+        books = self.remote.shown(self.cfg)
         if order == "NAME":
             books.sort(key=lambda b: b["name"].lower())
         elif order == "AUTHOR":     # books whose author is not known go last, by name

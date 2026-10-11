@@ -26,7 +26,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -3508,7 +3508,7 @@ class Main(QtWidgets.QMainWindow):
         return rows
 
     def credentials(self, export):
-        start = os.path.expanduser("~/readers-credentials.json")
+        start = os.path.expanduser("~/readers-books-credentials.json")
         kinds = "%s (*.json);;* (*)" % _("Reader's credentials")
         self.credentials_message = ""
         if export:

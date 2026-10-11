@@ -60,7 +60,7 @@ haptic tick.
 
 ## Install
 
-    sudo apt install ./readers-books_1.1.1_all.deb     # Debian, Ubuntu, Pop!_OS
+    sudo apt install ./readers-books_1.1.2_all.deb     # Debian, Ubuntu, Pop!_OS
     cd packaging && makepkg -si                         # Arch, Manjaro
 
 Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests).

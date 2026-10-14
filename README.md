@@ -30,6 +30,9 @@ reader, the same library, the same wording.
   last read, on whichever device, and the shelf says how far it is. It is exchanged when the app
   starts, when a book is opened, at each highlight, half a minute after the last page turned and
   on leaving the book.
+* A book opened from a file can join the library: "add to the library" in its menu copies it to
+  the drive, into the folder you choose (nothing there is written over), and from then on its
+  highlights and the page you are at travel like those of any book of the library.
 * Add a book from the shelf (Ctrl+O), by dropping the file on the window, or from a file manager
   ("open with"). Books are copied into the app, so the original can move.
 * The position is kept per book and survives a change of text size or window. The text sits in a
@@ -65,7 +68,7 @@ haptic tick.
 
 ## Install
 
-    sudo apt install ./readers-books_1.2.0_all.deb     # Debian, Ubuntu, Pop!_OS
+    sudo apt install ./readers-books_1.3.0_all.deb     # Debian, Ubuntu, Pop!_OS
     cd packaging && makepkg -si                         # Arch, Manjaro
 
 Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests).

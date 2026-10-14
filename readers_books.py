@@ -26,7 +26,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -142,6 +142,12 @@ STRINGS = {
   "on the shelf": "sur l'étagère",
   "opened %s": "ouvert %s",
   "the book could not be fetched: %s": "le livre n'a pas pu être récupéré : %s",
+  "add to the library": "ajouter à la bibliothèque",
+  "The book is copied to the drive, into the folder you choose, and becomes a book of the library: its highlights and the page you are at are then kept next to it and follow it to your other devices. Nothing on the drive is written over.": "Le livre est copié sur le drive, dans le dossier que vous choisissez, et devient un livre de la bibliothèque : ses surlignages et la page où vous en êtes sont alors gardés à côté de lui et le suivent sur vos autres appareils. Rien n'est écrasé sur le drive.",
+  "sending…": "envoi…",
+  "“%s” is now in the library, in %s.": "« %s » est maintenant dans la bibliothèque, dans %s.",
+  "the book could not be sent: %s": "le livre n'a pas pu être envoyé : %s",
+  "last time": "la dernière fois",
  },
  "de": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Bücher auf einem Drive, nach Ordnern aufgelistet; ein Buch wird erst heruntergeladen, wenn Sie es anklicken. Geben Sie die WebDAV-Adresse des Drives mit Benutzername und Anwendungspasswort an (kDrive, Nextcloud, jeder WebDAV-Server). Das Drive wird dann nach epub-, mobi-, azw- und fb2-Dateien durchsucht. Markierungen und die Seite, auf der Sie sind, werden neben jedes Buch geschrieben: das Konto muss dort schreiben dürfen.",
@@ -233,6 +239,12 @@ STRINGS = {
   "on the shelf": "im Regal",
   "opened %s": "geöffnet %s",
   "the book could not be fetched: %s": "das Buch konnte nicht geholt werden: %s",
+  "add to the library": "zur Bibliothek hinzufügen",
+  "The book is copied to the drive, into the folder you choose, and becomes a book of the library: its highlights and the page you are at are then kept next to it and follow it to your other devices. Nothing on the drive is written over.": "Das Buch wird in den gewählten Ordner des Drives kopiert und wird ein Buch der Bibliothek: seine Markierungen und die Seite, auf der Sie sind, werden dann neben ihm abgelegt und folgen ihm auf Ihre anderen Geräte. Nichts auf dem Drive wird überschrieben.",
+  "sending…": "wird gesendet…",
+  "“%s” is now in the library, in %s.": "„%s“ ist jetzt in der Bibliothek, in %s.",
+  "the book could not be sent: %s": "das Buch konnte nicht gesendet werden: %s",
+  "last time": "letztes Mal",
  },
  "es": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Libros guardados en un drive, listados por carpeta; un libro solo se descarga cuando haces clic en él. Indica la dirección WebDAV del drive con un nombre de usuario y una contraseña de aplicación (kDrive, Nextcloud, cualquier servidor WebDAV). Entonces se recorre el drive buscando archivos epub, mobi, azw y fb2. Los resaltados y la página en la que estás se escriben junto a cada libro: la cuenta debe poder escribir allí.",
@@ -324,6 +336,12 @@ STRINGS = {
   "on the shelf": "en la estantería",
   "opened %s": "abierto %s",
   "the book could not be fetched: %s": "no se pudo obtener el libro: %s",
+  "add to the library": "añadir a la biblioteca",
+  "The book is copied to the drive, into the folder you choose, and becomes a book of the library: its highlights and the page you are at are then kept next to it and follow it to your other devices. Nothing on the drive is written over.": "El libro se copia al drive, en la carpeta que elija, y pasa a ser un libro de la biblioteca: sus resaltados y la página en la que está se guardan entonces junto a él y le siguen a sus otros dispositivos. Nada del drive se sobrescribe.",
+  "sending…": "enviando…",
+  "“%s” is now in the library, in %s.": "«%s» está ahora en la biblioteca, en %s.",
+  "the book could not be sent: %s": "no se pudo enviar el libro: %s",
+  "last time": "la última vez",
  },
  "pt": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Livros guardados numa drive, listados por pasta; um livro só é descarregado quando clica nele. Indique o endereço WebDAV da drive com um nome de utilizador e uma palavra-passe de aplicação (kDrive, Nextcloud, qualquer servidor WebDAV). A drive é então percorrida à procura de ficheiros epub, mobi, azw e fb2. Os destaques e a página em que está são escritos ao lado de cada livro: a conta tem de poder escrever aí.",
@@ -415,6 +433,12 @@ STRINGS = {
   "on the shelf": "na estante",
   "opened %s": "aberto %s",
   "the book could not be fetched: %s": "não foi possível obter o livro: %s",
+  "add to the library": "adicionar à biblioteca",
+  "The book is copied to the drive, into the folder you choose, and becomes a book of the library: its highlights and the page you are at are then kept next to it and follow it to your other devices. Nothing on the drive is written over.": "O livro é copiado para a drive, na pasta que escolher, e passa a ser um livro da biblioteca: os seus destaques e a página em que está ficam então guardados ao lado dele e seguem-no para os seus outros aparelhos. Nada na drive é substituído.",
+  "sending…": "a enviar…",
+  "“%s” is now in the library, in %s.": "«%s» está agora na biblioteca, em %s.",
+  "the book could not be sent: %s": "não foi possível enviar o livro: %s",
+  "last time": "da última vez",
  },
  "ru": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Книги на диске, перечисленные по папкам; книга загружается только когда вы щёлкаете по ней. Укажите адрес WebDAV диска с именем пользователя и паролем приложения (kDrive, Nextcloud, любой сервер WebDAV). Затем диск просматривается в поисках файлов epub, mobi, azw и fb2. Выделения и страница, на которой вы остановились, записываются рядом с каждой книгой: учётной записи должна быть разрешена запись.",
@@ -507,6 +531,12 @@ STRINGS = {
   "on the shelf": "на полке",
   "opened %s": "открыта %s",
   "the book could not be fetched: %s": "не удалось получить книгу: %s",
+  "add to the library": "добавить в библиотеку",
+  "The book is copied to the drive, into the folder you choose, and becomes a book of the library: its highlights and the page you are at are then kept next to it and follow it to your other devices. Nothing on the drive is written over.": "Книга копируется на диск, в выбранную папку, и становится книгой библиотеки: её выделения и страница, на которой вы остановились, хранятся рядом с ней и следуют за ней на ваши другие устройства. Ничего на диске не перезаписывается.",
+  "sending…": "отправка…",
+  "“%s” is now in the library, in %s.": "«%s» теперь в библиотеке, в папке %s.",
+  "the book could not be sent: %s": "не удалось отправить книгу: %s",
+  "last time": "в прошлый раз",
  },
 }
 
@@ -1183,6 +1213,14 @@ class Library:
                 e.update(chapter=chapter, charOffset=char_offset, progress=progress, opened=when or _now())
                 self._save()
 
+    def link(self, book_id, source, source_name):
+        """A book of the shelf that was just sent to the drive: from now on a book of the library, by that address and that file name."""
+        with self.lock:
+            e = self.get(book_id)
+            if e:
+                e.update(source=source, sourceName=source_name)
+                self._save()
+
     def remove(self, book_id):
         with self.lock:
             e = self.get(book_id)
@@ -1226,7 +1264,8 @@ class Library:
                      "opened": same["opened"] if same else 0, "chapter": same["chapter"] if same else 0,
                      "charOffset": same["charOffset"] if same else 0, "progress": same["progress"] if same else 0,
                      "magazine": book.magazine is not None, "source": source or (same.get("source") if same else None),
-                     "sourceName": display_name if source else (same.get("sourceName") if same else None)}
+                     # the file's name: the drive's for a book of the library, else as it was opened, for the day it is sent to the library
+                     "sourceName": display_name if source or not (same and same.get("source")) else same.get("sourceName")}
             if same:
                 try:
                     os.remove(self.path(same))
@@ -1410,6 +1449,24 @@ class WebDav:
             _check(r)
             _save_stream(r, dest, progress)
 
+    def file_ref(self, folder, name):
+        """The address of a file named `name` in the folder at this path below the top of the drive."""
+        return self.folder_ref(folder) + quote(name, safe="")
+
+    def exists(self, ref):
+        """Whether something is at this address."""
+        r = self.session.head(ref, timeout=(30, 90))
+        if r.status_code == 404:
+            return False
+        _check(r)
+        return True
+
+    def upload(self, ref, path):
+        """Put a file on the drive at this address, in place of whatever was there. A book may be
+        large and the line slow: ten minutes."""
+        with open(path, "rb") as fh:
+            _check(self.session.put(ref, data=fh, timeout=(30, 600)))
+
 
 def _save_stream(response, dest, progress):
     total = int(response.headers.get("Content-Length") or 0)
@@ -1448,6 +1505,22 @@ def source_key(cfg):
 def from_library(entry):
     """A book fetched from the drive: the one kind that has highlights, and a place that travels."""
     return (entry.get("source") or "").startswith(("http://", "https://"))
+
+
+def can_send(cfg, entry):
+    """A book of the shelf may be sent to the library when there is one, it is not from it, and
+    a sync of the drive would list its kind (not plain text)."""
+    return library_configured(cfg) and entry.get("format") != TXT and not from_library(entry)
+
+
+def send_name(entry):
+    """The file name a book goes to the drive under: the one it was opened with when it was a
+    book's, else its title, with the format's extension."""
+    kept = entry.get("sourceName") if _ext(entry.get("sourceName") or "") in BOOK_EXTENSIONS else None
+    ext = kept.rsplit(".", 1)[1] if kept else entry["format"].lower()
+    stem = kept.rsplit(".", 1)[0] if kept else entry["title"]
+    stem = " ".join(re.sub(r'[\\/:*?"<>|\x00-\x1f]', " ", stem).split())[:120] or "book"
+    return "%s.%s" % (stem, ext)
 
 
 # Which folders of the drive make the library. Empty = the whole drive. A chosen folder stands
@@ -1635,6 +1708,34 @@ class RemoteLibrary:
             os.remove(INDEX_FILE)
         except OSError:
             pass
+
+    def send(self, cfg, folder, name, path):
+        """A book of the shelf sent to the drive, into this folder of the library, under this file
+        name — or the next free one, when a file of that name is there already: nothing on the
+        drive is ever written over. Listed in the library at once, as the drive names it, with no
+        sync to wait for. Blocking; returns the book as the drive lists it."""
+        remote = remote_for(cfg)
+        if remote is None:
+            raise IOError("no library")
+        stem, ext = (name.rsplit(".", 1) + [""])[:2] if "." in name else (name, "")
+        chosen = name
+        for n in range(2, 21):
+            if not remote.exists(remote.file_ref(folder, chosen)):
+                break
+            chosen = "%s (%d)%s" % (stem, n, "." + ext if ext else "")
+        ref = remote.file_ref(folder, chosen)
+        remote.upload(ref, path)
+        # the drive's own listing of the folder, so the book is known by the address a sync would give it
+        try:
+            book = next((b for b in remote.list(remote.folder_ref(folder))[1] if b["name"] == chosen), None)
+        except Exception:
+            book = None
+        if book is None:
+            book = {"name": chosen, "folder": folder, "ref": ref, "size": os.path.getsize(path), "modified": _now()}
+        if self.matches(cfg) or not self.index["scannedAt"]:
+            books = [b for b in self.index["books"] if b["ref"] != book["ref"] and not (b["folder"] == folder and b["name"] == chosen)]
+            self._save(dict(self.index, source=source_key(cfg), books=books + [book]))
+        return book
 
     def _save(self, index):
         self.index = index
@@ -2095,6 +2196,7 @@ def set_library_url(cfg, url):
     """The library's address. Another drive: its folders are not these, and the choice is to be offered again."""
     if url.strip() != cfg.get("url", "").strip():
         cfg.update(library_folders=[], library_folders_asked=False)
+        cfg.pop("send_folder", None)
     cfg["url"] = url.strip()
 
 
@@ -2959,6 +3061,7 @@ class Reader(QtWidgets.QWidget):
 # ------------------------------------------------------------------------------------------
 
 SHELF, BOOK, CHAPTERS, SETTINGS, LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS = "shelf", "book", "chapters", "settings", "library", "folder", "all", "library_folders"
+ADD_TO_LIBRARY = "add_to_library"       # choosing the folder of the library a book of the shelf is sent to
 UI_SIZES = {"S": 11, "M": 13, "L": 15}
 
 
@@ -2977,6 +3080,7 @@ class Main(QtWidgets.QMainWindow):
         self.import_failed = False
         self.syncing, self.sync_again = set(), set()    # highlights on their way to the drive
         self.fetching = None            # the drive reference of the book being downloaded
+        self.sending, self.sent, self.send_error = False, None, ""     # a book of the shelf on its way to the drive
         self.fetch_error = ""
         self.credentials_message = ""
         self.image_stores = {}
@@ -3171,6 +3275,8 @@ class Main(QtWidgets.QMainWindow):
         self.fetch_error = ""
         if screen[0] == LIBRARY_FOLDERS:
             self.folders_before = chosen_folders(self.cfg)
+        if screen[0] == ADD_TO_LIBRARY:
+            self.sending, self.sent, self.send_error = False, None, ""
         self.stack.append(screen)
         self.show_screen(reset=True)
 
@@ -3287,7 +3393,8 @@ class Main(QtWidgets.QMainWindow):
             rows.append(Row(b["title"], line, lambda b=b: self.open_entry(b), lambda b=b: [
                 (_("read"), lambda: self.push((BOOK, b["id"]))),
                 (_("contents") if b.get("magazine") else _("chapters"), lambda: self.push((CHAPTERS, b["id"]))),
-                (_("remove from the shelf"), lambda: self.remove(b["id"]))]))
+                (_("remove from the shelf"), lambda: self.remove(b["id"]))]
+                + ([(_("add to the library"), lambda: self.push((ADD_TO_LIBRARY, b["id"])))] if can_send(self.cfg, b) else [])))
         menu = [(_("+ open a book"), self.pick_book), (_("library"), lambda: self.push((LIBRARY,))), None,
                 self.theme_item(), (_("settings"), lambda: self.push((SETTINGS,)))]
         return _("books"), rows, menu
@@ -3377,7 +3484,8 @@ class Main(QtWidgets.QMainWindow):
             ("%s  ·  %s → %s" % (_("book text"), _("serif") if serif else _("sans-serif"), _("sans-serif") if serif else _("serif")),
              lambda: self.set("book_serif", not serif)),
             (_("remove from the shelf"), lambda: self.remove(book_id)),
-        ] + ([(_("export the highlights"), self.export_highlights)] if live_highlights(self.reader.highlights) else []) + [
+        ] + ([(_("add to the library"), lambda: self.push((ADD_TO_LIBRARY, book_id)))] if can_send(self.cfg, entry) else [])
+          + ([(_("export the highlights"), self.export_highlights)] if live_highlights(self.reader.highlights) else []) + [
             None,
             (_("books"), self.pop),
             self.theme_item(),
@@ -3815,6 +3923,66 @@ class Main(QtWidgets.QMainWindow):
 
             rows.append(Row(path, secondary, choose, lines=1, inverted=bool(chosen) and in_library(chosen, path)))
         return _("folders of the library"), rows, None
+
+    # ---- a book of the shelf sent to the drive ----
+
+    def screen_add_to_library(self):
+        """Where in the library a book of the shelf goes: the folders of the drive that hold
+        books (those of the library, when only some folders make it), the one used last time
+        first. A click sends the book there; it then stands on the shelf as a book of the
+        library, and the drive's listing says so at once."""
+        entry = self.library.get(self.screen[1])
+        if not entry:
+            self.stack.pop()
+            return self.screen_shelf()
+        chosen = chosen_folders(self.cfg)
+        last = self.cfg.get("send_folder")
+        counts = dict(self.remote.known_folders())
+        folders = sorted({f for f in list(counts) + chosen + [""] if in_library(chosen, f) and not folder_under(TRANSCRIPTS_FOLDER, f)},
+                         key=lambda f: (f != last, f.lower()))
+        rows = [Row(entry["title"], kind=SECTION)]
+        if self.sent is not None:
+            rows.append(Row(_("“%s” is now in the library, in %s.", entry["title"], self.sent or _("top of the drive")), kind=HINT))
+        else:
+            rows.append(Row(_("The book is copied to the drive, into the folder you choose, and becomes a book of the library: its highlights and the page you are at are then kept next to it and follow it to your other devices. Nothing on the drive is written over."), kind=HINT))
+        if self.sending:
+            rows.append(Row(_("sending…"), kind=HINT))
+        if self.send_error:
+            rows.append(Row(self.send_error, kind=HINT))
+        if self.sent is None:
+            for f in folders:
+                secondary = " · ".join(x for x in (n_books(counts[f]) if f in counts else "", _("last time") if f == last else "") if x)
+                rows.append(Row(f or _("top of the drive"), secondary, lambda f=f: self.send_book(entry["id"], f), lines=1))
+        return _("add to the library"), rows, None
+
+    def send_book(self, book_id, folder):
+        entry = self.library.get(book_id)
+        if not entry or self.sending or self.sent is not None:
+            return
+        self.sending, self.send_error = True, ""
+        self.show_screen()
+        cfg, screen = dict(self.cfg), self.screen
+
+        def job():
+            return self.remote.send(cfg, folder, send_name(entry), self.library.path(entry))
+
+        def done(book, error):
+            self.sending = False
+            if error is not None:
+                self.send_error = (_("the drive refused the login") if isinstance(error, WrongLogin)
+                                   else _("the book could not be sent: %s", str(error)[:160]))
+            else:
+                self.library.link(book_id, book["ref"], book["name"])
+                self.cfg["send_folder"] = folder
+                save_config(self.cfg)
+                self.sent = folder
+                linked = self.library.get(book_id)
+                if linked:
+                    self.sync_highlights(linked)        # the page it is at goes next to it right away, for the other devices
+            if self.screen == screen:
+                self.show_screen()
+
+        self.run(job, done)
 
     def screen_folder(self):
         path = self.screen[1]

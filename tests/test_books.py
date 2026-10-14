@@ -481,6 +481,60 @@ class LibraryPage(unittest.TestCase):
             APP.processEvents()
             main.grab().save(os.path.join(where, name + ".png"))
 
+    def test_a_book_of_the_shelf_goes_to_the_drive_and_is_a_book_of_the_library(self):
+        rb.save_config(dict(rb.DEFAULTS, url=self.BASE, username="u", password="p"))
+        try:
+            os.remove(rb.INDEX_FILE)
+        except OSError:
+            pass
+        book = path("shelf.epub")
+        make_books.epub(book, title="Un essai")         # the drive has an "Un essai.epub" in Essais already
+        main = rb.Main()
+        main.resize(760, 900)
+        main.show()
+        entry = main.library.add(book, "Un essai.epub")
+        main.library.save_position(entry["id"], 0, 0, 0)        # opened once: it has a place to send
+        self.assertTrue(rb.can_send(main.cfg, entry))
+        self.assertEqual(rb.send_name(entry), "Un essai.epub")
+        main.push((rb.LIBRARY,))
+        self.synced(main)
+        main.pop()
+        # the shelf's row menu offers it
+        row = next(r for r in main.rows if r.title == "Un essai")
+        item = next(m for m in row.menu() if m and m[0] == rb._("add to the library"))
+        item[1]()
+        self.assertEqual(main.screen[0], rb.ADD_TO_LIBRARY)
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], [rb._("top of the drive"), "Essais", "Romans", "Romans/Maigret"])
+        self.shot(main, "add_to_library")
+        next(r for r in main.rows if r.title == "Essais").action()
+        self.settle(main, lambda: main.sent is not None or main.send_error, "the upload")
+        self.assertEqual(main.send_error, "")
+        sent = os.path.join(path("drive"), "Essais", "Un essai (2).epub")
+        self.assertTrue(os.path.exists(sent))                   # the drive's own file was left alone
+        self.assertEqual(os.path.getsize(sent), os.path.getsize(book))
+        linked = main.library.get(entry["id"])
+        self.assertEqual(linked["sourceName"], "Un essai (2).epub")
+        self.assertTrue(rb.from_library(linked))
+        self.assertFalse(rb.can_send(main.cfg, linked))
+        self.assertIn("Un essai (2).epub", [b["name"] for b in main.remote.books("Essais")])
+        self.assertEqual(main.cfg["send_folder"], "Essais")
+        self.assertEqual(main.rows[1].title, rb._("“%s” is now in the library, in %s.", "Un essai", "Essais"))
+        self.shot(main, "sent")
+        # its place goes next to it at once
+        self.settle(main, lambda: os.path.exists(sent + rb.HIGHLIGHTS_SUFFIX), "the place next to the book")
+        # next time, the folder used last comes first
+        main.pop()
+        other = main.library.add(book, "Un autre.epub")
+        main.push((rb.ADD_TO_LIBRARY, other["id"]))
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW][:2], ["Essais", rb._("top of the drive")])
+        self.assertEqual(main.rows[2].secondary, rb.n_books(2) + " · " + rb._("last time"))
+        main.library.remove(other["id"])
+        main.library.remove(entry["id"])
+        # cleared through the server: a file removed behind rclone's back stays in its listing for minutes
+        for name in ("Un essai (2).epub", "Un essai (2).epub" + rb.HIGHLIGHTS_SUFFIX):
+            rb.requests.delete(self.BASE + "/Essais/" + rb.quote(name, safe=""), auth=("u", "p"), timeout=10)
+        self.assertFalse(os.path.exists(sent))
+
     def test_the_library_page_offers_the_folders_and_keeps_to_the_choice(self):
         rb.save_config(dict(rb.DEFAULTS, url=self.BASE, username="u", password="p"))
         try:

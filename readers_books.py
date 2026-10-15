@@ -26,7 +26,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -141,6 +141,14 @@ STRINGS = {
   "oldest first": "les plus anciens d'abord",
   "by author": "par auteur",
   "last opened first": "les derniers ouverts d'abord",
+  "order": "ordre",
+  "group by top folder": "regrouper par dossier principal",
+  "every folder": "chaque dossier",
+  "with subfolders": "avec les sous-dossiers",
+  "this folder only": "ce dossier seulement",
+  "most books first": "les plus fournis d'abord",
+  "by title": "par titre",
+  "last added first": "les derniers ajoutés d'abord",
   "downloading…": "téléchargement…",
   "on the shelf": "sur l'étagère",
   "opened %s": "ouvert %s",
@@ -241,6 +249,14 @@ STRINGS = {
   "oldest first": "älteste zuerst",
   "by author": "nach Autor",
   "last opened first": "zuletzt geöffnete zuerst",
+  "order": "Reihenfolge",
+  "group by top folder": "nach oberstem Ordner gruppieren",
+  "every folder": "jeder Ordner",
+  "with subfolders": "mit Unterordnern",
+  "this folder only": "nur dieser Ordner",
+  "most books first": "die meisten Bücher zuerst",
+  "by title": "nach Titel",
+  "last added first": "zuletzt hinzugefügte zuerst",
   "downloading…": "wird heruntergeladen…",
   "on the shelf": "im Regal",
   "opened %s": "geöffnet %s",
@@ -341,6 +357,14 @@ STRINGS = {
   "oldest first": "los más antiguos primero",
   "by author": "por autor",
   "last opened first": "los últimos abiertos primero",
+  "order": "orden",
+  "group by top folder": "agrupar por carpeta principal",
+  "every folder": "cada carpeta",
+  "with subfolders": "con las subcarpetas",
+  "this folder only": "solo esta carpeta",
+  "most books first": "las que tienen más libros primero",
+  "by title": "por título",
+  "last added first": "los últimos añadidos primero",
   "downloading…": "descargando…",
   "on the shelf": "en la estantería",
   "opened %s": "abierto %s",
@@ -441,6 +465,14 @@ STRINGS = {
   "oldest first": "mais antigos primeiro",
   "by author": "por autor",
   "last opened first": "os últimos abertos primeiro",
+  "order": "ordem",
+  "group by top folder": "agrupar por pasta principal",
+  "every folder": "cada pasta",
+  "with subfolders": "com as subpastas",
+  "this folder only": "só esta pasta",
+  "most books first": "as com mais livros primeiro",
+  "by title": "por título",
+  "last added first": "os últimos adicionados primeiro",
   "downloading…": "a descarregar…",
   "on the shelf": "na estante",
   "opened %s": "aberto %s",
@@ -542,6 +574,14 @@ STRINGS = {
   "oldest first": "сначала старые",
   "by author": "по автору",
   "last opened first": "сначала недавно открытые",
+  "order": "порядок",
+  "group by top folder": "группировать по верхней папке",
+  "every folder": "каждая папка",
+  "with subfolders": "с подпапками",
+  "this folder only": "только эта папка",
+  "most books first": "сначала с наибольшим числом книг",
+  "by title": "по названию",
+  "last added first": "сначала последние добавленные",
   "downloading…": "загрузка…",
   "on the shelf": "на полке",
   "opened %s": "открыта %s",
@@ -565,6 +605,11 @@ FOLDERS_LEFT_OUT = {
  "de": ("%d Ordner ausgeschlossen", "%d Ordner ausgeschlossen"), "es": ("%d carpeta dejada fuera", "%d carpetas dejadas fuera"),
  "pt": ("%d pasta deixada de fora", "%d pastas deixadas de fora"),
  "ru": ("%d папка исключена", "%d папки исключены", "%d папок исключено"),
+}
+FOLDERS = {
+ "en": ("%d folder", "%d folders"), "fr": ("%d dossier", "%d dossiers"), "de": ("%d Ordner", "%d Ordner"),
+ "es": ("%d carpeta", "%d carpetas"), "pt": ("%d pasta", "%d pastas"),
+ "ru": ("%d папка", "%d папки", "%d папок"),
 }
 FOLDERS_CHOSEN = {
  "en": ("%d folder chosen", "%d folders chosen"), "fr": ("%d dossier choisi", "%d dossiers choisis"),
@@ -601,6 +646,11 @@ def _(key, *args):
 def n_books(n):
     """« 1 book », « 3 books » — with the three Russian forms."""
     return _plural(PLURALS, n)
+
+
+def n_folders(n):
+    """« 1 folder », « 3 folders »."""
+    return _plural(FOLDERS, n)
 
 
 def n_folders_chosen(n):
@@ -1588,6 +1638,60 @@ def part_of(chosen, folder):
     return None
 
 
+def top_folder(folder):
+    """The top folder a folder is in: its first name; "" for the top of the drive itself."""
+    return folder.split("/", 1)[0]
+
+
+def relative_folder(base, folder):
+    """A folder's path as seen from inside `base`: "" for the base itself."""
+    if folder == base:
+        return ""
+    return folder if not base else folder[len(base) + 1:]
+
+
+def grouped_folders(books, top):
+    """The folders these books are in, as (path, count, latest change, folders spanned): every
+    folder, or the top folders only, each standing for everything inside it (the books of the
+    top of the drive stand by themselves)."""
+    groups = {}
+    for b in books:
+        groups.setdefault(top_folder(b["folder"]) if top else b["folder"], []).append(b)
+    return [(p, len(bs), max(b["modified"] for b in bs), len({b["folder"] for b in bs}) if top else 1) for p, bs in groups.items()]
+
+
+def sort_folders(folders, order):
+    if order == "NEWEST":
+        return sorted(folders, key=lambda f: (-f[2], f[0].lower()))
+    if order == "COUNT":
+        return sorted(folders, key=lambda f: (-f[1], f[0].lower()))
+    return sorted(folders, key=lambda f: f[0].lower())
+
+
+def sort_books(books, order, opened=None):
+    """The books of one list in the chosen order; `opened` = when this app last opened each, by its reference."""
+    opened = opened or {}
+    if order == "OLDEST":
+        return sorted(books, key=lambda b: (b["modified"], b["name"].lower()))
+    if order == "NAME":
+        return sorted(books, key=lambda b: b["name"].lower())
+    if order == "AUTHOR":     # books whose author is not known go last, by name
+        return sorted(books, key=lambda b: (not remote_author(b), remote_author(b).lower(), remote_title(b).lower()))
+    if order == "OPENED":
+        return sorted(books, key=lambda b: (-opened.get(b["ref"], 0), b["name"].lower()))
+    return sorted(books, key=lambda b: (-b["modified"], b["name"].lower()))
+
+
+BOOK_ORDERS = ("NEWEST", "OLDEST", "NAME", "AUTHOR", "OPENED")
+FOLDER_ORDERS = ("NAME", "NEWEST", "COUNT")
+SHELF_ORDERS = ("OPENED", "TITLE", "ADDED")
+
+
+def order_name(order):
+    return {"NEWEST": _("newest first"), "OLDEST": _("oldest first"), "NAME": _("by name"), "AUTHOR": _("by author"),
+            "OPENED": _("last opened first"), "COUNT": _("most books first"), "TITLE": _("by title"), "ADDED": _("last added first")}.get(order, "")
+
+
 def library_roots(chosen):
     """Where a sync starts: the chosen folders and the transcripts', or the top of the drive."""
     return list(dict.fromkeys(chosen + [TRANSCRIPTS_FOLDER])) if chosen else [""]
@@ -1652,21 +1756,21 @@ class RemoteLibrary:
         return [b for b in self.index["books"] if in_library(chosen, b["folder"], excluded)]
 
     def folders(self, cfg):
-        return self._counted(self.shown(cfg))
+        """The folders of the library, in the chosen order, as (path, count, latest change, folders
+        spanned): every folder, or the top folders only when the library is grouped by them."""
+        return sort_folders(grouped_folders(self.shown(cfg), bool(cfg.get("library_top_folders"))), cfg.get("folder_sort", "NAME"))
 
     def known_folders(self):
-        """Every folder the drive was seen to hold books in, chosen or not: what the choice is made from."""
-        return self._counted(self.index["books"])
+        """Every folder the drive was seen to hold books in, chosen or not, as (path, count): what the choice is made from."""
+        return [(p, n) for p, n, _m, _s in sort_folders(grouped_folders(self.index["books"], False), "NAME")]
 
-    @staticmethod
-    def _counted(books):
-        counts = {}
-        for b in books:
-            counts[b["folder"]] = counts.get(b["folder"], 0) + 1
-        return sorted(counts.items(), key=lambda kv: kv[0].lower())
+    def books(self, cfg, folder, subfolders=False):
+        """The books of one folder, alone or with everything inside it; left-out folders stay out."""
+        return [b for b in self.shown(cfg) if (folder_under(folder, b["folder"]) if subfolders else b["folder"] == folder)]
 
-    def books(self, folder):
-        return [b for b in self.index["books"] if b["folder"] == folder]
+    def has_subfolders(self, cfg, folder):
+        """True when a folder holds books in folders inside it."""
+        return any(b["folder"] != folder and folder_under(folder, b["folder"]) for b in self.shown(cfg))
 
     def stale(self, now=None):
         """True when the last sync is old enough for the library to sync again by itself at its opening."""
@@ -2282,7 +2386,10 @@ def import_credentials(cfg, path):
 DEFAULTS = {"dark": True, "font": "sans", "text_size": "M", "reader_pt": 0, "book_serif": False,
             "keep_awake": True, "url": "", "username": "", "password": "",
             "notes_url": "", "notes_username": "", "notes_password": "",
-            "library_sort": "NAME", "all_books_sort": "NEWEST",
+            # the orders of a folder's books, of all books, of the folders, of the shelf; the library by top
+            # folders only; a folder with the books of the folders inside it
+            "library_sort": "NAME", "all_books_sort": "NEWEST", "folder_sort": "NAME", "shelf_sort": "OPENED",
+            "library_top_folders": False, "library_subfolders": False,
             # the folders of the drive that make the library (empty = the whole drive); whether the choice was offered
             "library_folders": [], "library_excluded": [], "library_folders_asked": False}
 AUTO_READER_PT = 13
@@ -3426,7 +3533,14 @@ class Main(QtWidgets.QMainWindow):
             rows.append(Row(_("this file could not be read"), kind=HINT))
         if not self.library.books and not self.importing:
             rows.append(Row(_("nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window."), kind=HINT))
-        for b in self.library.books:
+        # the shelf's order: by last opened (or added), by title, or by last added
+        order = self.cfg.get("shelf_sort", "OPENED")
+        books = list(self.library.books)
+        if order == "TITLE":
+            books.sort(key=lambda b: b["title"].lower())
+        elif order == "ADDED":
+            books.sort(key=lambda b: -b.get("added", 0))
+        for b in books:
             line = " · ".join(x for x in ("%d%%" % b.get("progress", 0) if b.get("opened") else _("not started"),
                                           when_label(b.get("opened", 0)), b["format"].lower()) if x)
             rows.append(Row(b["title"], line, lambda b=b: self.open_entry(b), lambda b=b: [
@@ -3434,9 +3548,14 @@ class Main(QtWidgets.QMainWindow):
                 (_("contents") if b.get("magazine") else _("chapters"), lambda: self.push((CHAPTERS, b["id"]))),
                 (_("remove from the shelf"), lambda: self.remove(b["id"]))]
                 + ([(_("add to the library"), lambda: self.push((ADD_TO_LIBRARY, b["id"])))] if can_send(self.cfg, b) else [])))
-        menu = [(_("+ open a book"), self.pick_book), (_("library"), lambda: self.push((LIBRARY,))), None,
+        menu = [(_("+ open a book"), self.pick_book), (_("library"), lambda: self.push((LIBRARY,))),
+                (_("order") + " · " + order_name(order), self.order_menu(SHELF_ORDERS, order, "shelf_sort")), None,
                 self.theme_item(), (_("settings"), lambda: self.push((SETTINGS,)))]
         return _("books"), rows, menu
+
+    def order_menu(self, orders, order, setting):
+        """The orders a list can take, the current one ticked, as a submenu."""
+        return [(order_name(o) + ("  ✓" if o == order else ""), lambda o=o: self.set(setting, o)) for o in orders]
 
     def remove(self, book_id):
         self.library.remove(book_id)
@@ -3941,13 +4060,20 @@ class Main(QtWidgets.QMainWindow):
             rows.append(Row(_("no e-book found on the drive (epub, mobi, azw, fb2)"), kind=HINT))
         if shown:
             rows.append(Row(_("all books"), n_books(len(shown)), lambda: self.push((ALL_BOOKS,))))
-        for path, count in folders:
-            rows.append(Row(path or _("top of the drive"), n_books(count), lambda path=path: self.push((FOLDER, path)), lines=1,
+        top = bool(cfg.get("library_top_folders"))
+        for path, count, modified, spanned in folders:
+            # a top folder says how many folders it spans; its books are listed with them
+            line = " · ".join(x for x in (n_books(count), n_folders(spanned) if spanned > 1 else "",
+                                          date_label(modified) if cfg.get("folder_sort") == "NEWEST" and modified > 0 else "") if x)
+            rows.append(Row(path or _("top of the drive"), line, lambda path=path: self.push((FOLDER, path, top and bool(path))), lines=1,
                             menu=(lambda path=path: [(_("leave this folder out"), lambda: self.set_library_excluded(excluded_folders(self.cfg) + [path]))]) if path else None))
         menu = []
         if not progress and (not index["complete"] or index["failed"]):
             menu.append((_("continue the scan"), lambda: self.scan(False)))
         menu.append((_("stop the scan"), self.stop_scan) if progress else (_("scan the drive again"), lambda: self.scan(True)))
+        menu.append((_("every folder"), lambda: self.set("library_top_folders", False)) if top
+                    else (_("group by top folder"), lambda: self.set("library_top_folders", True)))
+        menu.append((_("order") + " · " + order_name(cfg.get("folder_sort", "NAME")), self.order_menu(FOLDER_ORDERS, cfg.get("folder_sort", "NAME"), "folder_sort")))
         menu.append((_("folders of the library"), lambda: self.push((LIBRARY_FOLDERS,))))
         menu.append((_("settings"), lambda: self.push((SETTINGS,))))
         return _("library"), rows, menu
@@ -4043,50 +4169,48 @@ class Main(QtWidgets.QMainWindow):
 
         self.run(job, done)
 
+    def opened_on_shelf(self):
+        """When each book of the library was last opened here, by its reference on the drive."""
+        return {b["source"]: max(b.get("opened", 0), b.get("added", 0)) for b in self.library.books if b.get("source")}
+
     def screen_folder(self):
-        path = self.screen[1]
+        """The books of one folder, in the chosen order: the folder alone, or with the folders
+        inside it (the menu; a top folder standing for a group always has them), each book then
+        naming its folder."""
+        path, group = self.screen[1], len(self.screen) > 2 and self.screen[2]
         order = self.cfg.get("library_sort", "NAME")
-        books = self.remote.books(path)
-        if order == "NEWEST":
-            books.sort(key=lambda b: (-b["modified"], b["name"].lower()))
-        elif order == "OLDEST":
-            books.sort(key=lambda b: (b["modified"], b["name"].lower()))
-        else:
-            books.sort(key=lambda b: b["name"].lower())
-        names = {"NAME": _("by name"), "NEWEST": _("newest first"), "OLDEST": _("oldest first")}
-        return self.book_list(path.rsplit("/", 1)[-1] or _("top of the drive"), books, names, order, "library_sort")
+        subfolders = group or bool(self.cfg.get("library_subfolders"))
+        has_subfolders = self.remote.has_subfolders(self.cfg, path)
+        opened = self.opened_on_shelf()
+        books = sort_books(self.remote.books(self.cfg, path, subfolders), order, opened)
+        extra = []
+        if not group and has_subfolders:
+            extra = [None, (_("this folder only") if subfolders else _("with subfolders"), lambda: self.set("library_subfolders", not subfolders))]
+        return self.book_list(path if group else (path.rsplit("/", 1)[-1] or _("top of the drive")), books, order, "library_sort",
+                              heading=" · ".join(x for x in (order_name(order), _("with subfolders") if subfolders and has_subfolders else "") if x),
+                              folder=subfolders, base=path, opened=opened if order == "OPENED" else None, extra=extra)
 
     def screen_all(self):
         order = self.cfg.get("all_books_sort", "NEWEST")
-        # When each book was last opened here, by its reference on the drive.
-        opened = {b["source"]: max(b.get("opened", 0), b.get("added", 0)) for b in self.library.books if b.get("source")}
-        books = self.remote.shown(self.cfg)
-        if order == "NAME":
-            books.sort(key=lambda b: b["name"].lower())
-        elif order == "AUTHOR":     # books whose author is not known go last, by name
-            books.sort(key=lambda b: (not remote_author(b), remote_author(b).lower(), remote_title(b).lower()))
-        elif order == "OPENED":
-            books.sort(key=lambda b: (-opened.get(b["ref"], 0), b["name"].lower()))
-        else:
-            books.sort(key=lambda b: (-b["modified"], b["name"].lower()))
-        names = {"NEWEST": _("newest first"), "NAME": _("by name"), "AUTHOR": _("by author"), "OPENED": _("last opened first")}
-        return self.book_list(_("all books"), books, names, order, "all_books_sort", folder=True,
-                              opened=opened if order == "OPENED" else None)
+        opened = self.opened_on_shelf()
+        books = sort_books(self.remote.shown(self.cfg), order, opened)
+        return self.book_list(_("all books"), books, order, "all_books_sort", folder=True, opened=opened if order == "OPENED" else None)
 
-    def book_list(self, title, books, names, order, setting, folder=False, opened=None):
+    def book_list(self, title, books, order, setting, heading=None, folder=False, base="", opened=None, extra=()):
         """The drive's books under a title, the order named above them and the orders offered
-        under ⋯. A click fetches the book (once) and opens it."""
-        rows = [Row(names.get(order, ""), kind=SECTION)]
+        under ⋯ (`extra` = what else the menu offers). A click fetches the book (once) and opens
+        it. `folder` names each book's folder on its line, as seen from `base`."""
+        rows = [Row(heading if heading is not None else order_name(order), kind=SECTION)]
         if self.fetch_error:
             rows.append(Row(self.fetch_error, kind=HINT))
         on_shelf = {b.get("source") for b in self.library.books if b.get("source")}
         for b in books:
             state = _("downloading…") if self.fetching == b["ref"] else _("on the shelf") if b["ref"] in on_shelf else ""
             seen = _("opened %s", when_label(opened[b["ref"]])) if opened and opened.get(b["ref"]) else ""
-            where = (remote_folder_name(b) or _("top of the drive")) if folder else ""
+            where = (relative_folder(base, b["folder"]) or (_("top of the drive") if not base else "")) if folder else ""
             line = " · ".join(x for x in (state, seen, where, date_label(b["modified"]), _ext(b["name"]), size_label(b["size"])) if x)
             rows.append(Row(remote_title(b), line, lambda b=b: self.fetch(b)))
-        menu = [(label + ("  ✓" if key == order else ""), lambda key=key: self.set(setting, key)) for key, label in names.items()]
+        menu = self.order_menu(BOOK_ORDERS, order, setting) + list(extra)
         return title, rows, menu
 
     def fetch(self, book):

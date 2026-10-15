@@ -272,8 +272,8 @@ class Drive(unittest.TestCase):
         self.assertTrue(remote.index["complete"])
         self.assertEqual(sorted(b["name"] for b in remote.index["books"]), ["Deux.epub", "Trois.mobi", "Un.epub"])
         self.assertEqual((remote.index["failed"], remote.index["folders"], drive.calls["/b"]), (["/broken"], 3, 3))
-        self.assertEqual(remote.folders(cfg), [("a", 1), ("b", 2)])
-        self.assertEqual(remote.folders(dict(cfg, library_folders=["b"])), [("b", 2)])
+        self.assertEqual([f[:2] for f in remote.folders(cfg)], [("a", 1), ("b", 2)])
+        self.assertEqual([f[:2] for f in remote.folders(dict(cfg, library_folders=["b"]))], [("b", 2)])
         self.assertEqual(rb.RemoteLibrary().index["failed"], ["/broken"])       # and it is on disk
 
     def test_the_transcripts_folder_is_looked_at_again_without_a_scan(self):
@@ -441,6 +441,30 @@ class Folders(unittest.TestCase):
         merged = rb.merge_folder([], "a", [], [book("a", "ok.epub"), book("b", "stray.epub")])
         self.assertEqual([b["folder"] + "/" + b["name"] for b in merged], ["a/ok.epub"])
 
+    DRIVE = [dict(name=n, folder=f, ref="ref:%s/%s" % (f, n), size=1, modified=m) for f, n, m in (
+        ("Books/novels/Roald Dahl", "Matilda.epub", 30), ("Books/novels", "Dune.epub", 10), ("Books/science", "Cosmos.epub", 50),
+        ("Books/science", "Carl Sagan - Contact.epub", 20), ("transcriptions/Huberman", "Sleep.epub", 60), ("", "Loose.epub", 40))]
+
+    def test_every_folder_or_the_top_ones(self):
+        self.assertEqual([f[0] for f in rb.sort_folders(rb.grouped_folders(self.DRIVE, False), "NAME")],
+                         ["", "Books/novels", "Books/novels/Roald Dahl", "Books/science", "transcriptions/Huberman"])
+        top = rb.sort_folders(rb.grouped_folders(self.DRIVE, True), "NAME")
+        self.assertEqual(top, [("", 1, 40, 1), ("Books", 4, 50, 3), ("transcriptions", 1, 60, 1)])
+        self.assertEqual([f[0] for f in rb.sort_folders(top, "NEWEST")], ["transcriptions", "Books", ""])
+        self.assertEqual([f[0] for f in rb.sort_folders(top, "COUNT")], ["Books", "", "transcriptions"])
+        self.assertEqual((rb.relative_folder("Books", "Books/novels/Roald Dahl"), rb.relative_folder("Books", "Books"), rb.relative_folder("", "Books/science")),
+                         ("novels/Roald Dahl", "", "Books/science"))
+
+    def test_books_in_every_order(self):
+        b = [x for x in self.DRIVE if rb.folder_under("Books", x["folder"])]
+        names = lambda order, opened=None: [x["name"] for x in rb.sort_books(b, order, opened)]
+        self.assertEqual(names("NEWEST"), ["Cosmos.epub", "Matilda.epub", "Carl Sagan - Contact.epub", "Dune.epub"])
+        self.assertEqual(names("OLDEST"), ["Dune.epub", "Carl Sagan - Contact.epub", "Matilda.epub", "Cosmos.epub"])
+        self.assertEqual(names("NAME"), ["Carl Sagan - Contact.epub", "Cosmos.epub", "Dune.epub", "Matilda.epub"])
+        self.assertEqual(names("AUTHOR"), ["Carl Sagan - Contact.epub", "Dune.epub", "Matilda.epub", "Cosmos.epub"])
+        self.assertEqual(names("OPENED", {"ref:Books/novels/Dune.epub": 5, "ref:Books/science/Cosmos.epub": 9}),
+                         ["Cosmos.epub", "Dune.epub", "Carl Sagan - Contact.epub", "Matilda.epub"])
+
     def test_another_drive_drops_the_choice(self):
         cfg = {"url": "https://a.example/", "library_folders": ["Books"], "library_folders_asked": True}
         rb.set_library_url(cfg, "https://a.example/ ")
@@ -533,7 +557,7 @@ class LibraryPage(unittest.TestCase):
         self.assertEqual(linked["sourceName"], "Un essai (2).epub")
         self.assertTrue(rb.from_library(linked))
         self.assertFalse(rb.can_send(main.cfg, linked))
-        self.assertIn("Un essai (2).epub", [b["name"] for b in main.remote.books("Essais")])
+        self.assertIn("Un essai (2).epub", [b["name"] for b in main.remote.books(main.cfg, "Essais")])
         self.assertEqual(main.cfg["send_folder"], "Essais")
         self.assertEqual(main.rows[1].title, rb._("“%s” is now in the library, in %s.", "Un essai", "Essais"))
         self.shot(main, "sent")
@@ -635,6 +659,58 @@ class LibraryPage(unittest.TestCase):
         main.pop()
         self.synced(main)
         self.assertEqual([t for t in [r.title for r in main.rows] if "/" in t or t in ("Essais", "Romans")], ["Romans", "Romans/Maigret", "transcriptions/Une chaîne"])
+        main.set("library_folders", [])
+        # a folder alone, then with the folders inside it, each book naming its folder
+        main.push((rb.FOLDER, "Romans"))
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["Un roman"])
+        self.assertEqual(main.rows[0].title, rb._("by name"))
+        next(m for m in main.menu_items if m and m[0] == rb._("with subfolders"))[1]()
+        self.assertEqual([(r.title, r.secondary.startswith("Maigret · ")) for r in main.rows if r.kind == rb.ROW], [("Le chien jaune", True), ("Un roman", False)])
+        self.assertEqual(main.rows[0].title, rb._("by name") + " · " + rb._("with subfolders"))
+        next(m for m in main.menu_items if m and m[0] == rb._("this folder only"))[1]()
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["Un roman"])
+        main.pop()
+        main.push((rb.FOLDER, "Essais"))
+        self.assertNotIn(rb._("with subfolders"), [m[0] for m in main.menu_items if m])     # Essais has no subfolder
+        main.pop()
+        # grouped by top folder: one line per top folder, with everything inside it, in the chosen order
+        next(m for m in main.menu_items if m and m[0] == rb._("group by top folder"))[1]()
+        self.assertTrue(main.cfg["library_top_folders"])
+        by_title = {r.title: r for r in main.rows}
+        self.assertEqual([t for t in by_title if "/" in t or t in ("Essais", "Romans", "transcriptions")], ["Essais", "Romans", "transcriptions"])
+        self.assertEqual(by_title["Romans"].secondary, rb.n_books(2) + " · " + rb.n_folders(2))
+        self.assertEqual(by_title["Essais"].secondary, rb.n_books(1))
+        next(m for m in main.menu_items if m and m[0].startswith(rb._("order")))[1][2][1]()      # by number of books
+        self.assertEqual(main.cfg["folder_sort"], "COUNT")
+        self.assertEqual([r.title for r in main.rows if r.title in ("Essais", "Romans", "transcriptions")], ["Romans", "Essais", "transcriptions"])
+        by_title["Romans"].action()
+        self.assertEqual(main.screen, (rb.FOLDER, "Romans", True))
+        self.assertEqual([(r.title, r.secondary.startswith("Maigret · ")) for r in main.rows if r.kind == rb.ROW], [("Le chien jaune", True), ("Un roman", False)])
+        self.assertNotIn(rb._("this folder only"), [m[0] for m in main.menu_items if m])      # a group always has them
+        next(m for m in main.menu_items if m and m[0] == rb._("newest first"))[1]()
+        self.assertEqual(main.cfg["library_sort"], "NEWEST")
+        self.shot(main, "top_folder")
+        main.pop()
+        next(m for m in main.menu_items if m and m[0] == rb._("every folder"))[1]()
+        self.assertFalse(main.cfg["library_top_folders"])
+        main.close()
+
+    def test_the_shelf_is_ordered_as_asked(self):
+        rb.save_config(dict(rb.DEFAULTS))
+        main = rb.Main()
+        main.library.books[:] = []
+        now = int(time.time() * 1000)
+        for title, added, opened in (("Zèbre", now - 3000, now - 1000), ("Abc", now - 2000, 0), ("Milieu", now - 1000, now - 2000)):
+            main.library.books.append(dict(id=title, fileName=title + ".txt", title=title, format="TXT", added=added, opened=opened, progress=0))
+        main.library._save()
+        main.show_screen()
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["Zèbre", "Milieu", "Abc"])     # last opened or added first
+        order = next(m for m in main.menu_items if m and m[0].startswith(rb._("order")))[1]
+        order[1][1]()
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["Abc", "Milieu", "Zèbre"])
+        order[2][1]()
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["Milieu", "Abc", "Zèbre"])
+        self.assertEqual(main.cfg["shelf_sort"], "ADDED")
         main.close()
 
 

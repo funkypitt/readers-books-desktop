@@ -386,6 +386,23 @@ class Folders(unittest.TestCase):
         self.assertTrue(rb.in_library([], "a/b"))
         self.assertEqual(rb.library_roots([]), [""])
 
+    def test_a_folder_left_out_is_out_with_what_is_inside_whatever_is_chosen(self):
+        excluded = ["Books/Old"]
+        self.assertTrue(rb.left_out(excluded, "Books/Old"))
+        self.assertTrue(rb.left_out(excluded, "Books/Old/Deeper"))
+        self.assertFalse(rb.left_out(excluded, "Books/Older"))      # a prefix of the name is not inside
+        self.assertFalse(rb.left_out(excluded, "Books"))
+        self.assertFalse(rb.left_out([], "Books/Old"))
+        # the whole drive, less that folder
+        self.assertTrue(rb.in_library([], "Books", excluded))
+        self.assertFalse(rb.in_library([], "Books/Old/Deeper", excluded))
+        # a chosen folder with a part of it left out
+        self.assertTrue(rb.in_library(["Books"], "Books/Maigret", excluded))
+        self.assertFalse(rb.in_library(["Books"], "Books/Old", excluded))
+        # even the transcripts' folder, when it is the one left out
+        self.assertFalse(rb.in_library(["Books"], rb.TRANSCRIPTS_FOLDER + "/x", [rb.TRANSCRIPTS_FOLDER]))
+        self.assertEqual(rb.excluded_folders({"library_excluded": ["b", "", "a", 3]}), ["a", "b"])
+
     def test_a_chosen_folder_stands_for_what_is_inside(self):
         chosen = ["Books"]
         self.assertTrue(rb.in_library(chosen, "Books"))
@@ -590,6 +607,34 @@ class LibraryPage(unittest.TestCase):
         titles = [r.title for r in main.rows]
         self.assertEqual([t for t in titles if "/" in t or t in ("Essais", "Romans")], ["Essais", "Romans", "Romans/Maigret", "transcriptions/Une chaîne"])
         self.assertNotIn(rb._("keep only some folders?"), titles)      # offered once
+        # a folder left out, by its row's menu: out of the list and of the syncs, known still
+        row = next(r for r in main.rows if r.title == "Romans/Maigret")
+        next(m for m in row.menu() if m[0] == rb._("leave this folder out"))[1]()
+        self.assertEqual(main.cfg["library_excluded"], ["Romans/Maigret"])
+        titles = [r.title for r in main.rows]
+        self.assertEqual([t for t in titles if "/" in t or t in ("Essais", "Romans")], ["Essais", "Romans", "transcriptions/Une chaîne"])
+        self.assertEqual(next(r.secondary for r in main.rows if r.title == rb._("all books")), rb.n_books(3))
+        # with Romans chosen, Maigret stays out; the walk skips it and its book stays known
+        main.push((rb.LIBRARY_FOLDERS,))
+        by_title = {r.title: r for r in main.rows}
+        self.assertEqual(by_title["Romans/Maigret"].secondary, rb.n_books(1) + " · " + rb._("left out"))
+        by_title["Romans"].action()
+        self.assertEqual(main.cfg["library_folders"], ["Romans"])
+        by_title = {r.title: r for r in main.rows}
+        self.assertEqual([(t, by_title[t].inverted) for t in ("Essais", "Romans", "Romans/Maigret")], [("Essais", False), ("Romans", True), ("Romans/Maigret", False)])
+        self.shot(main, "folders_left_out")
+        main.pop()
+        self.synced(main)
+        self.assertEqual(len(main.remote.index["books"]), 4)
+        self.assertEqual([t for t in [r.title for r in main.rows] if "/" in t or t in ("Essais", "Romans")], ["Romans", "transcriptions/Une chaîne"])
+        # taken back in through the chooser's menu
+        main.push((rb.LIBRARY_FOLDERS,))
+        row = next(r for r in main.rows if r.title == "Romans/Maigret")
+        next(m for m in row.menu() if m[0] == rb._("take this folder back in"))[1]()
+        self.assertEqual(main.cfg["library_excluded"], [])
+        main.pop()
+        self.synced(main)
+        self.assertEqual([t for t in [r.title for r in main.rows] if "/" in t or t in ("Essais", "Romans")], ["Romans", "Romans/Maigret", "transcriptions/Une chaîne"])
         main.close()
 
 

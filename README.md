@@ -53,6 +53,8 @@ reader, the same library, the same wording.
   that is stopped, or cut short by closing the window, carries on where it was. Once the drive
   has been walked, the library offers to keep only some of its folders (with everything inside
   them): fewer folders, faster syncs — the choice is in the library's menu and in the settings.
+  A right click on a folder leaves it out instead, with everything inside it, whatever else is
+  chosen: neither shown nor synced, until it is taken back in from the same list.
   The account can be exported and imported as the Reader's credentials file shared by the other
   Reader's apps (also `--export-credentials FILE` / `--import-credentials FILE`).
 * The transcripts made in Reader's Podcasts arrive by themselves: it sends each one, as a small
@@ -68,7 +70,7 @@ haptic tick.
 
 ## Install
 
-    sudo apt install ./readers-books_1.3.0_all.deb     # Debian, Ubuntu, Pop!_OS
+    sudo apt install ./readers-books_1.4.0_all.deb     # Debian, Ubuntu, Pop!_OS
     cd packaging && makepkg -si                         # Arch, Manjaro
 
 Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests).

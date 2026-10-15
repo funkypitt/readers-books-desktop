@@ -26,7 +26,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -128,9 +128,12 @@ STRINGS = {
   "scan the drive again": "parcourir le drive à nouveau",
   "sync now": "synchroniser maintenant",
   "folders of the library": "dossiers de la bibliothèque",
-  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "Tout le drive est dans la bibliothèque. Choisissez des dossiers pour ne garder que ceux-là, avec tout ce qu'ils contiennent : la bibliothèque se synchronise alors plus vite. Les transcriptions de Reader's Podcasts restent dans tous les cas.",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. Right-click a folder to leave it out: it is then neither shown nor synced, whatever else is chosen. The transcriptions of Reader's Podcasts stay unless left out.": "Tout le drive est dans la bibliothèque. Choisissez des dossiers pour ne garder que ceux-là, avec tout ce qu'ils contiennent : la bibliothèque se synchronise alors plus vite. Un clic droit sur un dossier l'écarte : il n'est alors ni affiché ni synchronisé, quel que soit le reste du choix. Les transcriptions de Reader's Podcasts restent, sauf si elles sont écartées.",
   "the whole drive": "tout le drive",
   "in %s": "dans %s",
+  "left out": "écarté",
+  "leave this folder out": "écarter ce dossier",
+  "take this folder back in": "reprendre ce dossier",
   "keep only some folders?": "ne garder que certains dossiers ?",
   "%d folders hold books — choose the ones for the library, or leave the whole drive": "%d dossiers contiennent des livres — choisissez ceux de la bibliothèque, ou gardez tout le drive",
   "by name": "par nom",
@@ -225,9 +228,12 @@ STRINGS = {
   "scan the drive again": "Drive erneut durchsuchen",
   "sync now": "jetzt synchronisieren",
   "folders of the library": "Ordner der Bibliothek",
-  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "Das ganze Drive ist in der Bibliothek. Wählen Sie Ordner, um nur diese zu behalten, mit allem darin: die Bibliothek wird dann schneller synchronisiert. Die Transkriptionen von Reader's Podcasts bleiben in jedem Fall.",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. Right-click a folder to leave it out: it is then neither shown nor synced, whatever else is chosen. The transcriptions of Reader's Podcasts stay unless left out.": "Das ganze Drive ist in der Bibliothek. Wählen Sie Ordner, um nur diese zu behalten, mit allem darin: die Bibliothek wird dann schneller synchronisiert. Ein Rechtsklick auf einen Ordner schließt ihn aus: er wird dann weder angezeigt noch synchronisiert, was auch sonst gewählt ist. Die Transkriptionen von Reader's Podcasts bleiben, außer sie sind ausgeschlossen.",
   "the whole drive": "das ganze Drive",
   "in %s": "in %s",
+  "left out": "ausgeschlossen",
+  "leave this folder out": "diesen Ordner ausschließen",
+  "take this folder back in": "diesen Ordner wieder aufnehmen",
   "keep only some folders?": "nur einige Ordner behalten?",
   "%d folders hold books — choose the ones for the library, or leave the whole drive": "%d Ordner enthalten Bücher — wählen Sie die der Bibliothek, oder behalten Sie das ganze Drive",
   "by name": "nach Name",
@@ -322,9 +328,12 @@ STRINGS = {
   "scan the drive again": "recorrer el drive de nuevo",
   "sync now": "sincronizar ahora",
   "folders of the library": "carpetas de la biblioteca",
-  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "Todo el drive está en la biblioteca. Elija carpetas para quedarse solo con esas, con todo lo que contienen: la biblioteca se sincroniza entonces más rápido. Las transcripciones de Reader's Podcasts se quedan en todo caso.",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. Right-click a folder to leave it out: it is then neither shown nor synced, whatever else is chosen. The transcriptions of Reader's Podcasts stay unless left out.": "Todo el drive está en la biblioteca. Elija carpetas para quedarse solo con esas, con todo lo que contienen: la biblioteca se sincroniza entonces más rápido. Un clic derecho en una carpeta la deja fuera: entonces ni se muestra ni se sincroniza, sea cual sea el resto de la elección. Las transcripciones de Reader's Podcasts se quedan, salvo si se dejan fuera.",
   "the whole drive": "todo el drive",
   "in %s": "en %s",
+  "left out": "dejada fuera",
+  "leave this folder out": "dejar fuera esta carpeta",
+  "take this folder back in": "volver a incluir esta carpeta",
   "keep only some folders?": "¿quedarse solo con algunas carpetas?",
   "%d folders hold books — choose the ones for the library, or leave the whole drive": "%d carpetas contienen libros — elija las de la biblioteca, o deje todo el drive",
   "by name": "por nombre",
@@ -419,9 +428,12 @@ STRINGS = {
   "scan the drive again": "percorrer a drive de novo",
   "sync now": "sincronizar agora",
   "folders of the library": "pastas da biblioteca",
-  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "Toda a drive está na biblioteca. Escolha pastas para ficar só com essas, com tudo o que contêm: a biblioteca sincroniza-se então mais depressa. As transcrições do Reader's Podcasts ficam em todo o caso.",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. Right-click a folder to leave it out: it is then neither shown nor synced, whatever else is chosen. The transcriptions of Reader's Podcasts stay unless left out.": "Toda a drive está na biblioteca. Escolha pastas para ficar só com essas, com tudo o que contêm: a biblioteca sincroniza-se então mais depressa. Um clique direito numa pasta deixa-a de fora: deixa então de ser mostrada e sincronizada, seja qual for o resto da escolha. As transcrições do Reader's Podcasts ficam, salvo se deixadas de fora.",
   "the whole drive": "toda a drive",
   "in %s": "em %s",
+  "left out": "deixada de fora",
+  "leave this folder out": "deixar esta pasta de fora",
+  "take this folder back in": "voltar a incluir esta pasta",
   "keep only some folders?": "ficar só com algumas pastas?",
   "%d folders hold books — choose the ones for the library, or leave the whole drive": "%d pastas contêm livros — escolha as da biblioteca, ou deixe toda a drive",
   "by name": "por nome",
@@ -517,9 +529,12 @@ STRINGS = {
   "scan the drive again": "просмотреть диск заново",
   "sync now": "синхронизировать сейчас",
   "folders of the library": "папки библиотеки",
-  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case.": "В библиотеке весь диск. Выберите папки, чтобы оставить только их, со всем содержимым: библиотека тогда синхронизируется быстрее. Расшифровки Reader's Podcasts остаются в любом случае.",
+  "The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. Right-click a folder to leave it out: it is then neither shown nor synced, whatever else is chosen. The transcriptions of Reader's Podcasts stay unless left out.": "В библиотеке весь диск. Выберите папки, чтобы оставить только их со всем содержимым: тогда библиотека синхронизируется быстрее. Щёлкните папку правой кнопкой, чтобы исключить её: тогда она не показывается и не синхронизируется, что бы ни было выбрано. Транскрипции Reader's Podcasts остаются, если не исключены.",
   "the whole drive": "весь диск",
   "in %s": "в %s",
+  "left out": "исключена",
+  "leave this folder out": "исключить эту папку",
+  "take this folder back in": "вернуть эту папку",
   "keep only some folders?": "оставить только некоторые папки?",
   "%d folders hold books — choose the ones for the library, or leave the whole drive": "в %d папках есть книги — выберите папки библиотеки или оставьте весь диск",
   "by name": "по имени",
@@ -544,6 +559,12 @@ PLURALS = {
  "en": ("%d book", "%d books"), "fr": ("%d livre", "%d livres"), "de": ("%d Buch", "%d Bücher"),
  "es": ("%d libro", "%d libros"), "pt": ("%d livro", "%d livros"),
  "ru": ("%d книга", "%d книги", "%d книг"),
+}
+FOLDERS_LEFT_OUT = {
+ "en": ("%d folder left out", "%d folders left out"), "fr": ("%d dossier écarté", "%d dossiers écartés"),
+ "de": ("%d Ordner ausgeschlossen", "%d Ordner ausgeschlossen"), "es": ("%d carpeta dejada fuera", "%d carpetas dejadas fuera"),
+ "pt": ("%d pasta deixada de fora", "%d pastas deixadas de fora"),
+ "ru": ("%d папка исключена", "%d папки исключены", "%d папок исключено"),
 }
 FOLDERS_CHOSEN = {
  "en": ("%d folder chosen", "%d folders chosen"), "fr": ("%d dossier choisi", "%d dossiers choisis"),
@@ -585,6 +606,11 @@ def n_books(n):
 def n_folders_chosen(n):
     """« 1 folder chosen », « 3 folders chosen »."""
     return _plural(FOLDERS_CHOSEN, n)
+
+
+def n_folders_left_out(n):
+    """« 1 folder left out », « 3 folders left out »."""
+    return _plural(FOLDERS_LEFT_OUT, n)
 
 
 def _plural(table, n):
@@ -1525,19 +1551,31 @@ def send_name(entry):
 
 # Which folders of the drive make the library. Empty = the whole drive. A chosen folder stands
 # for everything inside it; the folder Reader's Podcasts sends its transcripts to is always in.
-# The choice is kept in the settings; a sync walks only these folders, and only their books are shown.
+# A folder left out is out with everything inside it, whatever else is chosen: neither shown nor
+# walked by a sync. Both lists are kept in the settings; a sync walks only the chosen folders,
+# skips the ones left out, and only the remaining books are shown.
 
 def chosen_folders(cfg):
     """The folders chosen in the settings: paths below the top of the drive, sorted."""
     return sorted(f for f in (cfg.get("library_folders") or []) if isinstance(f, str) and f)
 
 
+def excluded_folders(cfg):
+    """The folders left out in the settings: paths below the top of the drive, sorted."""
+    return sorted(f for f in (cfg.get("library_excluded") or []) if isinstance(f, str) and f)
+
+
 def folder_under(parent, folder):
     return parent == "" or folder == parent or folder.startswith(parent + "/")
 
 
-def in_library(chosen, folder):
-    return not chosen or folder_under(TRANSCRIPTS_FOLDER, folder) or any(folder_under(c, folder) for c in chosen)
+def left_out(excluded, folder):
+    """True when the folder, or a folder above it, was left out."""
+    return any(e and folder_under(e, folder) for e in excluded)
+
+
+def in_library(chosen, folder, excluded=()):
+    return not left_out(excluded, folder) and (not chosen or folder_under(TRANSCRIPTS_FOLDER, folder) or any(folder_under(c, folder) for c in chosen))
 
 
 def part_of(chosen, folder):
@@ -1610,8 +1648,8 @@ class RemoteLibrary:
 
     def shown(self, cfg):
         """The books in the library: those of the chosen folders, or all of them."""
-        chosen = chosen_folders(cfg)
-        return [b for b in self.index["books"] if in_library(chosen, b["folder"])]
+        chosen, excluded = chosen_folders(cfg), excluded_folders(cfg)
+        return [b for b in self.index["books"] if in_library(chosen, b["folder"], excluded)]
 
     def folders(self, cfg):
         return self._counted(self.shown(cfg))
@@ -1656,7 +1694,7 @@ class RemoteLibrary:
         self.error = None
         self.stop = threading.Event()
         self.progress = (start["folders"], len(start["books"]), len(start["failed"]))
-        self.thread = threading.Thread(target=self._run, args=(remote, start, from_top, chosen_folders(cfg), self.stop), daemon=True)
+        self.thread = threading.Thread(target=self._run, args=(remote, start, from_top, chosen_folders(cfg), self.stop, excluded_folders(cfg)), daemon=True)
         self.thread.start()
 
     def cancel(self):
@@ -1669,7 +1707,7 @@ class RemoteLibrary:
         Podcasts sends its transcripts to, so that a transcript made this morning is in the
         library when it is opened, with no scan to ask for. In the background."""
         remote = remote_for(cfg)
-        if remote is None or self.scanning or not self.matches(cfg) or not self.index["complete"] or self.refreshing:
+        if remote is None or self.scanning or not self.matches(cfg) or not self.index["complete"] or self.refreshing or left_out(excluded_folders(cfg), name):
             return
         self.refreshing = True
         source = self.index["source"]
@@ -1745,9 +1783,9 @@ class RemoteLibrary:
             pass
         self.changed += 1
 
-    def _run(self, remote, start, from_top, chosen, stop):
+    def _run(self, remote, start, from_top, chosen, stop, excluded=()):
         try:
-            self._walk(remote, start, from_top, chosen, stop)
+            self._walk(remote, start, from_top, chosen, stop, excluded)
         except Exception as exc:
             if not stop.is_set():
                 self.error = exc
@@ -1756,7 +1794,7 @@ class RemoteLibrary:
                 self.progress = None
             self.changed += 1
 
-    def _walk(self, remote, index, from_top, chosen, stop):
+    def _walk(self, remote, index, from_top, chosen, stop, excluded=()):
         roots = [remote.folder_ref(p) for p in library_roots(chosen)]
         if from_top:
             # the whole tree at once, when the server allows it and the whole drive is wanted
@@ -1800,7 +1838,8 @@ class RemoteLibrary:
                 with lock:
                     in_flight.discard(folder)
                     if result:
-                        queue.extend(result[0])
+                        # a folder left out is not walked; its books stay known, so it can be taken back
+                        queue.extend(d for d in result[0] if not left_out(excluded, remote.folder_path(d)))
                         books[:] = merge_folder(books, remote.folder_path(folder), [remote.folder_path(d) for d in result[0]], result[1])
                         state["folders"] += 1
                     elif isinstance(error, WrongLogin):
@@ -2195,7 +2234,7 @@ def apply_credentials(cfg, account):
 def set_library_url(cfg, url):
     """The library's address. Another drive: its folders are not these, and the choice is to be offered again."""
     if url.strip() != cfg.get("url", "").strip():
-        cfg.update(library_folders=[], library_folders_asked=False)
+        cfg.update(library_folders=[], library_excluded=[], library_folders_asked=False)
         cfg.pop("send_folder", None)
     cfg["url"] = url.strip()
 
@@ -2245,7 +2284,7 @@ DEFAULTS = {"dark": True, "font": "sans", "text_size": "M", "reader_pt": 0, "boo
             "notes_url": "", "notes_username": "", "notes_password": "",
             "library_sort": "NAME", "all_books_sort": "NEWEST",
             # the folders of the drive that make the library (empty = the whole drive); whether the choice was offered
-            "library_folders": [], "library_folders_asked": False}
+            "library_folders": [], "library_excluded": [], "library_folders_asked": False}
 AUTO_READER_PT = 13
 MIN_READER_PT, MAX_READER_PT = 8, 30
 
@@ -3274,7 +3313,7 @@ class Main(QtWidgets.QMainWindow):
     def push(self, screen):
         self.fetch_error = ""
         if screen[0] == LIBRARY_FOLDERS:
-            self.folders_before = chosen_folders(self.cfg)
+            self.folders_before = (chosen_folders(self.cfg), excluded_folders(self.cfg))
         if screen[0] == ADD_TO_LIBRARY:
             self.sending, self.sent, self.send_error = False, None, ""
         self.stack.append(screen)
@@ -3285,7 +3324,7 @@ class Main(QtWidgets.QMainWindow):
             self.fetch_error = ""
             left = self.stack.pop()
             # the folders of the library left changed: it syncs quietly, so folders taken back in are read again
-            if left[0] == LIBRARY_FOLDERS and chosen_folders(self.cfg) != self.folders_before:
+            if left[0] == LIBRARY_FOLDERS and (chosen_folders(self.cfg), excluded_folders(self.cfg)) != self.folders_before:
                 self.remote.sync_quietly(self.cfg)
             self.show_screen(reset=True)
 
@@ -3723,7 +3762,8 @@ class Main(QtWidgets.QMainWindow):
         rows += self.account_rows()
         if library_configured(cfg):
             chosen = chosen_folders(cfg)
-            rows.append(Row(_("folders of the library"), n_folders_chosen(len(chosen)) if chosen else _("the whole drive"), lambda: self.push((LIBRARY_FOLDERS,))))
+            excluded = excluded_folders(cfg)
+            rows.append(Row(_("folders of the library"), " · ".join([n_folders_chosen(len(chosen)) if chosen else _("the whole drive")] + ([n_folders_left_out(len(excluded))] if excluded else [])), lambda: self.push((LIBRARY_FOLDERS,))))
         rows += self.credentials_rows()
         if library_started(cfg):
             rows.append(Row(_("forget the library"), _("removes the link, the login and the list of books; the shelf is kept"), self.forget_library))
@@ -3846,6 +3886,14 @@ class Main(QtWidgets.QMainWindow):
         save_config(self.cfg)
         self.show_screen()
 
+    def set_library_excluded(self, folders):
+        """The folders left out of the library; a chosen folder that is now left out is no longer chosen."""
+        excluded = sorted(set(f for f in folders if f))
+        chosen = [c for c in chosen_folders(self.cfg) if not left_out(excluded, c)]
+        self.cfg.update(library_excluded=excluded, library_folders=chosen)
+        save_config(self.cfg)
+        self.show_screen()
+
     def offer_folders(self):
         self.cfg["library_folders_asked"] = True
         save_config(self.cfg)
@@ -3894,7 +3942,8 @@ class Main(QtWidgets.QMainWindow):
         if shown:
             rows.append(Row(_("all books"), n_books(len(shown)), lambda: self.push((ALL_BOOKS,))))
         for path, count in folders:
-            rows.append(Row(path or _("top of the drive"), n_books(count), lambda path=path: self.push((FOLDER, path)), lines=1))
+            rows.append(Row(path or _("top of the drive"), n_books(count), lambda path=path: self.push((FOLDER, path)), lines=1,
+                            menu=(lambda path=path: [(_("leave this folder out"), lambda: self.set_library_excluded(excluded_folders(self.cfg) + [path]))]) if path else None))
         menu = []
         if not progress and (not index["complete"] or index["failed"]):
             menu.append((_("continue the scan"), lambda: self.scan(False)))
@@ -3906,22 +3955,32 @@ class Main(QtWidgets.QMainWindow):
     def screen_library_folders(self):
         """The folders of the drive that make the library: every folder seen to hold books, the
         chosen ones inverted along with what is inside them; a click chooses or un-chooses."""
-        chosen = chosen_folders(self.cfg)
-        rows = [Row(_("The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. The transcriptions of Reader's Podcasts stay in any case."), kind=HINT),
+        chosen, excluded = chosen_folders(self.cfg), excluded_folders(self.cfg)
+        rows = [Row(_("The whole drive is in the library. Choose folders to keep only those, with everything inside them: the library is then synced faster. Right-click a folder to leave it out: it is then neither shown nor synced, whatever else is chosen. The transcriptions of Reader's Podcasts stay unless left out."), kind=HINT),
                 Row(_("the whole drive"), "", lambda: self.set_library_folders([]) if chosen else None, inverted=not chosen)]
         for path, count in self.remote.known_folders():
             if not path:
                 continue
             part = part_of(chosen, path)
-            secondary = n_books(count) + (" · " + _("in %s", part) if part else "")
+            out = left_out(excluded, path)
+            out_by = next((e for e in excluded if e != path and folder_under(e, path)), None)
+            secondary = n_books(count) + (" · " + _("left out") + " · " + _("in %s", out_by) if out_by else " · " + _("left out") if out
+                                          else " · " + _("in %s", part) if part else "")
 
-            def choose(path=path, part=part):
+            def choose(path=path, part=part, out=out):
+                if out:
+                    return
                 if path in chosen:
                     self.set_library_folders([f for f in chosen if f != path])
                 elif part is None:
                     self.set_library_folders(chosen + [path])
 
-            rows.append(Row(path, secondary, choose, lines=1, inverted=bool(chosen) and in_library(chosen, path)))
+            def menu(path=path):
+                if path in excluded:
+                    return [(_("take this folder back in"), lambda: self.set_library_excluded([f for f in excluded if f != path]))]
+                return [(_("leave this folder out"), lambda: self.set_library_excluded(excluded + [path]))]
+
+            rows.append(Row(path, secondary, choose, menu=menu, lines=1, inverted=bool(chosen) and in_library(chosen, path, excluded)))
         return _("folders of the library"), rows, None
 
     # ---- a book of the shelf sent to the drive ----

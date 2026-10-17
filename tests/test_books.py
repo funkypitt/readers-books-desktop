@@ -113,6 +113,18 @@ class Shelf(unittest.TestCase):
         lib.remove(again["id"])
         self.assertIsNone(lib.get(again["id"]))
 
+    def test_the_menu_of_the_shelf_opens_with_its_orders_and_leads_to_the_settings(self):
+        # 1.5.0 and 1.6.0: the « order » submenu made the ⋮ menu fail before it showed — settings out of reach.
+        main = rb.Main()
+        menu = main.build_menu(main.menu_items)
+        labels = [a.text() for a in menu.actions()]
+        self.assertIn(rb._("settings"), labels)
+        order = next(a for a in menu.actions() if a.text().startswith(rb._("order")))
+        self.assertEqual(len(order.menu().actions()), len(rb.SHELF_ORDERS))
+        next(a for a in menu.actions() if a.text() == rb._("settings")).trigger()
+        self.assertEqual(main.screen[0], rb.SETTINGS)
+        main.close()
+
 
 class Pages(unittest.TestCase):
     def test_every_line_is_on_one_page_and_no_page_overflows(self):

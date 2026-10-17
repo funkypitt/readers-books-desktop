@@ -28,7 +28,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -3798,9 +3798,10 @@ class Main(QtWidgets.QMainWindow):
             self.listing.setCurrentItem(None)
             self.rows[i].action()
 
-    def popup(self, items, where, title=None):
-        """A menu of plain words. `items` are (label, action), None for a rule."""
-        menu = QtWidgets.QMenu(self)
+    def build_menu(self, items, title=None, menu=None):
+        """A menu of plain words. `items` are (label, action), None for a rule; an action that is
+        itself a list of items is a submenu (the orders)."""
+        menu = menu or QtWidgets.QMenu(self)
         if title:
             head = menu.addAction(QtGui.QFontMetrics(self.font()).elidedText(title, QtCore.Qt.ElideRight, 360))
             head.setEnabled(False)
@@ -3808,9 +3809,14 @@ class Main(QtWidgets.QMainWindow):
         for entry in items:
             if entry is None:
                 menu.addSeparator()
+            elif isinstance(entry[1], (list, tuple)):
+                self.build_menu(entry[1], menu=menu.addMenu(entry[0]))
             else:
                 menu.addAction(entry[0], entry[1])
-        menu.exec_(where)
+        return menu
+
+    def popup(self, items, where, title=None):
+        self.build_menu(items, title).exec_(where)
 
     def page_menu(self):
         if self.menu_items:

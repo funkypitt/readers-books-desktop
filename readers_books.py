@@ -3,7 +3,8 @@
 
 The desktop twin of the Android app: the same shelf, the same reader (EPUB, MOBI, FB2, TXT; the
 place in each book kept), the same magazine contents, the same optional library on a drive (a
-WebDAV address), the same highlights, the same credentials file. One file, PyQt5.
+WebDAV address), the same highlights, the same credentials file. One file, PyQt5 — and
+paper2epub.py next to it, which turns a paper in PDF into an EPUB.
 """
 import json
 import locale
@@ -11,6 +12,7 @@ import os
 import re
 import shutil
 import struct
+import subprocess
 import sys
 import threading
 import uuid
@@ -26,7 +28,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -159,6 +161,15 @@ STRINGS = {
   "“%s” is now in the library, in %s.": "« %s » est maintenant dans la bibliothèque, dans %s.",
   "the book could not be sent: %s": "le livre n'a pas pu être envoyé : %s",
   "last time": "la dernière fois",
+  "setting up the converter…": "mise en place du convertisseur…",
+  "the converter could not be set up: %s": "le convertisseur n'a pas pu être mis en place : %s",
+  "turning “%s” into a book…": "« %s » devient un livre…",
+  "loading the models": "chargement des modèles",
+  "reading the pages": "lecture des pages",
+  "making the book": "fabrication du livre",
+  "“%s” could not be turned into a book: %s": "« %s » n'a pas pu devenir un livre : %s",
+  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Un article en PDF devient un livre de l'étagère, ses figures, tableaux et équations en images. Le convertisseur se met en place une fois : environ 2 Go téléchargés.",
+  "set up the converter": "mettre en place le convertisseur",
  },
  "de": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Bücher auf einem Drive, nach Ordnern aufgelistet; ein Buch wird erst heruntergeladen, wenn Sie es anklicken. Geben Sie die WebDAV-Adresse des Drives mit Benutzername und Anwendungspasswort an (kDrive, Nextcloud, jeder WebDAV-Server). Das Drive wird dann nach epub-, mobi-, azw- und fb2-Dateien durchsucht. Markierungen und die Seite, auf der Sie sind, werden neben jedes Buch geschrieben: das Konto muss dort schreiben dürfen.",
@@ -267,6 +278,15 @@ STRINGS = {
   "“%s” is now in the library, in %s.": "„%s“ ist jetzt in der Bibliothek, in %s.",
   "the book could not be sent: %s": "das Buch konnte nicht gesendet werden: %s",
   "last time": "letztes Mal",
+  "setting up the converter…": "Konverter wird eingerichtet…",
+  "the converter could not be set up: %s": "der Konverter konnte nicht eingerichtet werden: %s",
+  "turning “%s” into a book…": "„%s“ wird zum Buch…",
+  "loading the models": "Modelle werden geladen",
+  "reading the pages": "Seiten werden gelesen",
+  "making the book": "Buch wird erstellt",
+  "“%s” could not be turned into a book: %s": "„%s“ konnte nicht zum Buch werden: %s",
+  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Ein Artikel als PDF wird ein Buch im Regal, seine Abbildungen, Tabellen und Gleichungen als Bilder. Der Konverter wird einmal eingerichtet: etwa 2 GB werden heruntergeladen.",
+  "set up the converter": "Konverter einrichten",
  },
  "es": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Libros guardados en un drive, listados por carpeta; un libro solo se descarga cuando haces clic en él. Indica la dirección WebDAV del drive con un nombre de usuario y una contraseña de aplicación (kDrive, Nextcloud, cualquier servidor WebDAV). Entonces se recorre el drive buscando archivos epub, mobi, azw y fb2. Los resaltados y la página en la que estás se escriben junto a cada libro: la cuenta debe poder escribir allí.",
@@ -375,6 +395,15 @@ STRINGS = {
   "“%s” is now in the library, in %s.": "«%s» está ahora en la biblioteca, en %s.",
   "the book could not be sent: %s": "no se pudo enviar el libro: %s",
   "last time": "la última vez",
+  "setting up the converter…": "preparando el conversor…",
+  "the converter could not be set up: %s": "no se pudo preparar el conversor: %s",
+  "turning “%s” into a book…": "«%s» se convierte en libro…",
+  "loading the models": "cargando los modelos",
+  "reading the pages": "leyendo las páginas",
+  "making the book": "haciendo el libro",
+  "“%s” could not be turned into a book: %s": "«%s» no pudo convertirse en libro: %s",
+  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Un artículo en PDF se convierte en un libro de la estantería, con sus figuras, tablas y ecuaciones como imágenes. El conversor se prepara una sola vez: unos 2 GB descargados.",
+  "set up the converter": "preparar el conversor",
  },
  "pt": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Livros guardados numa drive, listados por pasta; um livro só é descarregado quando clica nele. Indique o endereço WebDAV da drive com um nome de utilizador e uma palavra-passe de aplicação (kDrive, Nextcloud, qualquer servidor WebDAV). A drive é então percorrida à procura de ficheiros epub, mobi, azw e fb2. Os destaques e a página em que está são escritos ao lado de cada livro: a conta tem de poder escrever aí.",
@@ -483,6 +512,15 @@ STRINGS = {
   "“%s” is now in the library, in %s.": "«%s» está agora na biblioteca, em %s.",
   "the book could not be sent: %s": "não foi possível enviar o livro: %s",
   "last time": "da última vez",
+  "setting up the converter…": "a preparar o conversor…",
+  "the converter could not be set up: %s": "não foi possível preparar o conversor: %s",
+  "turning “%s” into a book…": "«%s» está a tornar-se um livro…",
+  "loading the models": "a carregar os modelos",
+  "reading the pages": "a ler as páginas",
+  "making the book": "a fazer o livro",
+  "“%s” could not be turned into a book: %s": "«%s» não pôde tornar-se um livro: %s",
+  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Um artigo em PDF torna-se um livro da estante, com as figuras, tabelas e equações como imagens. O conversor prepara-se uma só vez: cerca de 2 GB descarregados.",
+  "set up the converter": "preparar o conversor",
  },
  "ru": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Книги на диске, перечисленные по папкам; книга загружается только когда вы щёлкаете по ней. Укажите адрес WebDAV диска с именем пользователя и паролем приложения (kDrive, Nextcloud, любой сервер WebDAV). Затем диск просматривается в поисках файлов epub, mobi, azw и fb2. Выделения и страница, на которой вы остановились, записываются рядом с каждой книгой: учётной записи должна быть разрешена запись.",
@@ -592,6 +630,15 @@ STRINGS = {
   "“%s” is now in the library, in %s.": "«%s» теперь в библиотеке, в папке %s.",
   "the book could not be sent: %s": "не удалось отправить книгу: %s",
   "last time": "в прошлый раз",
+  "setting up the converter…": "установка конвертера…",
+  "the converter could not be set up: %s": "не удалось установить конвертер: %s",
+  "turning “%s” into a book…": "«%s» становится книгой…",
+  "loading the models": "загрузка моделей",
+  "reading the pages": "чтение страниц",
+  "making the book": "сборка книги",
+  "“%s” could not be turned into a book: %s": "«%s» не удалось превратить в книгу: %s",
+  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Статья в PDF становится книгой на полке, её рисунки, таблицы и формулы — картинками. Конвертер устанавливается один раз: около 2 ГБ загрузки.",
+  "set up the converter": "установить конвертер",
  },
 }
 
@@ -616,6 +663,13 @@ FOLDERS_CHOSEN = {
  "de": ("%d Ordner gewählt", "%d Ordner gewählt"), "es": ("%d carpeta elegida", "%d carpetas elegidas"),
  "pt": ("%d pasta escolhida", "%d pastas escolhidas"),
  "ru": ("%d папка выбрана", "%d папки выбраны", "%d папок выбрано"),
+}
+
+PAPERS = {
+ "en": ("%d paper waiting", "%d papers waiting"), "fr": ("%d article en attente", "%d articles en attente"),
+ "de": ("%d Artikel wartet", "%d Artikel warten"), "es": ("%d artículo en espera", "%d artículos en espera"),
+ "pt": ("%d artigo à espera", "%d artigos à espera"),
+ "ru": ("%d статья ждёт", "%d статьи ждут", "%d статей ждут"),
 }
 
 
@@ -661,6 +715,10 @@ def n_folders_chosen(n):
 def n_folders_left_out(n):
     """« 1 folder left out », « 3 folders left out »."""
     return _plural(FOLDERS_LEFT_OUT, n)
+
+
+def n_papers(n):
+    return _plural(PAPERS, n)
 
 
 def _plural(table, n):
@@ -757,7 +815,7 @@ _IMG = re.compile(r'<img\b[^>]*?src="([^"]+)"[^>]*>', re.I)
 _HEADING_OPEN = re.compile(r"<h[1-6]\b[^>]*>", re.I)
 _CLASSED = re.compile(r'<(p|div)\b[^>]*class="([^"]*)"[^>]*>', re.I)
 _LEAD = re.compile(r"\blead\b|\bchapo\b|\bstandfirst\b")
-_SMALLPRINT = re.compile(r"\bcategory\b|\bauthor\b|\bbyline\b|caption|\bcredit\b|\bseparator\b")
+_SMALLPRINT = re.compile(r"\bcategory\b|\bauthor\b|\bbyline\b|caption|\bcredit\b|\bseparator\b|\bfootnote\b")
 _SPACES = re.compile("[ \\t\\r   ]+")
 _BLANK_LINE = re.compile(r"\n\s*\n")
 _MARKS = re.compile("\u0001[HLS]")
@@ -859,7 +917,7 @@ def to_blocks(text, image):
 # ------------------------------------------------------------------------------------------
 
 EPUB, MOBI, FB2, TXT = "EPUB", "MOBI", "FB2", "TXT"
-OPEN_FILTER = "*.epub *.mobi *.prc *.azw *.azw3 *.fb2 *.txt"
+OPEN_FILTER = "*.epub *.mobi *.prc *.azw *.azw3 *.fb2 *.txt *.pdf"     # a PDF is a paper: see paper2epub.py
 
 
 def detect(path, name_hint):
@@ -1374,6 +1432,113 @@ def _base36(n):
         n, r = divmod(n, 36)
         out = digits[r] + out
     return out or "0"
+
+
+# ------------------------------------------------------------------------------------------
+# Papers in PDF: paper2epub.py (next to this file) turns one into an EPUB, in a Python
+# environment of its own (Marker and torch, about 2 GB) set up once in the app's data folder.
+# The app itself never imports them; the converter runs as a separate process.
+# ------------------------------------------------------------------------------------------
+
+CONVERTER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper2epub.py")
+PAPERS_ENV = os.path.join(DATA_DIR, "paper-converter")
+PAPERS_WORK = os.path.join(DATA_DIR, "papers")
+# Known to work together; torch is the CPU build: the converter reads the PDF's own text, a
+# graphics card would not make it faster.
+CONVERTER_PACKAGES = [
+    ["torch==2.14.1", "torchvision==0.29.1", "--index-url", "https://download.pytorch.org/whl/cpu"],
+    ["marker-pdf==2.0.0", "pylatexenc==2.11"],
+]
+
+
+def is_pdf(path):
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(5) == b"%PDF-"
+    except OSError:
+        return False
+
+
+def converter_python():
+    return os.path.join(PAPERS_ENV, "Scripts" if sys.platform == "win32" else "bin", "python.exe" if sys.platform == "win32" else "python")
+
+
+def _pins():
+    return " ".join(p for packages in CONVERTER_PACKAGES for p in packages if "==" in p)
+
+
+def converter_ready():
+    """Set up, with the packages this version of the app wants (a newer one sets it up again)."""
+    try:
+        with open(os.path.join(PAPERS_ENV, "ready")) as fh:
+            return os.path.isfile(CONVERTER) and fh.read() == _pins()
+    except OSError:
+        return False
+
+
+def _quiet(command, log):
+    """Runs a command, its output into the log; an error carries the last line of it."""
+    with open(log, "ab") as fh:
+        done = subprocess.run(command, stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    if done.returncode:
+        try:
+            with open(log, "rb") as fh:
+                last = [l for l in fh.read().decode("utf-8", "replace").splitlines() if l.strip()][-1:]
+        except OSError:
+            last = []
+        raise IOError(last[0].strip() if last else "exit %d" % done.returncode)
+
+
+def set_up_converter(step):
+    """Blocking. `step(n, of)` before each of the steps: the environment, torch, Marker, its
+    models. A step that fails can simply be run again."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    log = os.path.join(DATA_DIR, "paper-converter.log")
+    steps = 2 + len(CONVERTER_PACKAGES)
+    step(1, steps)
+    if not os.path.isfile(converter_python()):
+        try:
+            _quiet([sys.executable, "-m", "venv", PAPERS_ENV], log)
+        except IOError as exc:
+            shutil.rmtree(PAPERS_ENV, ignore_errors=True)
+            raise IOError("%s (python3-venv?)" % exc)
+    pip = [converter_python(), "-m", "pip", "install", "--disable-pip-version-check", "-q"]
+    for i, packages in enumerate(CONVERTER_PACKAGES):
+        step(2 + i, steps)
+        _quiet(pip + packages, log)
+    step(steps, steps)          # the models, downloaded once
+    _quiet([converter_python(), "-I", "-c", "from marker.models import create_model_dict; create_model_dict()"], log)
+    with open(os.path.join(PAPERS_ENV, "ready"), "w") as fh:
+        fh.write(_pins())
+
+
+def convert_paper(pdf_path, step):
+    """Blocking: the EPUB made of the paper, in PAPERS_WORK. `step(word)` as the converter goes."""
+    os.makedirs(PAPERS_WORK, exist_ok=True)
+    out = os.path.join(PAPERS_WORK, "%s.epub" % _base36(_now()))
+    log = os.path.join(DATA_DIR, "paper-converter.log")
+    env = dict(os.environ, PYTHONUNBUFFERED="1", TQDM_DISABLE="1")
+    error = None
+    with open(log, "ab") as err:
+        process = subprocess.Popen([converter_python(), "-I", CONVERTER, "--progress", pdf_path, out],
+                                   stdout=subprocess.PIPE, stderr=err, stdin=subprocess.DEVNULL, env=env)
+        for line in process.stdout:
+            try:
+                said = json.loads(line)
+            except ValueError:
+                continue
+            if "step" in said:
+                step(said["step"])
+            elif "error" in said:
+                error = said["error"]
+        process.wait()
+    if process.returncode or not os.path.isfile(out):
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+        raise IOError(error or "exit %d" % process.returncode)
+    return out
 
 
 # ------------------------------------------------------------------------------------------
@@ -2461,6 +2626,9 @@ class ImageStore:
         except Exception:
             return None
 
+    def data(self, source):
+        return self._bytes(source) or b""
+
     def size(self, source):
         """Pixel size, or None when the entry is missing or is not a picture."""
         if source not in self.sizes:
@@ -2705,6 +2873,11 @@ class Awake:
 # ------------------------------------------------------------------------------------------
 # One job on a thread of its own
 # ------------------------------------------------------------------------------------------
+
+class Step(QtCore.QObject):
+    """Where a long job is, told from its thread to the window's."""
+    said = QtCore.pyqtSignal(str)
+
 
 class Worker(QtCore.QObject):
     done = QtCore.pyqtSignal(object, object)     # result, error
@@ -3117,14 +3290,28 @@ class Reader(QtWidgets.QWidget):
         if found:
             return self.main.highlight_menu(e.globalPos(), found)
         # As on a reading tablet: the left third goes back, the right third forward, the
-        # middle opens the book's menu.
+        # middle opens the book's menu — or, on a picture, the picture on the whole window.
         third = self.width() / 3.0
+        picture = self.picture_at(e.pos())
         if e.x() < third:
             self.turn(False)
         elif e.x() > 2 * third:
             self.turn(True)
+        elif picture:
+            PictureView(self.main, self.images.data(picture))
         else:
             self.main.reader_menu(e.globalPos())
+
+    def picture_at(self, pos):
+        """The picture of the page under `pos`, by its source, or None."""
+        if not (self.book and self.pages and self.images):
+            return None
+        _font, area = self.frame()
+        for piece in self.pages[self.page]:
+            if isinstance(piece, Picture) and QtCore.QRect(area.left() + (area.width() - piece.width) // 2, area.top() + piece.y,
+                                                           piece.width, piece.height).contains(pos):
+                return piece.source
+        return None
 
     def wheelEvent(self, e):
         if e.angleDelta().y():
@@ -3202,6 +3389,111 @@ class Reader(QtWidgets.QWidget):
         p.drawText(QtCore.QRect(area.left(), y, area.width(), fs.height()), QtCore.Qt.AlignRight, where)
 
 
+class PictureView(QtWidgets.QWidget):
+    """A picture of the book on the whole window, to read a table or a figure: it opens fitted
+    to the window; the wheel (or + and −) zooms around the pointer, a drag moves it, 0 fits it
+    again, a click or Esc closes it."""
+
+    def __init__(self, main, data):
+        super().__init__(main)
+        self.main = main
+        self.image = QtGui.QImage.fromData(data)
+        self.scale, self.offset, self.fitted = 1.0, QtCore.QPointF(), True
+        self.pressed, self.moved = None, False
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.setCursor(QtCore.Qt.OpenHandCursor)
+        main.installEventFilter(self)
+        self.setGeometry(main.rect())
+        self.fit()
+        self.show()
+        self.raise_()
+        self.setFocus()
+
+    def eventFilter(self, obj, e):
+        if obj is self.main and e.type() == QtCore.QEvent.Resize:
+            self.setGeometry(self.main.rect())
+            if self.fitted:
+                self.fit()
+        return False
+
+    def fit(self):
+        if self.image.isNull():
+            return
+        margin = 24
+        self.scale = min((self.width() - 2 * margin) / self.image.width(), (self.height() - 2 * margin) / self.image.height())
+        self.offset = QtCore.QPointF((self.width() - self.image.width() * self.scale) / 2,
+                                     (self.height() - self.image.height() * self.scale) / 2)
+        self.fitted = True
+        self.update()
+
+    def zoom(self, factor, around):
+        if self.image.isNull():
+            return
+        fit = min(self.width() / self.image.width(), self.height() / self.image.height())
+        scale = min(max(self.scale * factor, fit * 0.5), max(fit, 1.0) * 8)
+        self.offset = around - (around - self.offset) * (scale / self.scale)
+        self.scale, self.fitted = scale, False
+        self.update()
+
+    def close_view(self):
+        self.main.removeEventFilter(self)
+        self.hide()
+        self.main.reader.setFocus()
+        self.deleteLater()
+
+    def paintEvent(self, _e):
+        p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
+        p.fillRect(self.rect(), QtGui.QColor(self.main.colors["bg"]))
+        if not self.image.isNull():
+            p.drawImage(QtCore.QRectF(self.offset, QtCore.QSizeF(self.image.width() * self.scale, self.image.height() * self.scale)), self.image)
+
+    def wheelEvent(self, e):
+        steps = e.angleDelta().y() / 120.0
+        if steps:
+            self.zoom(1.25 ** steps, QtCore.QPointF(e.pos()))
+
+    def mousePressEvent(self, e):
+        if e.button() == QtCore.Qt.LeftButton:
+            self.pressed, self.moved = e.pos(), False
+            self.setCursor(QtCore.Qt.ClosedHandCursor)
+
+    def mouseMoveEvent(self, e):
+        if self.pressed is None:
+            return
+        if not self.moved and (e.pos() - self.pressed).manhattanLength() < QtWidgets.QApplication.startDragDistance():
+            return
+        self.offset += QtCore.QPointF(e.pos() - self.pressed)
+        self.pressed, self.moved, self.fitted = e.pos(), True, False
+        self.update()
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == QtCore.Qt.RightButton or self.pressed is not None and not self.moved:
+            return self.close_view()
+        self.pressed = None
+        self.setCursor(QtCore.Qt.OpenHandCursor)
+
+    CLOSE_KEYS = (QtCore.Qt.Key_Escape, QtCore.Qt.Key_Back, QtCore.Qt.Key_Backspace, QtCore.Qt.Key_Q)
+
+    def event(self, e):
+        # Esc and Backspace are the window's "back": while the picture is open, they close it
+        if e.type() == QtCore.QEvent.ShortcutOverride and e.key() in self.CLOSE_KEYS:
+            e.accept()
+            return True
+        return super().event(e)
+
+    def keyPressEvent(self, e):
+        key, middle = e.key(), QtCore.QPointF(self.width() / 2, self.height() / 2)
+        if key in self.CLOSE_KEYS:
+            self.close_view()
+        elif key in (QtCore.Qt.Key_Plus, QtCore.Qt.Key_Equal):
+            self.zoom(1.25, middle)
+        elif key == QtCore.Qt.Key_Minus:
+            self.zoom(0.8, middle)
+        elif key == QtCore.Qt.Key_0:
+            self.fit()
+
+
 # ------------------------------------------------------------------------------------------
 # The window
 # ------------------------------------------------------------------------------------------
@@ -3224,6 +3516,10 @@ class Main(QtWidgets.QMainWindow):
         self.threads = []
         self.importing = False
         self.import_failed = False
+        # papers in PDF waiting to become books; what the converter is doing, the last failure
+        self.papers, self.paper_doing, self.paper_error = [], None, ""
+        self.paper_step = Step()
+        self.paper_step.said.connect(self.paper_said)
         self.syncing, self.sync_again = set(), set()    # highlights on their way to the drive
         self.fetching = None            # the drive reference of the book being downloaded
         self.sending, self.sent, self.send_error = False, None, ""     # a book of the shelf on its way to the drive
@@ -3531,6 +3827,14 @@ class Main(QtWidgets.QMainWindow):
             rows.append(Row("…", kind=HINT))
         elif self.import_failed:
             rows.append(Row(_("this file could not be read"), kind=HINT))
+        if self.paper_doing:
+            waiting = len(self.papers) - (0 if self.paper_doing.startswith(_("setting up the converter…")) else 1)
+            rows.append(Row(self.paper_doing + (" · " + n_papers(waiting) if waiting > 0 else ""), kind=HINT))
+        elif self.papers and not converter_ready():
+            rows.append(Row(_("A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded."), kind=HINT))
+            rows.append(Row(_("set up the converter"), n_papers(len(self.papers)), self.set_up_converter))
+        if self.paper_error:
+            rows.append(Row(self.paper_error, kind=HINT))
         if not self.library.books and not self.importing:
             rows.append(Row(_("nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window."), kind=HINT))
         # the shelf's order: by last opened (or added), by title, or by last added
@@ -3575,6 +3879,10 @@ class Main(QtWidgets.QMainWindow):
     def import_files(self, paths):
         """Books opened from here, dropped on the window or handed over by the file manager: they
         land on the shelf, and the last one opens."""
+        papers = [p for p in paths if is_pdf(p)]
+        paths = [p for p in paths if p not in papers]
+        if papers:
+            self.add_papers(papers)
         if not paths or self.importing:
             return
         self.importing, self.import_failed = True, False
@@ -3599,6 +3907,68 @@ class Main(QtWidgets.QMainWindow):
                 self.open_entry(entry, from_home=True)
             else:
                 self.show_screen()
+
+        self.run(job, done)
+
+    # ---- papers in PDF ----
+
+    def add_papers(self, paths):
+        """Papers wait on the shelf for the converter: set up first if it is not yet, then one
+        after the other; each becomes a book of the shelf."""
+        self.papers += [p for p in paths if p not in self.papers]
+        self.paper_error = ""
+        self.home()
+        self.show_screen(reset=True)
+        if converter_ready():
+            self.next_paper()
+
+    def paper_said(self, text):
+        self.paper_doing = text
+        if self.screen[0] == SHELF:
+            self.show_screen()
+
+    def set_up_converter(self):
+        if self.paper_doing:
+            return
+        self.paper_error = ""
+        self.paper_said(_("setting up the converter…"))
+        say = self.paper_step.said.emit
+
+        def done(_result, error):
+            self.paper_doing = None
+            if error:
+                self.paper_error = _("the converter could not be set up: %s") % error
+                self.paper_said(None)
+            else:
+                self.next_paper()
+
+        self.run(lambda: set_up_converter(lambda n, of: say("%s %d/%d" % (_("setting up the converter…"), n, of))), done)
+
+    def next_paper(self):
+        if self.paper_doing or not self.papers:
+            return
+        path = self.papers[0]
+        name = os.path.splitext(os.path.basename(path))[0]
+        doing = _("turning “%s” into a book…") % name
+        words = {"models": _("loading the models"), "pages": _("reading the pages"), "book": _("making the book")}
+        say = self.paper_step.said.emit
+        self.paper_said(doing)
+
+        def job():
+            epub = convert_paper(path, lambda step: say("%s %s" % (doing, words.get(step, ""))))
+            return self.library.add(epub, name + ".epub", move=True)
+
+        def done(entry, error):
+            self.papers.pop(0)
+            self.paper_doing = None
+            if error:
+                self.paper_error = _("“%s” could not be turned into a book: %s") % (name, error)
+            elif not self.papers and self.screen[0] == SHELF:
+                return self.open_entry(entry, from_home=True)
+            if self.papers:
+                self.next_paper()
+            else:
+                self.paper_said(None)
 
         self.run(job, done)
 

@@ -38,8 +38,24 @@ reader, the same library, the same wording.
 * The position is kept per book and survives a change of text size or window. The text sits in a
   column no wider than a comfortable line, whatever the window. The screen stays awake while a
   page is open, until fifteen minutes after the last turn (where the system lets a program ask).
-* Pictures in EPUBs are shown in the page, scaled to the text width and never cut; styles and
-  footnote links are dropped. MOBI means PalmDoc; no PDF.
+* Pictures in EPUBs are shown in the page, scaled to the text width and never cut; a click in
+  the middle of a picture shows it on the whole window (the wheel or + and − zoom around the
+  pointer, a drag moves it, 0 fits it again, a click or Esc closes it) — the way to read a table.
+  Styles and footnote links are dropped; footnotes are small print. MOBI means PalmDoc.
+* A paper in PDF, opened or dropped like a book, becomes a book of the shelf (and, from its
+  menu, of the library — so the phone reads it too). `paper2epub.py` finds the blocks of every
+  page with [Marker](https://github.com/datalab-to/marker), from the PDF's own text: headings
+  make the chapters (by the sections' numbers when the paper numbers them), the text becomes
+  paragraphs joined again across pages and columns, a journal's sidebar goes to the title page,
+  footnotes close their chapter, short sub- and superscripts are written in Unicode (x², dₖ).
+  Displayed equations, figures and tables are cut out of the page as pictures, exactly as
+  printed, padded to the width of the paper's column so that their print comes out at about
+  the size of the book's text; a line the text layer lost, or mathematics it garbled, is cut out
+  too rather than dropped. A scanned paper (no text layer) becomes its pages as pictures. The
+  converter is set up on first use, in a Python environment of its own (`paper-converter` in
+  the app's data folder: Marker and the CPU build of torch, about 2 GB with its models; delete
+  the folder to take it away); it never runs inside the app. A paper takes about ten seconds.
+  On its own: `<that environment>/bin/python paper2epub.py paper.pdf paper.epub`.
 * A magazine issue (an EPUB whose contents page carries a section, a title and an author per
   article, as the newspapers pipeline writes them) opens on its contents: sections, titles,
   authors and cover pictures. An article is a chapter; back returns to the contents.
@@ -73,10 +89,11 @@ haptic tick.
 
 ## Install
 
-    sudo apt install ./readers-books_1.5.0_all.deb     # Debian, Ubuntu, Pop!_OS
+    sudo apt install ./readers-books_1.6.0_all.deb     # Debian, Ubuntu, Pop!_OS
     cd packaging && makepkg -si                         # Arch, Manjaro
 
-Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests).
+Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests; python3-venv
+for the papers in PDF).
 
 ## Where things are kept
 

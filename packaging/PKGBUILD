@@ -1,7 +1,7 @@
 # Maintainer: funkypitt <pierregallaz@gmail.com>
 # Arch / Manjaro: cd packaging && makepkg -si
 pkgname=readers-books
-pkgver=1.5.0
+pkgver=1.6.0
 pkgrel=1
 pkgdesc="Black-and-white e-book reader: a shelf as a plain list, pages cut at whole lines, an optional library on a drive"
 arch=('any')
@@ -14,6 +14,7 @@ sha256sums=('SKIP')
 package() {
   cd "$srcdir/readers-books-desktop-$pkgver"
   install -Dm755 readers_books.py "$pkgdir/usr/lib/readers-books/readers_books.py"
+  install -Dm755 paper2epub.py "$pkgdir/usr/lib/readers-books/paper2epub.py"
   for f in packaging/fonts/*; do install -Dm644 "$f" "$pkgdir/usr/lib/readers-books/fonts/$(basename "$f")"; done
   install -Dm644 packaging/readers-books.png "$pkgdir/usr/lib/readers-books/readers-books.png"
   install -Dm755 /dev/stdin "$pkgdir/usr/bin/readers-books" <<'SH'

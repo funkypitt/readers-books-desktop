@@ -1,0 +1,677 @@
+#!/usr/bin/env python3
+"""An academic paper in PDF as an EPUB the Reader's Books apps read well.
+
+    paper2epub.py paper.pdf paper.epub [--progress]
+
+Marker (https://github.com/datalab-to/marker) finds the blocks of every page — headings, text,
+equations, figures, tables, captions, footnotes — from the PDF's own text layer. The text
+becomes paragraphs; displayed equations, figures and tables are cut out of the page as pictures,
+so they look exactly as printed. A picture is padded to the width of the paper's column: the
+reader scales every picture to its text width, so the print in it comes out at about the size
+of the book's text, and a table as wide as the page comes out smaller (the reader zooms on it).
+
+Paragraphs cut by a page or a column are joined again, the figures and tables found in between
+are put after them. A chapter per top section; the footnotes of a chapter close it. A scanned
+paper (no text layer) becomes its pages as pictures.
+
+With --progress, one JSON object per line on stdout: {"step": ...}, then {"done": title} or
+{"error": message}. Needs marker-pdf, pypdfium2 and Pillow; pylatexenc if there.
+"""
+
+import html
+import io
+import json
+import os
+import re
+import sys
+import unicodedata
+import uuid
+import zipfile
+from html.parser import HTMLParser
+
+SCALE = 4                   # pixels per PDF point for the pictures: 288 dpi
+MARGIN = 3                  # points kept around a cut-out
+PHOTO_BYTES = 600_000       # a PNG this heavy is a photograph: JPEG instead, if smaller
+
+SKIP = {"PageHeader", "PageFooter"}
+FLOATS = {"Figure", "Picture", "Diagram", "Table", "ComplexRegion", "Form", "TableOfContents"}
+GROUPS = {"FigureGroup", "TableGroup", "PictureGroup"}
+ENDS_SENTENCE = tuple('.!?:;"”’')      # not ")" nor "]": a line ends on a citation mid-sentence
+
+PROGRESS = False
+
+
+def say(**what):
+    if PROGRESS:
+        print(json.dumps(what, ensure_ascii=False), flush=True)
+
+
+# ------------------------------------------------------------------------------------------
+# Marker's HTML of a block → inline XHTML: text, italics, bold, super- and subscripts; links,
+# spans and attributes go; math is written out in Unicode where it can be.
+# ------------------------------------------------------------------------------------------
+
+try:
+    from pylatexenc.latex2text import LatexNodes2Text
+    _LATEX = LatexNodes2Text(math_mode="text")
+except Exception:
+    _LATEX = None
+
+
+def latex_text(tex):
+    if _LATEX:
+        try:
+            return _LATEX.latex_to_text(tex).strip()
+        except Exception:
+            pass
+    return tex
+
+
+SUPERSCRIPT = dict(zip("0123456789+-=()nijkTt′'", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱʲᵏᵀᵗ′′"))
+SUBSCRIPT = dict(zip("0123456789+-=()aeoxhklmnpstijruv", "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₒₓₕₖₗₘₙₚₛₜᵢⱼᵣᵤᵥ"))
+
+
+class Inline(HTMLParser):
+    KEEP = {"i": "i", "em": "i", "b": "b", "strong": "b", "sup": "sup", "sub": "sub", "code": "code"}
+    ITEMS = {"ul", "ol", "li"}
+
+    def __init__(self, lists):
+        super().__init__(convert_charrefs=True)
+        self.lists = lists          # keep list markup (a list block), else items become text
+        self.out, self.open, self.math = [], [], None
+        self.scripts = []           # where each open sup or sub starts in `out`
+
+    def handle_starttag(self, tag, attrs):
+        if self.math is not None:
+            return
+        if tag == "math":
+            self.math = []
+        elif tag in self.KEEP:
+            if self.KEEP[tag] in ("sup", "sub"):
+                self.scripts.append(len(self.out))
+            self.out.append("<%s>" % self.KEEP[tag])
+            self.open.append(self.KEEP[tag])
+        elif tag in self.ITEMS and self.lists:
+            self.out.append("<%s>" % tag)
+            self.open.append(tag)
+        elif tag == "br":
+            self.out.append("<br/>")
+        elif tag in ("p", "li", "div"):
+            self.out.append(" ")
+
+    def handle_startendtag(self, tag, attrs):
+        if tag == "br" and self.math is None:
+            self.out.append("<br/>")
+
+    def handle_endtag(self, tag):
+        if tag == "math" and self.math is not None:
+            self.out.append(html.escape(latex_text("".join(self.math)), quote=False))
+            self.math = None
+            return
+        if self.math is not None:
+            return
+        want = self.KEEP.get(tag) or (tag if tag in self.ITEMS and self.lists else None)
+        if want and want in self.open:
+            while self.open:            # close whatever was left open inside it
+                t = self.open.pop()
+                self.out.append("</%s>" % t)
+                if t == want:
+                    break
+            if want in ("sup", "sub") and self.scripts:
+                self.script(want, self.scripts.pop())
+
+    def script(self, kind, at):
+        """A short super- or subscript written in Unicode ("x²", "dₖ") when every character of
+        it has its form there: readers that drop the markup keep it."""
+        inner = "".join(self.out[at + 1:-1])
+        table = SUPERSCRIPT if kind == "sup" else SUBSCRIPT
+        text = html.unescape(inner).strip()
+        if "<" not in inner and 0 < len(text) <= 4 and all(c in table for c in text):
+            self.out[at:] = ["".join(table[c] for c in text)]
+
+    def handle_data(self, data):
+        if self.math is not None:
+            self.math.append(data)
+        else:
+            self.out.append(html.escape(data, quote=False))
+
+    def result(self):
+        self.close()
+        while self.open:
+            self.out.append("</%s>" % self.open.pop())
+        return re.sub(r"\s+", " ", "".join(self.out)).strip()
+
+
+def inline(markup, lists=False):
+    parser = Inline(lists)
+    parser.feed(markup or "")
+    return accents(parser.result())
+
+
+# Some PDFs draw an accent as a glyph of its own after the letter: "Mu¨ller".
+SPACING = {"¨": "̈", "´": "́", "ˆ": "̂", "˜": "̃", "¸": "̧", "ˇ": "̌", "˚": "̊"}
+_LOOSE = re.compile(r"([A-Za-z])([¨´ˆ˜¸ˇ˚])")
+
+
+def accents(text):
+    def compose(m):
+        letter, mark = m.group(1), m.group(2)
+        if mark == "´" and letter.lower() not in "aeiouyc":      # "don´t" is an apostrophe
+            return m.group(0)
+        joined = unicodedata.normalize("NFC", letter + SPACING[mark])
+        return joined if len(joined) == 1 else m.group(0)
+    return _LOOSE.sub(compose, text)
+
+
+def garbled(text):
+    """Math set in fonts with their own encoding comes out of the text layer as "ð1Þ ¼": such
+    a block is better cut out of the page."""
+    return bool(re.search(r"ð[^ð]{0,40}Þ", text)) and ("¼" in text or "þ" in text)
+
+
+def plain(xhtml):
+    return html.unescape(re.sub(r"<[^>]+>", "", xhtml)).strip()
+
+
+# ------------------------------------------------------------------------------------------
+# The pages as pictures, one at a time, and the cut-outs
+# ------------------------------------------------------------------------------------------
+
+class Pages:
+    def __init__(self, path):
+        import pypdfium2
+        self.pdf = pypdfium2.PdfDocument(path)
+        self.index, self.image = None, None
+
+    def metadata(self):
+        try:
+            return self.pdf.get_metadata_dict()
+        except Exception:
+            return {}
+
+    def __len__(self):
+        return len(self.pdf)
+
+    def page(self, i):
+        if i != self.index:
+            self.image = self.pdf[i].render(scale=SCALE).to_pil().convert("RGB")
+            self.index = i
+        return self.image
+
+    def cut(self, i, bbox, page_box, width=None):
+        """The part `bbox` of page i (points, from the top left), padded with white to
+        `width` points when it is narrower, as image bytes and their extension."""
+        from PIL import Image
+        image = self.page(i)
+        kx = image.width / max(1.0, page_box[2] - page_box[0])
+        ky = image.height / max(1.0, page_box[3] - page_box[1])
+        x0, y0 = max(0, int((bbox[0] - MARGIN) * kx)), max(0, int((bbox[1] - MARGIN) * ky))
+        x1, y1 = min(image.width, int((bbox[2] + MARGIN) * kx)), min(image.height, int((bbox[3] + MARGIN) * ky))
+        if x1 - x0 < 4 or y1 - y0 < 4:
+            return None
+        part = image.crop((x0, y0, x1, y1))
+        if part.convert("L").point(lambda v: 255 if v < 235 else 0).getbbox() is None:
+            return None         # nothing printed there
+        full = int(width * kx) if width else 0
+        if full > part.width:
+            canvas = Image.new("RGB", (full, part.height), "white")
+            canvas.paste(part, ((full - part.width) // 2, 0))
+            part = canvas
+        return encode(part)
+
+
+def encode(image):
+    out = io.BytesIO()
+    image.save(out, "PNG", optimize=True)
+    data = out.getvalue()
+    if len(data) > PHOTO_BYTES:
+        jpeg = io.BytesIO()
+        image.save(jpeg, "JPEG", quality=88)
+        if jpeg.tell() < len(data):
+            return jpeg.getvalue(), "jpg"
+    return data, "png"
+
+
+# ------------------------------------------------------------------------------------------
+# Marker's pages → a flow of pieces: ("h", level, xhtml, page), ("p", xhtml, class, page), ("img"
+# or "eq", page, bbox, page box, kind, caption or text), ("note", xhtml), ("aside", xhtml, page)
+# ------------------------------------------------------------------------------------------
+
+def marker_pages(path):
+    say(step="models")
+    from marker.config.parser import ConfigParser
+    from marker.converters.pdf import PdfConverter
+    from marker.models import create_model_dict
+    config = ConfigParser({"output_format": "json", "disable_ocr": True, "disable_tqdm": True})
+    converter = PdfConverter(config=config.generate_config_dict(), artifact_dict=create_model_dict(),
+                             renderer=config.get_renderer(), processor_list=config.get_processors())
+    say(step="pages")
+    return json.loads(converter(path).model_dump_json())["children"]     # model_dump() trips on the metadata
+
+
+def heading_level(markup):
+    m = re.match(r"\s*<h([1-6])", markup or "")
+    return int(m.group(1)) if m else 2
+
+
+def main_column(pages):
+    """Where the paper's text starts and how wide its column is: the left edge that carries
+    the most text over the whole paper. A narrow block wholly left of it sits in the margin
+    (a journal's sidebar of citation, dates and licence)."""
+    chars, widths_at = {}, {}
+    for page in pages:
+        for b in page.get("children") or []:
+            if b["block_type"] == "Text":
+                edge = round(b["bbox"][0] / 10)
+                chars[edge] = chars.get(edge, 0) + len(plain(b.get("html") or ""))
+                widths_at.setdefault(edge, []).append(b["bbox"][2] - b["bbox"][0])
+    if not chars:
+        return None, None
+    edge = max(chars, key=chars.get)
+    found = sorted(widths_at[edge])
+    return edge * 10 - 5, found[len(found) // 2]
+
+
+def margin_of(page, left, column):
+    """The right edge of the page's margin, or None: a page with something as wide as a column
+    starting left of the main one (the left column of a two-column page) has none."""
+    if left is None:
+        return None
+    for b in page.get("children") or []:
+        if b["block_type"] not in SKIP and b["bbox"][0] < left - 10 and b["bbox"][2] - b["bbox"][0] >= column * 0.6:
+            return None
+    return left + 2
+
+
+def flow_of(pages):
+    """The pieces in reading order, page after page. The margin's text is an ("aside", xhtml, page)."""
+    pieces = []
+    left, column = main_column(pages)
+    for number, page in enumerate(pages):
+        box = page["bbox"]
+        margin = margin_of(page, left, column)
+        for block in page.get("children") or []:
+            kind = block["block_type"]
+            if kind in SKIP:
+                continue
+            x0, y0, x1, y1 = block["bbox"]
+            if margin is not None and x1 <= margin and x1 - x0 < column * 0.6:
+                text = "" if kind in FLOATS or kind in GROUPS else inline(block.get("html") or "")
+                if text:
+                    pieces.append(("aside", text, number))
+                continue
+            if kind in GROUPS:
+                parts = block.get("children") or []
+                shapes = [b for b in parts if b["block_type"] not in ("Caption", "Footnote")]
+                if shapes:
+                    bbox = [min(b["bbox"][0] for b in shapes), min(b["bbox"][1] for b in shapes),
+                            max(b["bbox"][2] for b in shapes), max(b["bbox"][3] for b in shapes)]
+                    caption = " ".join(inline(b["html"]) for b in parts if b["block_type"] == "Caption")
+                    pieces.append(("img", number, bbox, box, kind, caption))
+                continue
+            if kind in FLOATS:
+                pieces.append(("img", number, block["bbox"], box, kind, ""))
+            elif kind == "Equation":
+                pieces.append(("eq", number, block["bbox"], box, kind, plain(inline(block["html"]))))
+            elif kind == "SectionHeader":
+                text = inline(block["html"])
+                if text:
+                    pieces.append(("h", heading_level(block["html"]), text, number))
+            elif kind == "Footnote":
+                text = inline(block["html"])
+                if text:
+                    pieces.append(("note", text))
+            elif kind == "Caption":
+                text = inline(block["html"])
+                if text:
+                    pieces.append(("p", text, "caption", number))
+            elif kind == "ListGroup":
+                items = [inline(b["html"]) for b in block.get("children") or [] if b["block_type"] == "ListItem"]
+                for item in filter(None, items):
+                    pieces.append(("p", item, "item", number))
+            elif kind == "Code":
+                text = plain(inline(block["html"]))
+                if text:
+                    pieces.append(("p", "<code>%s</code>" % html.escape(text, quote=False), "code", number))
+            else:                       # Text, TextInlineMath, ListItem, Reference, Handwriting…
+                text = inline(block["html"])
+                if text and garbled(plain(text)):
+                    pieces.append(("eq", number, block["bbox"], box, kind, plain(text)))
+                elif text:
+                    pieces.append(("p", text, "", number))
+                elif x1 - x0 > 20 and y1 - y0 > 6:     # text the text layer lost: never dropped
+                    pieces.append(("eq", number, block["bbox"], box, kind, ""))
+    return pieces
+
+
+def continues(before, after):
+    """A paragraph cut by the end of a page or a column: the first part does not end a
+    sentence and the second starts in lower case — or the first stops on a bare word."""
+    a, b = plain(before), plain(after)
+    if not a or not b:
+        return False
+    if re.search(r"[a-z,]$", a) and len(a) > 40 and b[0].isalnum():     # "… in which σ denotes" + "ReLU [29] …"
+        return True
+    return b[0].islower() and (a.endswith("-") or not a.endswith(ENDS_SENTENCE))
+
+
+def join(before, after):
+    if plain(before).endswith("-") and before.endswith("-"):
+        return before[:-1] + after
+    return before + " " + after
+
+
+def page_of(piece):
+    return piece[1] if piece[0] in ("img", "eq") else piece[3] if piece[0] in ("p", "h") else None
+
+
+def mend(pieces):
+    """Joins the cut paragraphs; the figures and tables met in between, with their captions and
+    the lines cut out next to them, follow the paragraph. A paragraph in lower case after an
+    equation goes on with its sentence: the figures wait for it too."""
+    out, waiting = [], []
+    last = None                 # the index in `out` of the paragraph that may go on
+    for piece in pieces:
+        kind = piece[0]
+        if kind == "img" or kind == "p" and piece[2] == "caption" \
+                or kind == "eq" and not piece[5] and waiting and page_of(waiting[-1]) == piece[1]:
+            waiting.append(piece)
+            continue
+        if kind in ("note", "aside"):
+            out.append(piece)
+            continue
+        if kind == "p" and piece[2] == "" and last is not None:
+            if out[last][0] == "p" and continues(out[last][1], piece[1]):
+                out[last] = ("p", join(out[last][1], piece[1]), "", out[last][3])
+                continue
+            if out[last][0] == "eq" and plain(piece[1])[:1].islower():
+                out.append(piece)
+                last = len(out) - 1
+                continue
+        out.extend(waiting)
+        waiting = []
+        out.append(piece)
+        last = len(out) - 1 if kind == "eq" or kind == "p" and piece[2] == "" else None
+    out.extend(waiting)
+    return out
+
+
+# ------------------------------------------------------------------------------------------
+# The book: a title page, a chapter per top section
+# ------------------------------------------------------------------------------------------
+
+def widths(pages):
+    """The width of a column of text and the width the text takes on a page, in points."""
+    columns, spans = [], []
+    for page in pages:
+        lefts, rights = [], []
+        for block in page.get("children") or []:
+            if block["block_type"] == "Text" and len(plain(block.get("html") or "")) > 150:
+                x0, _y0, x1, _y1 = block["bbox"]
+                columns.append(x1 - x0)
+                lefts.append(x0)
+                rights.append(x1)
+        if lefts:
+            spans.append(max(rights) - min(lefts))
+    if not columns:
+        return 0, 0
+    columns.sort()
+    spans.sort()
+    return columns[len(columns) // 2], spans[len(spans) // 2]
+
+
+def meta_text(text):
+    """A field of the PDF's metadata; pdfium leaves some characters as "#_#x00FC;"."""
+    return re.sub(r"#_#x([0-9A-Fa-f]+);", lambda m: chr(int(m.group(1), 16)), text or "").strip()
+
+
+def squash(text):
+    return re.sub(r"\W+", "", text or "").lower()
+
+
+def good_title(text):
+    t = meta_text(text)
+    return t if 3 < len(t) < 300 and not re.search(r"\.(pdf|dvi|tex|docx?)$|^Microsoft Word|^untitled", t, re.I) else ""
+
+
+NUMBERED = re.compile(r"^((?:\d+|[A-Z]|[IVX]+)(?:\.\d+)*)\.?\s+\S")
+BACK_MATTER = re.compile(r"^(abstract|summary|references|bibliography|literature cited|acknowledge?ments?|appendi(x|ces)"
+                         r"|supplementary|supporting information|conclusions?|discussion|résumé|bibliographie|remerciements"
+                         r"|literatur|danksagung|zusammenfassung)\b", re.I)
+
+
+def numbering(text):
+    """How deep a numbered heading is: "3 Model" 0, "3.2.1 Scaled" 2; None if unnumbered."""
+    m = NUMBERED.match(text)
+    return m.group(1).count(".") if m else None
+
+
+def chapter_depths(headings):
+    """For each (Marker's level, text) heading, 1 when it opens a chapter, else 2–6. A paper
+    that numbers its sections says it best: "2 Background" and "A. Proofs" are chapters, "2.1"
+    one level down; an unnumbered heading ("Abstract", "References") is a chapter when Marker
+    puts it no deeper than the numbered ones. Else the shallowest level Marker uses twice."""
+    numbers = [numbering(t) for _l, t in headings]
+    tops = [level for (level, _t), n in zip(headings, numbers) if n == 0]
+    if len(tops) >= 3:
+        first = numbers.index(0)
+        out = []
+        for i, ((level, text), n) in enumerate(zip(headings, numbers)):
+            if n is not None:
+                out.append(min(6, 1 + n))
+            elif BACK_MATTER.match(text) or i < first and level <= max(tops):
+                out.append(1)
+            else:
+                out.append(min(6, 1 + max(1, level - min(tops))))
+        return out
+    levels = [level for level, _t in headings]
+    top = min(levels) if levels else 1
+    if levels.count(top) < 2 and any(level > top for level in levels):
+        top = min(level for level in levels if level > top)
+    return [1 if level <= top or BACK_MATTER.match(text) else min(6, 1 + level - top) for level, text in headings]
+
+
+def build(pdf_path):
+    pages_seen = Pages(pdf_path)
+    meta = pages_seen.metadata()
+    pages = marker_pages(pdf_path)
+    say(step="book")
+    texty = sum(1 for page in pages if len(" ".join(plain(b.get("html") or "") for b in page.get("children") or [])) > 200)
+    stem = os.path.splitext(os.path.basename(pdf_path))[0].replace("_", " ")
+    if texty * 2 < len(pages):
+        return scanned(pages_seen, good_title(meta.get("Title")) or stem, meta)
+    column, span = widths(pages)
+    pieces = mend(flow_of(pages))
+
+    # The title: the heading of the first page that is the PDF's own title, else its highest
+    # heading, else the PDF's title, else the file's name. A heading before it on that page
+    # (a journal's "RESEARCH ARTICLE") is small print.
+    first = [i for i, p in enumerate(pieces) if p[0] == "h" and p[3] == 0]
+    known = squash(good_title(meta.get("Title")))
+    title_at = next((i for i in first if known and (known in squash(plain(pieces[i][2])) or squash(plain(pieces[i][2])) in known)), None)
+    if title_at is None and first:
+        title_at = min(first, key=lambda i: pieces[i][1])
+    title = good_title(plain(pieces[title_at][2])) if title_at is not None else ""
+    title = title or good_title(meta.get("Title")) or stem
+    if title_at is not None:
+        for i in first:
+            if i < title_at:
+                pieces[i] = ("p", pieces[i][2], "author", 0)
+        pieces.pop(title_at)
+    depth = chapter_depths([(p[1], plain(p[2])) for p in pieces if p[0] == "h"])
+
+    images = []
+
+    def picture(piece):
+        kind, number, bbox, box, block_kind, text = piece
+        caption = text if kind == "img" else ""      # an equation's text is only its alt
+        w = bbox[2] - bbox[0]
+        target = column if column and w <= column * 1.15 else max(w, span or w)
+        cut = pages_seen.cut(number, bbox, box, target)
+        if not cut:
+            return ""
+        data, ext = cut
+        name = "images/%03d.%s" % (len(images) + 1, ext)
+        images.append((name, data))
+        alt = html.escape(plain(text) or block_kind.lower(), quote=True)
+        out = '<div class="%s"><img src="%s" alt="%s"/></div>' % ("equation" if kind == "eq" else "figure", name, alt)
+        if caption:
+            out += '\n<p class="caption">%s</p>' % caption
+        return out
+
+    chapters = [[title, ['<h1 class="title">%s</h1>' % html.escape(title, quote=False)], []]]
+    front = True                # the authors and the like, before the first section
+    headings = iter(depth)
+    for piece in pieces:
+        kind = piece[0]
+        if kind == "h":
+            front = False
+            level = next(headings)
+            if level == 1:
+                chapters.append([plain(piece[2]), [], []])
+            chapters[-1][1].append("<h%d>%s</h%d>" % (level, piece[2], level))
+        elif kind == "aside" and piece[2] <= 1:     # the sidebar of the first pages: at the end of the title page
+            notes = chapters[0][2]
+            if notes and continues(plain(notes[-1]), piece[1]):
+                notes[-1] = notes[-1][:-len("</p>")] + " " + piece[1] + "</p>"
+            else:
+                notes.append('<p class="footnote">%s</p>' % piece[1])
+        elif kind in ("note", "aside"):
+            chapters[-1][2].append('<p class="footnote">%s</p>' % piece[1])
+        elif kind in ("img", "eq"):
+            chapters[-1][1].append(picture(piece))
+        else:
+            cls = "author" if front and not piece[2] else piece[2]
+            chapters[-1][1].append('<p class="%s">%s</p>' % (cls, piece[1]) if cls else "<p>%s</p>" % piece[1])
+    return title, meta_text(meta.get("Author")), [(t, body + notes) for t, body, notes in chapters if body or notes], images
+
+
+def scanned(pages_seen, title, meta):
+    """No text to read: the pages as pictures, one chapter."""
+    images, body = [], ['<h1 class="title">%s</h1>' % html.escape(title, quote=False)]
+    for i in range(len(pages_seen)):
+        say(step="book", page=i + 1, of=len(pages_seen))
+        image = pages_seen.page(i)
+        data, ext = encode(image.resize((image.width // 2, image.height // 2)))
+        name = "images/page-%03d.%s" % (i + 1, ext)
+        images.append((name, data))
+        body.append('<div class="figure"><img src="%s" alt="page %d"/></div>' % (name, i + 1))
+    return title, meta_text(meta.get("Author")), [(title, body)], images
+
+
+# ------------------------------------------------------------------------------------------
+# EPUB 3, with an NCX for the older readers
+# ------------------------------------------------------------------------------------------
+
+CSS = """body { font-family: serif; line-height: 1.45; margin: 0 4%; }
+h1 { font-size: 1.4em; margin: 1.2em 0 0.6em; }
+h1.title { font-size: 1.6em; text-align: center; }
+h2 { font-size: 1.2em; } h3, h4, h5, h6 { font-size: 1.05em; }
+p { margin: 0; text-indent: 1.2em; text-align: justify; }
+h1 + p, h2 + p, h3 + p, h4 + p, div + p, p.caption + p { text-indent: 0; }
+p.author { text-align: center; text-indent: 0; font-size: 0.9em; margin: 0.2em 0; }
+p.caption { font-size: 0.85em; text-indent: 0; margin: 0.3em 0 1em; }
+p.footnote { font-size: 0.8em; text-indent: 0; margin-top: 0.4em; }
+p.item { text-indent: -1em; margin-left: 1em; }
+p.code { font-family: monospace; text-indent: 0; white-space: pre-wrap; }
+div.figure, div.equation { text-align: center; margin: 0.8em 0; }
+div.figure img, div.equation img { max-width: 100%; }
+"""
+
+XHTML = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>%s</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body>
+%s
+</body>
+</html>
+"""
+
+
+def write_epub(path, title, authors, chapters, images):
+    esc = lambda s: html.escape(s, quote=True)
+    book_id = "urn:uuid:%s" % uuid.uuid4()
+    files = [("ch%03d.xhtml" % (i + 1), t, body) for i, (t, body) in enumerate(chapters)]
+    manifest = ['<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
+                '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+                '<item id="css" href="style.css" media-type="text/css"/>']
+    manifest += ['<item id="c%d" href="%s" media-type="application/xhtml+xml"/>' % (i, f) for i, (f, _t, _b) in enumerate(files)]
+    manifest += ['<item id="i%d" href="%s" media-type="%s"/>' % (i, n, "image/png" if n.endswith("png") else "image/jpeg")
+                 for i, (n, _d) in enumerate(images)]
+    spine = ['<itemref idref="c%d"/>' % i for i in range(len(files))]
+    creator = '<dc:creator>%s</dc:creator>' % esc(authors) if authors else ""
+    opf = """<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+<dc:identifier id="id">%s</dc:identifier><dc:title>%s</dc:title>%s<dc:language>en</dc:language>
+<meta property="dcterms:modified">2000-01-01T00:00:00Z</meta>
+</metadata>
+<manifest>
+%s
+</manifest>
+<spine toc="ncx">
+%s
+</spine>
+</package>
+""" % (book_id, esc(title), creator, "\n".join(manifest), "\n".join(spine))
+    nav = XHTML % (esc(title), '<nav epub:type="toc"><ol>\n%s\n</ol></nav>' % "\n".join(
+        '<li><a href="%s">%s</a></li>' % (f, esc(t)) for f, t, _b in files))
+    ncx = """<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+<head><meta name="dtb:uid" content="%s"/></head><docTitle><text>%s</text></docTitle>
+<navMap>
+%s
+</navMap>
+</ncx>
+""" % (book_id, esc(title), "\n".join(
+        '<navPoint id="n%d" playOrder="%d"><navLabel><text>%s</text></navLabel><content src="%s"/></navPoint>'
+        % (i, i + 1, esc(t), f) for i, (f, t, _b) in enumerate(files)))
+    container = """<?xml version="1.0" encoding="utf-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>
+"""
+    tmp = path + ".part"
+    with zipfile.ZipFile(tmp, "w") as z:
+        z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        z.writestr("META-INF/container.xml", container, zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/content.opf", opf, zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/nav.xhtml", nav, zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/toc.ncx", ncx, zipfile.ZIP_DEFLATED)
+        z.writestr("OEBPS/style.css", CSS, zipfile.ZIP_DEFLATED)
+        for f, t, body in files:
+            z.writestr("OEBPS/" + f, XHTML % (esc(t), "\n".join(b for b in body if b)), zipfile.ZIP_DEFLATED)
+        for name, data in images:
+            z.writestr("OEBPS/" + name, data, zipfile.ZIP_STORED)
+    os.replace(tmp, path)
+
+
+def convert(pdf_path, epub_path):
+    title, authors, chapters, images = build(pdf_path)
+    write_epub(epub_path, title, authors, chapters, images)
+    return title
+
+
+def main(argv):
+    global PROGRESS
+    args = [a for a in argv if a != "--progress"]
+    PROGRESS = len(args) != len(argv)
+    if len(args) != 2:
+        print(__doc__.strip().split("\n\n")[1], file=sys.stderr)
+        return 2
+    try:
+        title = convert(args[0], args[1])
+    except Exception as exc:
+        say(error="%s: %s" % (type(exc).__name__, exc))
+        if not PROGRESS:
+            raise
+        return 1
+    say(done=title)
+    if not PROGRESS:
+        print(args[1])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

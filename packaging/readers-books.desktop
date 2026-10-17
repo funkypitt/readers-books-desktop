@@ -7,5 +7,5 @@ Exec=readers-books %F
 Icon=readers-books
 Terminal=false
 Categories=Office;Viewer;Literature;Qt;
-Keywords=ebook;epub;mobi;fb2;book;reader;
-MimeType=application/epub+zip;application/x-mobipocket-ebook;application/vnd.amazon.ebook;application/x-fictionbook+xml;application/x-fictionbook;
+Keywords=ebook;epub;mobi;fb2;book;reader;pdf;paper;
+MimeType=application/epub+zip;application/x-mobipocket-ebook;application/vnd.amazon.ebook;application/x-fictionbook+xml;application/x-fictionbook;application/pdf;

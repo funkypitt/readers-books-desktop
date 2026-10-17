@@ -917,7 +917,7 @@ def to_blocks(text, image):
 # ------------------------------------------------------------------------------------------
 
 EPUB, MOBI, FB2, TXT = "EPUB", "MOBI", "FB2", "TXT"
-OPEN_FILTER = "*.epub *.mobi *.prc *.azw *.azw3 *.fb2 *.txt *.pdf"     # a PDF is a paper: see paper2epub.py
+OPEN_FILTER = "*.epub *.mobi *.prc *.azw *.azw3 *.fb2 *.txt"
 
 
 def detect(path, name_hint):
@@ -1441,6 +1441,12 @@ def _base36(n):
 # ------------------------------------------------------------------------------------------
 
 CONVERTER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper2epub.py")
+# Only where the app runs as a Python script with the converter beside it (the .deb, the
+# PKGBUILD, the source): the Windows and macOS builds are frozen, with no Python to make an
+# environment with.
+PAPERS_POSSIBLE = not getattr(sys, "frozen", False) and os.path.isfile(CONVERTER)
+if PAPERS_POSSIBLE:
+    OPEN_FILTER += " *.pdf"     # a PDF is a paper: see paper2epub.py
 PAPERS_ENV = os.path.join(DATA_DIR, "paper-converter")
 PAPERS_WORK = os.path.join(DATA_DIR, "papers")
 # Known to work together; torch is the CPU build: the converter reads the PDF's own text, a
@@ -3879,7 +3885,7 @@ class Main(QtWidgets.QMainWindow):
     def import_files(self, paths):
         """Books opened from here, dropped on the window or handed over by the file manager: they
         land on the shelf, and the last one opens."""
-        papers = [p for p in paths if is_pdf(p)]
+        papers = [p for p in paths if PAPERS_POSSIBLE and is_pdf(p)]
         paths = [p for p in paths if p not in papers]
         if papers:
             self.add_papers(papers)

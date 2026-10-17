@@ -56,6 +56,8 @@ reader, the same library, the same wording.
   the app's data folder: Marker and the CPU build of torch, about 2 GB with its models; delete
   the folder to take it away); it never runs inside the app. A paper takes about ten seconds.
   On its own: `<that environment>/bin/python paper2epub.py paper.pdf paper.epub`.
+  Papers are for the Linux packages and the source: the Windows and macOS builds have no
+  Python of their own to set the converter up with.
 * A magazine issue (an EPUB whose contents page carries a section, a title and an author per
   article, as the newspapers pipeline writes them) opens on its contents: sections, titles,
   authors and cover pictures. An article is a chapter; back returns to the contents.

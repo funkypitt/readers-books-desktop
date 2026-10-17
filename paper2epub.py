@@ -27,6 +27,7 @@ import io
 import json
 import os
 import re
+import signal
 import sys
 import unicodedata
 import uuid
@@ -827,6 +828,30 @@ def convert(pdf_path, epub_path):
     return title
 
 
+def stop_servers():
+    """Marker starts its models as servers meant to outlive it (about 3 GB of memory, kept until
+    the session ends): the ones this environment started are stopped once the paper is done."""
+    folder = os.path.expanduser("~/.cache/datalab/surya")
+    try:
+        names = [n for n in os.listdir(folder) if n.endswith("_server.json")]
+    except OSError:
+        return
+    for name in names:
+        try:
+            with open(os.path.join(folder, name)) as fh:
+                pid = int(json.load(fh)["pid"])
+            with open("/proc/%d/cmdline" % pid, "rb") as fh:
+                ours = fh.read().split(b"\0")[0] == os.fsencode(sys.executable)
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if ours:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                os.remove(os.path.join(folder, name))
+            except OSError:
+                pass
+
+
 def main(argv):
     global PROGRESS
     args = [a for a in argv if a != "--progress"]
@@ -841,6 +866,8 @@ def main(argv):
         if not PROGRESS:
             raise
         return 1
+    finally:
+        stop_servers()
     say(done=title)
     if not PROGRESS:
         print(args[1])

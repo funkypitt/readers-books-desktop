@@ -55,7 +55,8 @@ reader, the same library, the same wording.
   too rather than dropped. A scanned paper (no text layer) becomes its pages as pictures. The
   converter is set up on first use, in a Python environment of its own (`paper-converter` in
   the app's data folder: Marker and the CPU build of torch, about 2 GB with its models; delete
-  the folder to take it away); it never runs inside the app. A paper takes about ten seconds.
+  the folder to take it away); it never runs inside the app, and the model servers Marker
+  starts (about 3 GB of memory, meant by Marker to outlive it) are stopped once the PDF is done. A paper takes about ten seconds.
   A book is helped by what the PDF knows besides Marker: its bookmarks give the chapters (the
   upper levels open chapters, the deeper ones are headings inside); without bookmarks, lines
   alone such as « – II – » or « Chapter 3 » open them. A line Marker lost is read from the text

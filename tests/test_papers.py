@@ -222,9 +222,21 @@ class Shelf(unittest.TestCase):
         main.resize(760, 900)
         main.show()
         self.assertFalse(rb.converter_ready())
+        # the open dialog says a PDF is turned into an EPUB, and so does the empty shelf
+        asked = []
+        real = rb.QtWidgets.QFileDialog.getOpenFileName
+        rb.QtWidgets.QFileDialog.getOpenFileName = lambda *a: asked.append(a[3]) or ("", "")
+        try:
+            main.pick_book()
+        finally:
+            rb.QtWidgets.QFileDialog.getOpenFileName = real
+        self.assertIn(rb._("books, or a PDF to turn into an EPUB"), asked[0])
+        self.assertIn("%s (*.pdf)" % rb._("a PDF, turned into an EPUB"), asked[0])
+        self.assertTrue(any("EPUB" in r.title for r in main.rows))
         main.import_files([pdf])
         self.assertEqual(main.papers, [pdf])
         titles = [r.title for r in main.rows]
+        self.assertIn(rb._("A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded."), titles)
         self.assertIn(rb._("set up the converter"), titles)
         row = next(r for r in main.rows if r.title == rb._("set up the converter"))
         self.assertEqual(row.secondary, rb.n_papers(1))

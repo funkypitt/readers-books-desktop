@@ -42,9 +42,10 @@ reader, the same library, the same wording.
   the middle of a picture shows it on the whole window (the wheel or + and − zoom around the
   pointer, a drag moves it, 0 fits it again, a click or Esc closes it) — the way to read a table.
   Styles and footnote links are dropped; footnotes are small print. MOBI means PalmDoc.
-* A paper in PDF, opened or dropped like a book, becomes a book of the shelf (and, from its
-  menu, of the library — so the phone reads it too). `paper2epub.py` finds the blocks of every
-  page with [Marker](https://github.com/datalab-to/marker), from the PDF's own text: headings
+* A paper in PDF, opened or dropped like a book, is turned into an EPUB, and the EPUB goes on
+  the shelf (and, from its menu, in the library — so the phone reads it too); the PDF itself is
+  left as it was. The open dialog, the shelf and the progress line say so. `paper2epub.py`
+  finds the blocks of every page with [Marker](https://github.com/datalab-to/marker), from the PDF's own text: headings
   make the chapters (by the sections' numbers when the paper numbers them), the text becomes
   paragraphs joined again across pages and columns, a journal's sidebar goes to the title page,
   footnotes close their chapter, short sub- and superscripts are written in Unicode (x², dₖ).

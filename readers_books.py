@@ -28,7 +28,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.6.1"
+VERSION = "1.6.2"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -163,13 +163,16 @@ STRINGS = {
   "last time": "la dernière fois",
   "setting up the converter…": "mise en place du convertisseur…",
   "the converter could not be set up: %s": "le convertisseur n'a pas pu être mis en place : %s",
-  "turning “%s” into a book…": "« %s » devient un livre…",
+  "the PDF “%s” is being turned into an EPUB…": "le PDF « %s » est converti en EPUB…",
   "loading the models": "chargement des modèles",
   "reading the pages": "lecture des pages",
-  "making the book": "fabrication du livre",
-  "“%s” could not be turned into a book: %s": "« %s » n'a pas pu devenir un livre : %s",
-  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Un article en PDF devient un livre de l'étagère, ses figures, tableaux et équations en images. Le convertisseur se met en place une fois : environ 2 Go téléchargés.",
+  "making the EPUB": "fabrication de l'EPUB",
+  "the PDF “%s” could not be turned into an EPUB: %s": "le PDF « %s » n'a pas pu être converti en EPUB : %s",
+  "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "Un PDF ne se lit pas tel quel : il est converti en EPUB, un livre de l'étagère, ses figures, tableaux et équations en images ; le PDF lui-même reste tel qu'il était. Le convertisseur se met en place une fois : environ 2 Go téléchargés.",
   "set up the converter": "mettre en place le convertisseur",
+  "books, or a PDF to turn into an EPUB": "livres, ou un PDF à convertir en EPUB",
+  "a PDF, turned into an EPUB": "un PDF, converti en EPUB",
+  "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "rien sur l'étagère. Ouvrir un fichier epub, mobi, fb2 ou texte, ou un PDF à convertir en EPUB : d'ici, ou en le déposant sur cette fenêtre.",
  },
  "de": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Bücher auf einem Drive, nach Ordnern aufgelistet; ein Buch wird erst heruntergeladen, wenn Sie es anklicken. Geben Sie die WebDAV-Adresse des Drives mit Benutzername und Anwendungspasswort an (kDrive, Nextcloud, jeder WebDAV-Server). Das Drive wird dann nach epub-, mobi-, azw- und fb2-Dateien durchsucht. Markierungen und die Seite, auf der Sie sind, werden neben jedes Buch geschrieben: das Konto muss dort schreiben dürfen.",
@@ -280,13 +283,16 @@ STRINGS = {
   "last time": "letztes Mal",
   "setting up the converter…": "Konverter wird eingerichtet…",
   "the converter could not be set up: %s": "der Konverter konnte nicht eingerichtet werden: %s",
-  "turning “%s” into a book…": "„%s“ wird zum Buch…",
+  "the PDF “%s” is being turned into an EPUB…": "das PDF „%s“ wird in EPUB umgewandelt…",
   "loading the models": "Modelle werden geladen",
   "reading the pages": "Seiten werden gelesen",
-  "making the book": "Buch wird erstellt",
-  "“%s” could not be turned into a book: %s": "„%s“ konnte nicht zum Buch werden: %s",
-  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Ein Artikel als PDF wird ein Buch im Regal, seine Abbildungen, Tabellen und Gleichungen als Bilder. Der Konverter wird einmal eingerichtet: etwa 2 GB werden heruntergeladen.",
+  "making the EPUB": "EPUB wird erstellt",
+  "the PDF “%s” could not be turned into an EPUB: %s": "das PDF „%s“ konnte nicht in EPUB umgewandelt werden: %s",
+  "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "Ein PDF wird nicht so gelesen, wie es ist: es wird in ein EPUB umgewandelt, ein Buch im Regal, seine Abbildungen, Tabellen und Gleichungen als Bilder; das PDF selbst bleibt unverändert. Der Konverter wird einmal eingerichtet: etwa 2 GB werden heruntergeladen.",
   "set up the converter": "Konverter einrichten",
+  "books, or a PDF to turn into an EPUB": "Bücher, oder ein PDF zum Umwandeln in EPUB",
+  "a PDF, turned into an EPUB": "ein PDF, in EPUB umgewandelt",
+  "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nichts im Regal. Eine epub-, mobi-, fb2- oder Textdatei öffnen, oder ein PDF zum Umwandeln in EPUB: von hier oder durch Ablegen auf diesem Fenster.",
  },
  "es": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Libros guardados en un drive, listados por carpeta; un libro solo se descarga cuando haces clic en él. Indica la dirección WebDAV del drive con un nombre de usuario y una contraseña de aplicación (kDrive, Nextcloud, cualquier servidor WebDAV). Entonces se recorre el drive buscando archivos epub, mobi, azw y fb2. Los resaltados y la página en la que estás se escriben junto a cada libro: la cuenta debe poder escribir allí.",
@@ -397,13 +403,16 @@ STRINGS = {
   "last time": "la última vez",
   "setting up the converter…": "preparando el conversor…",
   "the converter could not be set up: %s": "no se pudo preparar el conversor: %s",
-  "turning “%s” into a book…": "«%s» se convierte en libro…",
+  "the PDF “%s” is being turned into an EPUB…": "el PDF «%s» se está convirtiendo en EPUB…",
   "loading the models": "cargando los modelos",
   "reading the pages": "leyendo las páginas",
-  "making the book": "haciendo el libro",
-  "“%s” could not be turned into a book: %s": "«%s» no pudo convertirse en libro: %s",
-  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Un artículo en PDF se convierte en un libro de la estantería, con sus figuras, tablas y ecuaciones como imágenes. El conversor se prepara una sola vez: unos 2 GB descargados.",
+  "making the EPUB": "haciendo el EPUB",
+  "the PDF “%s” could not be turned into an EPUB: %s": "el PDF «%s» no pudo convertirse en EPUB: %s",
+  "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "Un PDF no se lee tal cual: se convierte en un EPUB, un libro de la estantería, con sus figuras, tablas y ecuaciones como imágenes; el PDF en sí queda como estaba. El conversor se prepara una sola vez: unos 2 GB descargados.",
   "set up the converter": "preparar el conversor",
+  "books, or a PDF to turn into an EPUB": "libros, o un PDF para convertir en EPUB",
+  "a PDF, turned into an EPUB": "un PDF, convertido en EPUB",
+  "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada en la estantería. Abre un archivo epub, mobi, fb2 o de texto, o un PDF para convertir en EPUB: desde aquí, o soltándolo sobre esta ventana.",
  },
  "pt": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Livros guardados numa drive, listados por pasta; um livro só é descarregado quando clica nele. Indique o endereço WebDAV da drive com um nome de utilizador e uma palavra-passe de aplicação (kDrive, Nextcloud, qualquer servidor WebDAV). A drive é então percorrida à procura de ficheiros epub, mobi, azw e fb2. Os destaques e a página em que está são escritos ao lado de cada livro: a conta tem de poder escrever aí.",
@@ -514,13 +523,16 @@ STRINGS = {
   "last time": "da última vez",
   "setting up the converter…": "a preparar o conversor…",
   "the converter could not be set up: %s": "não foi possível preparar o conversor: %s",
-  "turning “%s” into a book…": "«%s» está a tornar-se um livro…",
+  "the PDF “%s” is being turned into an EPUB…": "o PDF «%s» está a ser convertido em EPUB…",
   "loading the models": "a carregar os modelos",
   "reading the pages": "a ler as páginas",
-  "making the book": "a fazer o livro",
-  "“%s” could not be turned into a book: %s": "«%s» não pôde tornar-se um livro: %s",
-  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Um artigo em PDF torna-se um livro da estante, com as figuras, tabelas e equações como imagens. O conversor prepara-se uma só vez: cerca de 2 GB descarregados.",
+  "making the EPUB": "a fazer o EPUB",
+  "the PDF “%s” could not be turned into an EPUB: %s": "o PDF «%s» não pôde ser convertido em EPUB: %s",
+  "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "Um PDF não é lido tal como está: é convertido num EPUB, um livro da estante, com as figuras, tabelas e equações como imagens; o próprio PDF fica como estava. O conversor prepara-se uma só vez: cerca de 2 GB descarregados.",
   "set up the converter": "preparar o conversor",
+  "books, or a PDF to turn into an EPUB": "livros, ou um PDF para converter em EPUB",
+  "a PDF, turned into an EPUB": "um PDF, convertido em EPUB",
+  "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada na estante. Abra um ficheiro epub, mobi, fb2 ou de texto, ou um PDF para converter em EPUB: daqui, ou largando-o sobre esta janela.",
  },
  "ru": {
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Книги на диске, перечисленные по папкам; книга загружается только когда вы щёлкаете по ней. Укажите адрес WebDAV диска с именем пользователя и паролем приложения (kDrive, Nextcloud, любой сервер WebDAV). Затем диск просматривается в поисках файлов epub, mobi, azw и fb2. Выделения и страница, на которой вы остановились, записываются рядом с каждой книгой: учётной записи должна быть разрешена запись.",
@@ -632,13 +644,16 @@ STRINGS = {
   "last time": "в прошлый раз",
   "setting up the converter…": "установка конвертера…",
   "the converter could not be set up: %s": "не удалось установить конвертер: %s",
-  "turning “%s” into a book…": "«%s» становится книгой…",
+  "the PDF “%s” is being turned into an EPUB…": "PDF «%s» преобразуется в EPUB…",
   "loading the models": "загрузка моделей",
   "reading the pages": "чтение страниц",
-  "making the book": "сборка книги",
-  "“%s” could not be turned into a book: %s": "«%s» не удалось превратить в книгу: %s",
-  "A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded.": "Статья в PDF становится книгой на полке, её рисунки, таблицы и формулы — картинками. Конвертер устанавливается один раз: около 2 ГБ загрузки.",
+  "making the EPUB": "создание EPUB",
+  "the PDF “%s” could not be turned into an EPUB: %s": "PDF «%s» не удалось преобразовать в EPUB: %s",
+  "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "PDF не читается как есть: он преобразуется в EPUB — книгу на полке, с рисунками, таблицами и формулами в виде картинок; сам PDF остаётся без изменений. Конвертер устанавливается один раз: около 2 ГБ загрузки.",
   "set up the converter": "установить конвертер",
+  "books, or a PDF to turn into an EPUB": "книги или PDF для преобразования в EPUB",
+  "a PDF, turned into an EPUB": "PDF, преобразуемый в EPUB",
+  "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "на полке пусто. Откройте файл epub, mobi, fb2 или текст либо PDF для преобразования в EPUB: отсюда или перетащив его в это окно.",
  },
 }
 
@@ -666,10 +681,10 @@ FOLDERS_CHOSEN = {
 }
 
 PAPERS = {
- "en": ("%d paper waiting", "%d papers waiting"), "fr": ("%d article en attente", "%d articles en attente"),
- "de": ("%d Artikel wartet", "%d Artikel warten"), "es": ("%d artículo en espera", "%d artículos en espera"),
- "pt": ("%d artigo à espera", "%d artigos à espera"),
- "ru": ("%d статья ждёт", "%d статьи ждут", "%d статей ждут"),
+ "en": ("%d PDF waiting", "%d PDFs waiting"), "fr": ("%d PDF en attente", "%d PDF en attente"),
+ "de": ("%d PDF wartet", "%d PDFs warten"), "es": ("%d PDF en espera", "%d PDF en espera"),
+ "pt": ("%d PDF à espera", "%d PDF à espera"),
+ "ru": ("%d PDF ждёт", "%d PDF ждут", "%d PDF ждут"),
 }
 
 
@@ -3843,12 +3858,14 @@ class Main(QtWidgets.QMainWindow):
             waiting = len(self.papers) - (0 if self.paper_doing.startswith(_("setting up the converter…")) else 1)
             rows.append(Row(self.paper_doing + (" · " + n_papers(waiting) if waiting > 0 else ""), kind=HINT))
         elif self.papers and not converter_ready():
-            rows.append(Row(_("A paper in PDF becomes a book of the shelf, its figures, tables and equations as pictures. The converter is set up once: about 2 GB downloaded."), kind=HINT))
+            rows.append(Row(_("A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded."), kind=HINT))
             rows.append(Row(_("set up the converter"), n_papers(len(self.papers)), self.set_up_converter))
         if self.paper_error:
             rows.append(Row(self.paper_error, kind=HINT))
         if not self.library.books and not self.importing:
-            rows.append(Row(_("nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window."), kind=HINT))
+            rows.append(Row(_("nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.")
+                            if PAPERS_POSSIBLE else
+                            _("nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window."), kind=HINT))
         # the shelf's order: by last opened (or added), by title, or by last added
         order = self.cfg.get("shelf_sort", "OPENED")
         books = list(self.library.books)
@@ -3880,9 +3897,11 @@ class Main(QtWidgets.QMainWindow):
         self.show_screen(reset=self.screen[0] != SHELF)
 
     def pick_book(self):
+        # a PDF is opened only to be turned into an EPUB: the dialog says so
+        kinds = ("%s (%s);;%s (*.pdf)" % (_("books, or a PDF to turn into an EPUB"), OPEN_FILTER, _("a PDF, turned into an EPUB"))
+                 if PAPERS_POSSIBLE else "%s (%s)" % (_("books"), OPEN_FILTER))
         path, _sel = QtWidgets.QFileDialog.getOpenFileName(
-            self, _("+ open a book").lstrip("+ "), self.cfg.get("last_dir") or os.path.expanduser("~"),
-            "%s (%s);;* (*)" % (_("books"), OPEN_FILTER))
+            self, _("+ open a book").lstrip("+ "), self.cfg.get("last_dir") or os.path.expanduser("~"), kinds + ";;* (*)")
         if path:
             self.cfg["last_dir"] = os.path.dirname(path)
             save_config(self.cfg)
@@ -3961,8 +3980,8 @@ class Main(QtWidgets.QMainWindow):
             return
         path = self.papers[0]
         name = os.path.splitext(os.path.basename(path))[0]
-        doing = _("turning “%s” into a book…") % name
-        words = {"models": _("loading the models"), "pages": _("reading the pages"), "book": _("making the book")}
+        doing = _("the PDF “%s” is being turned into an EPUB…") % name
+        words = {"models": _("loading the models"), "pages": _("reading the pages"), "book": _("making the EPUB")}
         say = self.paper_step.said.emit
         self.paper_said(doing)
 
@@ -3974,7 +3993,7 @@ class Main(QtWidgets.QMainWindow):
             self.papers.pop(0)
             self.paper_doing = None
             if error:
-                self.paper_error = _("“%s” could not be turned into a book: %s") % (name, error)
+                self.paper_error = _("the PDF “%s” could not be turned into an EPUB: %s") % (name, error)
             elif not self.papers and self.screen[0] == SHELF:
                 return self.open_entry(entry, from_home=True)
             if self.papers:

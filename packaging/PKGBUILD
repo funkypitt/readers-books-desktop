@@ -1,13 +1,16 @@
 # Maintainer: funkypitt <pierregallaz@gmail.com>
 # Arch / Manjaro: cd packaging && makepkg -si
 pkgname=readers-books
-pkgver=1.7.1
+pkgver=1.8.0
 pkgrel=1
 pkgdesc="Black-and-white e-book reader: a shelf as a plain list, pages cut at whole lines, an optional library on a drive"
 arch=('any')
 url="https://github.com/funkypitt/readers-books-desktop"
 license=('MIT')
 depends=('python' 'python-pyqt5' 'python-requests')
+optdepends=('tesseract: read the text of a scanned PDF'
+            'tesseract-data-eng' 'tesseract-data-fra' 'tesseract-data-deu'
+            'tesseract-data-spa' 'tesseract-data-por' 'tesseract-data-rus')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/funkypitt/readers-books-desktop/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 

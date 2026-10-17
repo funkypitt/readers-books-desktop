@@ -27,6 +27,7 @@ def load(name, file):
 
 rb = load("rb_papers", "readers_books.py")
 p2e = load("paper2epub", "paper2epub.py")
+PDF_PAGES = p2e.Pages          # the real one: the tests below put stand-ins in its place
 import make_books  # noqa: E402
 from PyQt5 import QtTest  # noqa: E402
 
@@ -278,6 +279,85 @@ class Book(unittest.TestCase):
         self.assertIn(("p", "Let's pause for a moment.", "", 1, None), out)
 
 
+# Scans made here: text drawn on white pages at 300 dpi, saved as a PDF of pictures only
+FRENCH = ("Il marchait ainsi qu'au temps où il portait l'uniforme des hussards, la poitrine bombée, "
+          "les jambes un peu entrouvertes comme s'il venait de descendre de cheval ; et il avançait "
+          "brutalement dans la rue pleine de monde, heurtant les épaules, poussant les gens pour ne "
+          "point se déranger de sa route. Il inclinait légèrement sur l'oreille son chapeau à haute "
+          "forme assez défraîchi, et battait le pavé de son talon.")
+ENGLISH = ("They were indeed a queer-looking party that assembled on the bank, the birds with draggled "
+           "feathers, the animals with their fur clinging close to them, and all dripping wet, cross, "
+           "and uncomfortable. The first question of course was how to get dry again: they had a "
+           "consultation about this, and after a few minutes it seemed quite natural to Alice to find "
+           "herself talking familiarly with them, as if she had known them all her life.")
+
+
+def scan(name, text, pages=2):
+    from PIL import Image, ImageDraw, ImageFont
+    font = ImageFont.truetype(os.path.join(HERE, "packaging", "fonts", "Literata-Regular.ttf"), 42)
+    images = []
+    for _ in range(pages):
+        image = Image.new("L", (1700, 2400), 255)
+        draw, line, y = ImageDraw.Draw(image), "", 200
+        for word in text.split():
+            if draw.textlength(line + " " + word, font=font) > 1300:
+                draw.text((200, y), line, font=font, fill=0)
+                line, y = word, y + 64
+            else:
+                line = (line + " " + word).strip()
+        draw.text((200, y), line, font=font, fill=0)
+        images.append(image)
+    images[0].save(path(name), save_all=True, append_images=images[1:], resolution=300)
+    return path(name)
+
+
+class Scans(unittest.TestCase):
+    def test_tesseract_reads_a_scan_in_the_language_it_is_written_in(self):
+        if not p2e.tesseract() or not {"eng", "fra"} <= set(p2e.ocr_languages()):
+            self.skipTest("Tesseract with English and French is not installed")
+        import pypdfium2
+        for name, text, lang, words in (("scan-fr.pdf", FRENCH, "fra", "épaules, poussant les gens"),
+                                        ("scan-en.pdf", ENGLISH, "eng", "draggled feathers")):
+            source = scan(name, text)
+            self.assertTrue(p2e.needs_ocr(PDF_PAGES(source)))
+            work = tempfile.mkdtemp(dir=TMP)
+            read = os.path.join(work, "read.pdf")
+            found, _unsure = p2e.ocr_pdf(source, read, work)
+            self.assertEqual(found, lang)
+            pdf = pypdfium2.PdfDocument(read)
+            self.assertEqual(len(pdf), 2)
+            said = " ".join(pdf[0].get_textpage().get_text_range().split())
+            self.assertIn(words, said)
+            self.assertFalse(p2e.needs_ocr(PDF_PAGES(read)))       # it has its text now
+
+    def test_what_tesseract_read_in_a_drawing_goes(self):
+        tsv = "\n".join(["level\tpage\tblock\tpar\tline\tword\tleft\ttop\twidth\theight\tconf\ttext"] + [
+            "5\t1\t1\t1\t1\t%d\t%d\t100\t50\t40\t%s\t%s" % (k, 100 + 60 * k, conf, word)
+            for k, (conf, word) in enumerate([(96, "Alice"), (27, "l'Histoire"), (52, "~~)"), (55, "poison,"), (12, "L@*"), (30, "Ss"),
+                                              (20, "*Arennerntt"), (35, "Il"), (91, "il")])])
+        words = p2e.tsv_words(tsv)
+        unsure = p2e.unsure_words(words, p2e.known_words([words]))
+        # "l'Histoire" and "poison," are words, however unsure Tesseract is of them; "Il" is read
+        # for sure elsewhere
+        self.assertEqual([w for *_box, w in unsure], ["~~)", "L@*", "Ss", "*Arennerntt"])
+        self.assertAlmostEqual(unsure[0][0], 220 * 72 / 300)                     # in points
+        bad = {"L@*", "~~)"}
+        self.assertEqual(p2e.scrub("<p>said the <i>Mouse</i> L@* to Alice ~~)</p>", bad), "<p>said the <i>Mouse</i> to Alice</p>")
+        self.assertEqual(p2e.scrub("<p>Ji L@* ~~) Ss</p>", bad), "")          # mostly a drawing: it goes
+        self.assertEqual(p2e.scrub("<p>– Oui.</p>", bad), "<p>– Oui.</p>")
+
+    def test_a_running_head_stays_only_the_first_time(self):
+        words = ENGLISH.split()
+        pieces = [("h", 1, "ALICE IN WONDERLAND", 0)]
+        for page in range(12):
+            if page:
+                pieces.append(("p", "ALICE IN WONDERLAND %d" % (page + 3), "", page, "break"))
+            pieces.append(("p", " ".join(words[page:page + 8]), "", page, None))
+        kept = p2e.running_heads(pieces, 12)
+        self.assertEqual(sum("ALICE" in (p[2] if p[0] == "h" else p[1]) for p in kept), 1)
+        self.assertEqual(len(kept), 13)
+
+
 class Shelf(unittest.TestCase):
     def settle(self, main, until, what, seconds=20):
         end = time.time() + seconds
@@ -302,7 +382,7 @@ class Shelf(unittest.TestCase):
                 fh.write(rb._pins())
             set_up.append(True)
 
-        def fake_convert(source, step):
+        def fake_convert(source, step, notice=None):
             self.assertEqual(source, pdf)
             for s in ("models", "pages", "book"):
                 step(s)
@@ -342,11 +422,40 @@ class Shelf(unittest.TestCase):
         self.assertEqual(entry["title"], "La pluie et le beau temps")
         self.assertEqual(entry["sourceName"], "Un article.epub")      # the name it will have on the drive
         # a paper that fails says so on the shelf, and the next one is not held up
-        rb.convert_paper = lambda _s, _step: (_ for _ in ()).throw(IOError("no text"))
+        rb.convert_paper = lambda _s, _step, _notice=None: (_ for _ in ()).throw(IOError("no text"))
         main.import_files([pdf])
         self.settle(main, lambda: main.paper_error, "the failure")
         self.assertIn("no text", main.paper_error)
         self.assertIn(main.paper_error, [r.title for r in main.rows])
+        main.close()
+
+    def test_a_scan_without_tesseract_says_how_to_get_its_text(self):
+        pdf = path("Un scan.pdf")
+        with open(pdf, "wb") as fh:
+            fh.write(b"%PDF-1.4\n%made up\n")
+        os.makedirs(rb.PAPERS_ENV, exist_ok=True)
+        with open(os.path.join(rb.PAPERS_ENV, "ready"), "w") as fh:
+            fh.write(rb._pins())
+        made = converted("scan.epub")
+
+        def fake_convert(_source, step, notice=None):
+            step("ocr", 3, 10)
+            notice("no-ocr")
+            out = path("scan-out.epub")
+            with open(made, "rb") as a, open(out, "wb") as b:
+                b.write(a.read())
+            return out
+
+        rb.convert_paper = fake_convert
+        main = rb.Main()
+        main.resize(760, 900)
+        main.show()
+        shown = []
+        main.paper_step.said.connect(shown.append)
+        main.import_files([pdf])
+        self.settle(main, lambda: not main.papers, "the conversion")
+        self.assertTrue(any(t.endswith(rb._("reading the scanned pages") + " 3/10") for t in shown), shown)
+        self.assertEqual(main.paper_error, rb._("“%s” is a scan: its pages are pictures. To get its text, install Tesseract (the tesseract-ocr package) and open the PDF again.") % "Un scan")
         main.close()
 
     def test_a_picture_opens_on_the_whole_window_zooms_and_closes(self):

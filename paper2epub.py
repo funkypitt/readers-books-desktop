@@ -14,6 +14,10 @@ Paragraphs cut by a page or a column are joined again, the figures and tables fo
 are put after them. A chapter per top section; the footnotes of a chapter close it. A scanned
 paper (no text layer) becomes its pages as pictures.
 
+A scanned PDF (no text on most pages) is read first by Tesseract, if it is installed, in the
+language it reads best among those installed; the rest goes as for any PDF. Without Tesseract,
+its pages are pictures, and --progress says {"notice": "no-ocr"}.
+
 A book is helped by what the PDF knows besides Marker: its bookmarks give the chapters, its text
 layer the lines Marker lost. Its printed table of contents goes: the reader has its own.
 
@@ -27,8 +31,11 @@ import io
 import json
 import os
 import re
+import shutil
 import signal
+import subprocess
 import sys
+import tempfile
 import unicodedata
 import uuid
 import zipfile
@@ -222,6 +229,9 @@ class Pages:
             self.text, self.height, self.text_index = page.get_textpage(), page.get_height(), i
         return self.text
 
+    def page_text(self, i):
+        return self._text_of(i).get_text_range()
+
     def text_in(self, i, bbox):
         """What the text layer holds in `bbox` of page i (points, from the top left)."""
         text = self._text_of(i)
@@ -274,6 +284,175 @@ def encode(image):
         if jpeg.tell() < len(data):
             return jpeg.getvalue(), "jpg"
     return data, "png"
+
+
+# ------------------------------------------------------------------------------------------
+# A scanned PDF: Tesseract reads its pages, and they come back with their text under the picture
+# ------------------------------------------------------------------------------------------
+
+OCR_DPI = 300
+# the app's languages are tried first, then the others installed, a dozen at most
+LIKELY = ("eng", "fra", "deu", "spa", "por", "rus", "ita", "nld")
+ISO = {"eng": "en", "fra": "fr", "deu": "de", "spa": "es", "por": "pt", "rus": "ru", "ita": "it", "nld": "nl"}
+ONE_THREAD = dict(os.environ, OMP_THREAD_LIMIT="1")     # pages are read side by side instead
+
+
+def tesseract():
+    return shutil.which("tesseract")
+
+
+def ocr_languages():
+    try:
+        listed = subprocess.run([tesseract(), "--list-langs"], capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError, TypeError):
+        return []
+    langs = [l.strip() for l in listed.splitlines()[1:] if l.strip() and l.strip() not in ("osd", "equ", "snum")]
+    return ([l for l in LIKELY if l in langs] + [l for l in langs if l not in LIKELY])[:12]
+
+
+def needs_ocr(seen):
+    """Most pages have no text: a scan."""
+    if not hasattr(seen, "page_text"):
+        return False
+    n = len(seen)
+    sample = sorted({k * n // min(n, 30) for k in range(min(n, 30))})
+    texty = sum(1 for i in sample if len(seen.page_text(i).strip()) > 200)
+    return bool(sample) and texty * 2 < len(sample)
+
+
+def confidence(image, lang):
+    """How sure Tesseract is of the words it reads on the picture in that language, 0–100."""
+    tsv = subprocess.run([tesseract(), image, "stdout", "-l", lang, "tsv"], capture_output=True,
+                         text=True, env=ONE_THREAD, timeout=600).stdout
+    sure = []
+    for line in tsv.splitlines()[1:]:
+        f = line.split("\t")
+        if len(f) >= 12 and len(f[11].strip()) >= 2:
+            try:
+                sure.append(float(f[10]))
+            except ValueError:
+                pass
+    sure = [c for c in sure if c >= 0]
+    return sum(sure) / len(sure) if sure else 0.0
+
+
+def language_of(images, langs, workers):
+    """The language Tesseract reads the pictures best in."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(workers) as pool:
+        scores = {lang: pool.map(lambda image, lang=lang: confidence(image, lang), images) for lang in langs}
+        scores = {lang: sum(found) / len(images) for lang, found in scores.items()}
+    return max(langs, key=lambda lang: scores[lang])
+
+
+def ocr_pdf(pdf_path, out_path, work):
+    """The scan with Tesseract's text under each page's picture, at `out_path`; returns the language."""
+    import pypdfium2
+    from concurrent.futures import ThreadPoolExecutor
+    source = pypdfium2.PdfDocument(pdf_path)
+    n = len(source)
+    workers = max(1, (os.cpu_count() or 2) // 2)
+
+    def picture(i):
+        name = os.path.join(work, "page-%05d.jpg" % i)
+        if not os.path.exists(name):
+            source[i].render(scale=OCR_DPI / 72, grayscale=True).to_pil().convert("L").save(name, quality=85)
+        return name
+
+    say(step="ocr", page=0, of=n)
+    lang = language_of([picture(i) for i in sorted({n // 4, n // 2, 3 * n // 4})], ocr_languages(), workers)
+    read = [0]
+
+    def read_page(i, image):
+        base = os.path.join(work, "page-%05d" % i)
+        done = subprocess.run([tesseract(), image, base, "-l", lang, "--dpi", str(OCR_DPI), "pdf", "tsv"],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=ONE_THREAD, timeout=600)
+        if done.returncode or not os.path.isfile(base + ".pdf"):
+            raise IOError("tesseract: %s" % done.stderr.decode("utf-8", "replace").strip()[-200:])
+        read[0] += 1
+        say(step="ocr", page=read[0], of=n)
+        with open(base + ".tsv", encoding="utf-8", errors="replace") as fh:
+            return base + ".pdf", tsv_words(fh.read())
+
+    with ThreadPoolExecutor(workers) as pool:
+        jobs = [pool.submit(read_page, i, picture(i)) for i in range(n)]     # pictures made here, one at a time
+        parts = [job.result() for job in jobs]
+    book = pypdfium2.PdfDocument.new()
+    for part, _words in parts:
+        book.import_pages(pypdfium2.PdfDocument(part))
+    book.save(out_path)
+    known = known_words(words for _part, words in parts)
+    unsure = {i: unsure_words(words, known) for i, (_part, words) in enumerate(parts)}
+    return lang, {i: found for i, found in unsure.items() if found}
+
+
+def tsv_words(tsv):
+    """Tesseract's words: (confidence, x, y, width, height, word), in pixels."""
+    words = []
+    for line in tsv.splitlines()[1:]:
+        f = line.split("\t")
+        if len(f) >= 12 and f[11].strip():
+            try:
+                words.append((float(f[10]), int(f[6]), int(f[7]), int(f[8]), int(f[9]), f[11].strip()))
+            except ValueError:
+                pass
+    return words
+
+
+def bare(word):
+    return re.sub(r"^\W+|\W+$", "", word).lower()
+
+
+def known_words(pages):
+    """The words Tesseract is sure of somewhere in the book (80 of 100 and more)."""
+    return {bare(w) for words in pages for conf, *_box, w in words if conf >= 80 and bare(w)}
+
+
+def unsure_words(words, known=()):
+    """The words Tesseract read in the drawings, (x0, y0, x1, y1, word) in points: unsure ones (under
+    60 of 100) that do not look like words — no three letters in a row and not read for sure
+    elsewhere in the book, or signs words never hold. Its confidence alone will not do:
+    "l'Histoire", read right, gets 27."""
+    out = []
+    k = 72 / OCR_DPI
+    for conf, x, y, w, h, word in words:
+        if 0 <= conf < 60 and (re.search(r"[{}|\\/~@*¥<>^_=#%$§©®]", word) or bare(word) not in known
+                               and not re.search(r"[^\W\d_]{3}", re.sub(r"['’]", "", word))):
+            out.append((x * k, y * k, (x + w) * k, (y + h) * k, word))
+    return out
+
+
+def unsure_in(seen, number, bbox):
+    words = (getattr(seen, "unsure", None) or {}).get(number) or []
+    return {w for x0, y0, x1, y1, w in words
+            if bbox[0] - 2 <= (x0 + x1) / 2 <= bbox[2] + 2 and bbox[1] - 2 <= (y0 + y1) / 2 <= bbox[3] + 2}
+
+
+def scrub(text, unsure, markup=True):
+    """`text` without the unsure words; "" when they were most of it."""
+    if not unsure:
+        return text
+    counts = [0, 0]             # kept, dropped
+
+    def words(part):
+        out = []
+        for token in re.split(r"(\s+)", part):
+            if token.strip() and html.unescape(token) in unsure:
+                counts[1] += 1
+                continue
+            counts[0] += bool(token.strip())
+            out.append(token)
+        return "".join(out)
+
+    parts = re.split(r"(<[^>]+>)", text) if markup else [text]
+    cleaned = "".join(part if markup and part.startswith("<") else words(part) for part in parts)
+    if counts[1]:
+        real = re.findall(r"[^\W\d_]{2,}", plain(cleaned) if markup else cleaned)
+        if counts[1] >= counts[0] or len(real) < 2:
+            return ""
+        cleaned = re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+        cleaned = re.sub(r"(<(?:p|li|h\d)\b[^>]*>)\s+|\s+(</(?:p|li|h\d)>)", lambda m: m.group(1) or m.group(2), cleaned)
+    return cleaned
 
 
 # ------------------------------------------------------------------------------------------
@@ -335,7 +514,8 @@ def flow_of(pages, seen=None):
     left, column = main_column(pages)
 
     def from_layer(number, bbox):
-        return layer_text(seen.text_in(number, bbox)) if hasattr(seen, "text_in") else ""
+        said = layer_text(seen.text_in(number, bbox)) if hasattr(seen, "text_in") else ""
+        return scrub(said, unsure_in(seen, number, bbox), markup=False)
 
     for number, page in enumerate(pages):
         box = page["bbox"]
@@ -346,6 +526,13 @@ def flow_of(pages, seen=None):
             if kind in SKIP or kind == "TableOfContents":      # the reader has its own contents
                 continue
             x0, y0, x1, y1 = block["bbox"]
+            unsure = unsure_in(seen, number, block["bbox"])
+            if unsure and kind not in FLOATS and kind not in GROUPS:      # Tesseract read a drawing
+                had = plain(block.get("html") or "")
+                for b in [block] + (block.get("children") or []):
+                    b["html"] = scrub(b.get("html") or "", unsure)
+                if had and not plain(block["html"]) and not any(plain(b.get("html") or "") for b in block.get("children") or []):
+                    continue
             if margin is not None and x1 <= margin and x1 - x0 < column * 0.6:
                 text = "" if kind in FLOATS or kind in GROUPS else inline(block.get("html") or "")
                 if text:
@@ -386,6 +573,7 @@ def flow_of(pages, seen=None):
                         continue
                     item = unmarked(inline(b["html"]))
                     raw = seen.text_in(number, b["bbox"]) if hasattr(seen, "text_in") else ""
+                    raw = scrub(raw, unsure_in(seen, number, b["bbox"]), markup=False)
                     if layer_text(raw)[:1] in tuple("–—«“\""):
                         # lines of dialogue taken for a list (Marker ate the dash), one a line
                         for line in re.split(r"\r?\n(?=\s*[–—«“\"])", raw):
@@ -403,7 +591,7 @@ def flow_of(pages, seen=None):
                     continue            # printer's marks only
                 if not text:            # Marker lost it: the text layer may have it
                     raw = seen.text_in(number, block["bbox"]) if hasattr(seen, "text_in") else ""
-                    said = layer_text(raw)
+                    said = scrub(layer_text(raw), unsure, markup=False)
                     if raw.strip() and not said:
                         continue
                     if said and not garbled(said):
@@ -640,17 +828,48 @@ def by_outline(pieces, outline, n_pages):
     return out, depth
 
 
-def build(pdf_path):
+def running_heads(pieces, n_pages):
+    """A short line at the top or the foot of many pages is a running head Marker took for text:
+    only its first time stays (often the chapter's own heading)."""
+    by_page = {}
+    for i, p in enumerate(pieces):
+        if p[0] in ("h", "p"):
+            by_page.setdefault(page_of(p), []).append(i)
+
+    def key(p):
+        text = plain(p[2] if p[0] == "h" else p[1])
+        return re.sub(r"\d+", "", squash(text)) if len(text) <= 80 else ""
+
+    ends = sorted({i for found in by_page.values() for i in (found[0], found[-1])})
+    pages_of = {}
+    for i in ends:
+        if key(pieces[i]):
+            pages_of.setdefault(key(pieces[i]), set()).add(page_of(pieces[i]))
+    heads = {k for k, found in pages_of.items() if len(found) >= max(3, n_pages // 10)}
+    seen, drop = set(), set()
+    for i in ends:
+        k = key(pieces[i])
+        if k in heads:
+            if k in seen:
+                drop.add(i)
+            seen.add(k)
+    return [p for i, p in enumerate(pieces) if i not in drop]
+
+
+def build(pdf_path, original=None, unsure=None):
+    """The book of the PDF; `original` is the file it was read from when this is Tesseract's copy,
+    `unsure` the words Tesseract was unsure of, by page."""
     pages_seen = Pages(pdf_path)
-    meta = pages_seen.metadata()
+    pages_seen.unsure = unsure
+    meta = (Pages(original) if original else pages_seen).metadata()
     pages = marker_pages(pdf_path)
     say(step="book")
     texty = sum(1 for page in pages if len(" ".join(plain(b.get("html") or "") for b in page.get("children") or [])) > 200)
-    stem = os.path.splitext(os.path.basename(pdf_path))[0].replace("_", " ")
+    stem = os.path.splitext(os.path.basename(original or pdf_path))[0].replace("_", " ")
     if texty * 2 < len(pages):
         return scanned(pages_seen, good_title(meta.get("Title")) or stem, meta)
     column, span = widths(pages)
-    pieces = mend(flow_of(pages, pages_seen))
+    pieces = running_heads(mend(flow_of(pages, pages_seen)), len(pages))
 
     # The title: the heading of the first page that is the PDF's own title, else its highest
     # heading, else the PDF's title, else the file's name. A heading before it on that page
@@ -764,7 +983,7 @@ XHTML = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
-def write_epub(path, title, authors, chapters, images):
+def write_epub(path, title, authors, chapters, images, language="en"):
     esc = lambda s: html.escape(s, quote=True)
     book_id = "urn:uuid:%s" % uuid.uuid4()
     files = [("ch%03d.xhtml" % (i + 1), t, body) for i, (t, body) in enumerate(chapters)]
@@ -779,7 +998,7 @@ def write_epub(path, title, authors, chapters, images):
     opf = """<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
 <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-<dc:identifier id="id">%s</dc:identifier><dc:title>%s</dc:title>%s<dc:language>en</dc:language>
+<dc:identifier id="id">%s</dc:identifier><dc:title>%s</dc:title>%s<dc:language>%s</dc:language>
 <meta property="dcterms:modified">2000-01-01T00:00:00Z</meta>
 </metadata>
 <manifest>
@@ -789,7 +1008,7 @@ def write_epub(path, title, authors, chapters, images):
 %s
 </spine>
 </package>
-""" % (book_id, esc(title), creator, "\n".join(manifest), "\n".join(spine))
+""" % (book_id, esc(title), creator, esc(language), "\n".join(manifest), "\n".join(spine))
     nav = XHTML % (esc(title), '<nav epub:type="toc"><ol>\n%s\n</ol></nav>' % "\n".join(
         '<li><a href="%s">%s</a></li>' % (f, esc(t)) for f, t, _b in files))
     ncx = """<?xml version="1.0" encoding="utf-8"?>
@@ -823,8 +1042,18 @@ def write_epub(path, title, authors, chapters, images):
 
 
 def convert(pdf_path, epub_path):
-    title, authors, chapters, images = build(pdf_path)
-    write_epub(epub_path, title, authors, chapters, images)
+    with tempfile.TemporaryDirectory(prefix="paper2epub-") as work:
+        scan = needs_ocr(Pages(pdf_path))
+        lang = None
+        if scan and tesseract() and ocr_languages():
+            read = os.path.join(work, "read.pdf")
+            lang, unsure = ocr_pdf(pdf_path, read, work)
+            title, authors, chapters, images = build(read, pdf_path, unsure)
+        else:
+            if scan:
+                say(notice="no-ocr")
+            title, authors, chapters, images = build(pdf_path)
+    write_epub(epub_path, title, authors, chapters, images, ISO.get(lang, lang or "en"))
     return title
 
 

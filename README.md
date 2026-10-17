@@ -52,7 +52,13 @@ reader, the same library, the same wording.
   Displayed equations, figures and tables are cut out of the page as pictures, exactly as
   printed, padded to the width of the paper's column so that their print comes out at about
   the size of the book's text; a line the text layer lost, or mathematics it garbled, is cut out
-  too rather than dropped. A scanned paper (no text layer) becomes its pages as pictures. The
+  too rather than dropped. A scanned PDF (no text on most pages) is read first by
+  [Tesseract](https://github.com/tesseract-ocr/tesseract) when it is installed (the .deb
+  recommends it with English, French, German, Spanish, Portuguese and Russian): the language is
+  the one Tesseract reads three sample pages best in, the pages are read side by side (about
+  0.4 s a page, Marker included), and what it read in drawings and frames — unsure words that
+  do not look like words and are never read for sure elsewhere in the book — is left out.
+  Without Tesseract, a scan becomes its pages as pictures and the shelf says what to install. The
   converter is set up on first use, in a Python environment of its own (`paper-converter` in
   the app's data folder: Marker and the CPU build of torch, about 2 GB with its models; delete
   the folder to take it away); it never runs inside the app, and the model servers Marker

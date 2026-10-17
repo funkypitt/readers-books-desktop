@@ -28,7 +28,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.7.1"
+VERSION = "1.8.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -170,6 +170,8 @@ STRINGS = {
   "the PDF “%s” could not be turned into an EPUB: %s": "le PDF « %s » n'a pas pu être converti en EPUB : %s",
   "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "Un PDF ne se lit pas tel quel : il est converti en EPUB, un livre de l'étagère, ses figures, tableaux et équations en images ; le PDF lui-même reste tel qu'il était. Le convertisseur se met en place une fois : environ 2 Go téléchargés.",
   "set up the converter": "mettre en place le convertisseur",
+  "reading the scanned pages": "lecture des pages scannées",
+  "“%s” is a scan: its pages are pictures. To get its text, install Tesseract (the tesseract-ocr package) and open the PDF again.": "« %s » est un scan : ses pages sont des images. Pour en avoir le texte, installez Tesseract (le paquet tesseract-ocr) et rouvrez le PDF.",
   "books, or a PDF to turn into an EPUB": "livres, ou un PDF à convertir en EPUB",
   "a PDF, turned into an EPUB": "un PDF, converti en EPUB",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "rien sur l'étagère. Ouvrir un fichier epub, mobi, fb2 ou texte, ou un PDF à convertir en EPUB : d'ici, ou en le déposant sur cette fenêtre.",
@@ -290,6 +292,8 @@ STRINGS = {
   "the PDF “%s” could not be turned into an EPUB: %s": "das PDF „%s“ konnte nicht in EPUB umgewandelt werden: %s",
   "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "Ein PDF wird nicht so gelesen, wie es ist: es wird in ein EPUB umgewandelt, ein Buch im Regal, seine Abbildungen, Tabellen und Gleichungen als Bilder; das PDF selbst bleibt unverändert. Der Konverter wird einmal eingerichtet: etwa 2 GB werden heruntergeladen.",
   "set up the converter": "Konverter einrichten",
+  "reading the scanned pages": "gescannte Seiten werden gelesen",
+  "“%s” is a scan: its pages are pictures. To get its text, install Tesseract (the tesseract-ocr package) and open the PDF again.": "„%s“ ist ein Scan: seine Seiten sind Bilder. Um den Text zu erhalten, installieren Sie Tesseract (das Paket tesseract-ocr) und öffnen Sie das PDF erneut.",
   "books, or a PDF to turn into an EPUB": "Bücher, oder ein PDF zum Umwandeln in EPUB",
   "a PDF, turned into an EPUB": "ein PDF, in EPUB umgewandelt",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nichts im Regal. Eine epub-, mobi-, fb2- oder Textdatei öffnen, oder ein PDF zum Umwandeln in EPUB: von hier oder durch Ablegen auf diesem Fenster.",
@@ -410,6 +414,8 @@ STRINGS = {
   "the PDF “%s” could not be turned into an EPUB: %s": "el PDF «%s» no pudo convertirse en EPUB: %s",
   "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "Un PDF no se lee tal cual: se convierte en un EPUB, un libro de la estantería, con sus figuras, tablas y ecuaciones como imágenes; el PDF en sí queda como estaba. El conversor se prepara una sola vez: unos 2 GB descargados.",
   "set up the converter": "preparar el conversor",
+  "reading the scanned pages": "leyendo las páginas escaneadas",
+  "“%s” is a scan: its pages are pictures. To get its text, install Tesseract (the tesseract-ocr package) and open the PDF again.": "«%s» es un escaneo: sus páginas son imágenes. Para obtener su texto, instala Tesseract (el paquete tesseract-ocr) y vuelve a abrir el PDF.",
   "books, or a PDF to turn into an EPUB": "libros, o un PDF para convertir en EPUB",
   "a PDF, turned into an EPUB": "un PDF, convertido en EPUB",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada en la estantería. Abre un archivo epub, mobi, fb2 o de texto, o un PDF para convertir en EPUB: desde aquí, o soltándolo sobre esta ventana.",
@@ -530,6 +536,8 @@ STRINGS = {
   "the PDF “%s” could not be turned into an EPUB: %s": "o PDF «%s» não pôde ser convertido em EPUB: %s",
   "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "Um PDF não é lido tal como está: é convertido num EPUB, um livro da estante, com as figuras, tabelas e equações como imagens; o próprio PDF fica como estava. O conversor prepara-se uma só vez: cerca de 2 GB descarregados.",
   "set up the converter": "preparar o conversor",
+  "reading the scanned pages": "a ler as páginas digitalizadas",
+  "“%s” is a scan: its pages are pictures. To get its text, install Tesseract (the tesseract-ocr package) and open the PDF again.": "«%s» é uma digitalização: as páginas são imagens. Para obter o texto, instale o Tesseract (o pacote tesseract-ocr) e volte a abrir o PDF.",
   "books, or a PDF to turn into an EPUB": "livros, ou um PDF para converter em EPUB",
   "a PDF, turned into an EPUB": "um PDF, convertido em EPUB",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada na estante. Abra um ficheiro epub, mobi, fb2 ou de texto, ou um PDF para converter em EPUB: daqui, ou largando-o sobre esta janela.",
@@ -651,6 +659,8 @@ STRINGS = {
   "the PDF “%s” could not be turned into an EPUB: %s": "PDF «%s» не удалось преобразовать в EPUB: %s",
   "A PDF is not read as it is: it is turned into an EPUB, a book of the shelf, its figures, tables and equations as pictures; the PDF itself is left as it was. The converter is set up once: about 2 GB downloaded.": "PDF не читается как есть: он преобразуется в EPUB — книгу на полке, с рисунками, таблицами и формулами в виде картинок; сам PDF остаётся без изменений. Конвертер устанавливается один раз: около 2 ГБ загрузки.",
   "set up the converter": "установить конвертер",
+  "reading the scanned pages": "распознавание отсканированных страниц",
+  "“%s” is a scan: its pages are pictures. To get its text, install Tesseract (the tesseract-ocr package) and open the PDF again.": "«%s» — это скан: его страницы — картинки. Чтобы получить текст, установите Tesseract (пакет tesseract-ocr) и откройте PDF снова.",
   "books, or a PDF to turn into an EPUB": "книги или PDF для преобразования в EPUB",
   "a PDF, turned into an EPUB": "PDF, преобразуемый в EPUB",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "на полке пусто. Откройте файл epub, mobi, fb2 или текст либо PDF для преобразования в EPUB: отсюда или перетащив его в это окно.",
@@ -1533,8 +1543,9 @@ def set_up_converter(step):
         fh.write(_pins())
 
 
-def convert_paper(pdf_path, step):
-    """Blocking: the EPUB made of the paper, in PAPERS_WORK. `step(word)` as the converter goes."""
+def convert_paper(pdf_path, step, notice=None):
+    """Blocking: the EPUB made of the paper, in PAPERS_WORK. `step(word, page, of)` as the
+    converter goes; `notice(word)` for what it says besides ("no-ocr": a scan, no Tesseract)."""
     os.makedirs(PAPERS_WORK, exist_ok=True)
     out = os.path.join(PAPERS_WORK, "%s.epub" % _base36(_now()))
     log = os.path.join(DATA_DIR, "paper-converter.log")
@@ -1549,7 +1560,9 @@ def convert_paper(pdf_path, step):
             except ValueError:
                 continue
             if "step" in said:
-                step(said["step"])
+                step(said["step"], said.get("page"), said.get("of"))
+            elif "notice" in said and notice:
+                notice(said["notice"])
             elif "error" in said:
                 error = said["error"]
         process.wait()
@@ -3981,12 +3994,17 @@ class Main(QtWidgets.QMainWindow):
         path = self.papers[0]
         name = os.path.splitext(os.path.basename(path))[0]
         doing = _("the PDF “%s” is being turned into an EPUB…") % name
-        words = {"models": _("loading the models"), "pages": _("reading the pages"), "book": _("making the EPUB")}
+        words = {"models": _("loading the models"), "pages": _("reading the pages"), "book": _("making the EPUB"),
+                 "ocr": _("reading the scanned pages")}
         say = self.paper_step.said.emit
         self.paper_said(doing)
+        notices = []
+
+        def stepped(word, page=None, of=None):
+            say("%s %s" % (doing, words.get(word, "")) + (" %d/%d" % (page, of) if of else ""))
 
         def job():
-            epub = convert_paper(path, lambda step: say("%s %s" % (doing, words.get(step, ""))))
+            epub = convert_paper(path, stepped, notices.append)
             return self.library.add(epub, name + ".epub", move=True)
 
         def done(entry, error):
@@ -3994,7 +4012,9 @@ class Main(QtWidgets.QMainWindow):
             self.paper_doing = None
             if error:
                 self.paper_error = _("the PDF “%s” could not be turned into an EPUB: %s") % (name, error)
-            elif not self.papers and self.screen[0] == SHELF:
+            elif "no-ocr" in notices:
+                self.paper_error = _("“%s” is a scan: its pages are pictures. To get its text, install Tesseract (the tesseract-ocr package) and open the PDF again.") % name
+            if not error and not self.papers and self.screen[0] == SHELF:
                 return self.open_entry(entry, from_home=True)
             if self.papers:
                 self.next_paper()

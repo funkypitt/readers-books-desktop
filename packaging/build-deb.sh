@@ -23,7 +23,7 @@ Section: text
 Priority: optional
 Architecture: all
 Depends: python3 (>= 3.8), python3-pyqt5, python3-requests
-Recommends: python3-venv
+Recommends: python3-venv, tesseract-ocr, tesseract-ocr-fra, tesseract-ocr-deu, tesseract-ocr-spa, tesseract-ocr-por, tesseract-ocr-rus
 Maintainer: funkypitt <pierregallaz@gmail.com>
 Homepage: https://github.com/funkypitt/readers-books-desktop
 Description: Black-and-white e-book reader: a shelf, and pages cut at whole lines

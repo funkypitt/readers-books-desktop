@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""An academic paper in PDF as an EPUB the Reader's Books apps read well.
+"""A PDF — an academic paper, an essay, a novel — as an EPUB the Reader's Books apps read well.
 
     paper2epub.py paper.pdf paper.epub [--progress]
 
@@ -14,10 +14,14 @@ Paragraphs cut by a page or a column are joined again, the figures and tables fo
 are put after them. A chapter per top section; the footnotes of a chapter close it. A scanned
 paper (no text layer) becomes its pages as pictures.
 
+A book is helped by what the PDF knows besides Marker: its bookmarks give the chapters, its text
+layer the lines Marker lost. Its printed table of contents goes: the reader has its own.
+
 With --progress, one JSON object per line on stdout: {"step": ...}, then {"done": title} or
 {"error": message}. Needs marker-pdf, pypdfium2 and Pillow; pylatexenc if there.
 """
 
+import difflib
 import html
 import io
 import json
@@ -169,6 +173,20 @@ def garbled(text):
     return bool(re.search(r"ð[^ð]{0,40}Þ", text)) and ("¼" in text or "þ" in text)
 
 
+MARKS = re.compile(r"[\u2758-\u275a]+")       # a proof's crop marks: ❘❙❚
+
+
+def unmarked(xhtml):
+    return MARKS.sub("", xhtml).strip()
+
+
+def layer_text(raw):
+    """The text layer's lines as one line of text."""
+    raw = re.sub(r"[\x02\u00ad]\r?\n", "", raw or "")      # a word cut at the end of a line
+    raw = re.sub(r"-\r?\n", "-", raw).replace("’", "'")      # Marker's apostrophe
+    return re.sub(r"\s+", " ", MARKS.sub("", raw)).strip()
+
+
 def plain(xhtml):
     return html.unescape(re.sub(r"<[^>]+>", "", xhtml)).strip()
 
@@ -182,6 +200,31 @@ class Pages:
         import pypdfium2
         self.pdf = pypdfium2.PdfDocument(path)
         self.index, self.image = None, None
+        self.text_index, self.text = None, None
+
+    def outline(self):
+        """The PDF's bookmarks: (level, title, page)."""
+        out = []
+        try:
+            for mark in self.pdf.get_toc():
+                dest = mark.get_dest()
+                at = dest.get_index() if dest else None
+                if at is not None:
+                    out.append((mark.level, mark.get_title() or "", at))
+        except Exception:
+            return []
+        return out
+
+    def _text_of(self, i):
+        if i != self.text_index:
+            page = self.pdf[i]
+            self.text, self.height, self.text_index = page.get_textpage(), page.get_height(), i
+        return self.text
+
+    def text_in(self, i, bbox):
+        """What the text layer holds in `bbox` of page i (points, from the top left)."""
+        text = self._text_of(i)
+        return text.get_text_bounded(bbox[0] - 1, self.height - bbox[3] - 1, bbox[2] + 1, self.height - bbox[1] + 1)
 
     def metadata(self):
         try:
@@ -283,16 +326,23 @@ def margin_of(page, left, column):
     return left + 2
 
 
-def flow_of(pages):
-    """The pieces in reading order, page after page. The margin's text is an ("aside", xhtml, page)."""
+def flow_of(pages, seen=None):
+    """The pieces in reading order, page after page. The margin's text is an ("aside", xhtml, page).
+    A paragraph is ("p", xhtml, "", page, at): `at` is "break" at the top of a page or a column,
+    where a cut paragraph may go on, None elsewhere."""
     pieces = []
     left, column = main_column(pages)
+
+    def from_layer(number, bbox):
+        return layer_text(seen.text_in(number, bbox)) if hasattr(seen, "text_in") else ""
+
     for number, page in enumerate(pages):
         box = page["bbox"]
         margin = margin_of(page, left, column)
+        above = None            # the top of the last paragraph of this page
         for block in page.get("children") or []:
             kind = block["block_type"]
-            if kind in SKIP:
+            if kind in SKIP or kind == "TableOfContents":      # the reader has its own contents
                 continue
             x0, y0, x1, y1 = block["bbox"]
             if margin is not None and x1 <= margin and x1 - x0 < column * 0.6:
@@ -314,7 +364,11 @@ def flow_of(pages):
             elif kind == "Equation":
                 pieces.append(("eq", number, block["bbox"], box, kind, plain(inline(block["html"]))))
             elif kind == "SectionHeader":
-                text = inline(block["html"])
+                text = unmarked(inline(block["html"]))
+                if not text and not plain(block.get("html") or ""):
+                    said = from_layer(number, block["bbox"])
+                    if not said[:1].islower():     # else the scraps of a line cut off by the page
+                        text = html.escape(said, quote=False)
                 if text:
                     pieces.append(("h", heading_level(block["html"]), text, number))
             elif kind == "Footnote":
@@ -326,19 +380,38 @@ def flow_of(pages):
                 if text:
                     pieces.append(("p", text, "caption", number))
             elif kind == "ListGroup":
-                items = [inline(b["html"]) for b in block.get("children") or [] if b["block_type"] == "ListItem"]
-                for item in filter(None, items):
-                    pieces.append(("p", item, "item", number))
+                for b in block.get("children") or []:
+                    if b["block_type"] != "ListItem":
+                        continue
+                    item = unmarked(inline(b["html"]))
+                    raw = seen.text_in(number, b["bbox"]) if hasattr(seen, "text_in") else ""
+                    if layer_text(raw)[:1] in tuple("–—«“\""):
+                        # lines of dialogue taken for a list (Marker ate the dash), one a line
+                        for line in re.split(r"\r?\n(?=\s*[–—«“\"])", raw):
+                            if layer_text(line):
+                                pieces.append(("p", html.escape(layer_text(line), quote=False), "", number, None))
+                    elif item:
+                        pieces.append(("p", item, "item", number))
             elif kind == "Code":
                 text = plain(inline(block["html"]))
                 if text:
                     pieces.append(("p", "<code>%s</code>" % html.escape(text, quote=False), "code", number))
             else:                       # Text, TextInlineMath, ListItem, Reference, Handwriting…
-                text = inline(block["html"])
+                text = unmarked(inline(block["html"]))
+                if not text and plain(block.get("html") or ""):
+                    continue            # printer's marks only
+                if not text:            # Marker lost it: the text layer may have it
+                    raw = seen.text_in(number, block["bbox"]) if hasattr(seen, "text_in") else ""
+                    said = layer_text(raw)
+                    if raw.strip() and not said:
+                        continue
+                    if said and not garbled(said):
+                        text = html.escape(said, quote=False)
                 if text and garbled(plain(text)):
                     pieces.append(("eq", number, block["bbox"], box, kind, plain(text)))
                 elif text:
-                    pieces.append(("p", text, "", number))
+                    pieces.append(("p", text, "", number, "break" if above is None or y0 < above - 2 else None))
+                    above = y0
                 elif x1 - x0 > 20 and y1 - y0 > 6:     # text the text layer lost: never dropped
                     pieces.append(("eq", number, block["bbox"], box, kind, ""))
     return pieces
@@ -381,8 +454,9 @@ def mend(pieces):
             out.append(piece)
             continue
         if kind == "p" and piece[2] == "" and last is not None:
-            if out[last][0] == "p" and continues(out[last][1], piece[1]):
-                out[last] = ("p", join(out[last][1], piece[1]), "", out[last][3])
+            at = piece[4] if len(piece) > 4 else "break"
+            if out[last][0] == "p" and at == "break" and continues(out[last][1], piece[1]):
+                out[last] = ("p", join(out[last][1], piece[1]), "", out[last][3], out[last][4] if len(out[last]) > 4 else None)
                 continue
             if out[last][0] == "eq" and plain(piece[1])[:1].islower():
                 out.append(piece)
@@ -471,6 +545,100 @@ def chapter_depths(headings):
     return [1 if level <= top or BACK_MATTER.match(text) else min(6, 1 + level - top) for level, text in headings]
 
 
+CHAPTER_MARK = re.compile(r"^(?:[–—-]\s*)?(?:[IVXLC]+|\d{1,3})(?:\s*[–—-])?\.?$"
+                          r"|^(?:chapitre|chapter|kapitel|cap[ií]tulo|capitolo|глава|partie|part|teil|livre|book)\s+\S+(?:\s+\S+){0,4}$", re.I)
+# what bookmarks often leave out (LaTeX's \section*) and still opens a chapter
+UNLISTED = re.compile(r"^(abstract|references|bibliography|acknowledge?ments?|appendi(x|ces)|résumé|bibliographie"
+                      r"|remerciements|literatur(verzeichnis)?|danksagung|zusammenfassung)\b", re.I)
+NUMBER_PREFIX = re.compile(r"^\W*(?:(?:chapitre|chapter|kapitel|cap[ií]tulo|capitolo|глава|part(?:ie)?|teil|livre|book)\s+)?"
+                           r"(?:\d+|[IVXLC]+)\s*[:.–—-]\s*", re.I)
+CONTENTS = re.compile(r"^(table des mati[eè]res|(table of )?contents|sommaire|inhalt(sverzeichnis)?|[íi]ndice|содержание|оглавление)$", re.I)
+
+
+def prose(text, strict):
+    """A heading of Marker's that is a line of the text: "Il répondit :", "« Orgeat ! »". With
+    `strict` (the bookmarks say what the headings are) a heading ending a sentence is one too."""
+    t = text.strip()
+    if CHAPTER_MARK.match(t):
+        return False
+    if re.match(r"^[«“\"]|^[–—-]\s*\w", t) or re.search(r"[:;,]$", t):
+        return True
+    return bool(re.search(r"[.!?…»”]$", t)) and (strict or len(t.split()) >= 8)
+
+
+def by_marks(pieces):
+    """A book with no bookmarks: lines alone such as "– II –" or "Chapitre 3" open its chapters,
+    when there are at least three of them."""
+    marks = [i for i, p in enumerate(pieces) if p[0] == "p" and p[2] == "" and len(plain(p[1])) <= 60
+             and CHAPTER_MARK.match(plain(p[1]))]
+    if len(marks) < 3:
+        return pieces
+    top = min([p[1] for p in pieces if p[0] == "h"] or [1])
+    for i in marks:
+        pieces[i] = ("h", top, pieces[i][1], pieces[i][3])
+    return pieces
+
+
+def by_outline(pieces, outline, n_pages):
+    """The PDF's bookmarks are the chapters: each goes on the line it names (else at the top of its
+    page). Its upper levels open chapters, as many as make chapters of two pages or more on average;
+    the rest are headings inside. Marker's other headings stay as subheadings, unless they read
+    as a line of the text. Returns the pieces and the depth of each heading."""
+    levels = sorted({level for level, _t, _p in outline})
+    rank = {level: k for k, level in enumerate(levels)}
+    files = 0
+    for k in range(1, len(levels)):
+        if sum(1 for level, _t, _p in outline if rank[level] <= k) > n_pages / 2:
+            break
+        files = k
+
+    def depth_of(level):
+        return 1 if rank[level] <= files else min(6, 1 + rank[level] - files)
+
+    at_page = {}
+    for i, p in enumerate(pieces):
+        if p[0] == "h" or p[0] == "p" and p[2] == "":
+            at_page.setdefault(page_of(p), []).append(i)
+    named, before = {}, {}
+    for level, title, page in outline:
+        want = squash(title)
+        core = squash(NUMBER_PREFIX.sub("", title))      # "3: Catalogs" is "CHAPTER THREE: Catalogs"
+        best, score = None, 0.6
+        for i in at_page.get(page, []) + at_page.get(page + 1, []):
+            p = pieces[i]
+            text = squash(plain(p[2] if p[0] == "h" else p[1]))
+            if i in named or not text or len(text) > 2 * len(want) + 20:
+                continue
+            r = 1.0 if text == want else 0.9 if len(core) >= 4 and core != want and text.endswith(core) \
+                else 0 if len(want) <= 6 else difflib.SequenceMatcher(None, want, text).ratio()
+            if r > score:
+                best, score = i, r
+        if best is not None:
+            named[best] = depth_of(level)
+        else:
+            first = [i for i, p in enumerate(pieces) if page_of(p) is not None and page_of(p) >= page][:1]
+            before.setdefault(first[0] if first else len(pieces), []).append((depth_of(level), title, page))
+    sub = min(6, max(depth_of(level) for level in levels) + 1)
+    out, depth = [], []
+    for i, p in enumerate(pieces + [None]):
+        for d, title, page in before.get(i, []):
+            out.append(("h", 1, html.escape(title, quote=False), page))
+            depth.append(d)
+        if p is None:
+            break
+        if i in named:
+            out.append(("h", 1, p[2] if p[0] == "h" else p[1], page_of(p)))
+            depth.append(named[i])
+        elif p[0] == "h" and prose(plain(p[2]), True):
+            out.append(("p", p[2], "", p[3], None))
+        elif p[0] == "h":
+            out.append(p)
+            depth.append(1 if UNLISTED.match(plain(p[2])) else sub)
+        else:
+            out.append(p)
+    return out, depth
+
+
 def build(pdf_path):
     pages_seen = Pages(pdf_path)
     meta = pages_seen.metadata()
@@ -481,7 +649,7 @@ def build(pdf_path):
     if texty * 2 < len(pages):
         return scanned(pages_seen, good_title(meta.get("Title")) or stem, meta)
     column, span = widths(pages)
-    pieces = mend(flow_of(pages))
+    pieces = mend(flow_of(pages, pages_seen))
 
     # The title: the heading of the first page that is the PDF's own title, else its highest
     # heading, else the PDF's title, else the file's name. A heading before it on that page
@@ -498,7 +666,12 @@ def build(pdf_path):
             if i < title_at:
                 pieces[i] = ("p", pieces[i][2], "author", 0)
         pieces.pop(title_at)
-    depth = chapter_depths([(p[1], plain(p[2])) for p in pieces if p[0] == "h"])
+    outline = [o for o in (pages_seen.outline() if hasattr(pages_seen, "outline") else []) if squash(o[1])]
+    if len(outline) >= 2:
+        pieces, depth = by_outline(pieces, outline, len(pages))
+    else:
+        pieces = [("p", p[2], "", p[3], None) if p[0] == "h" and prose(plain(p[2]), False) else p for p in by_marks(pieces)]
+        depth = chapter_depths([(p[1], plain(p[2])) for p in pieces if p[0] == "h"])
 
     images = []
 
@@ -543,6 +716,7 @@ def build(pdf_path):
         else:
             cls = "author" if front and not piece[2] else piece[2]
             chapters[-1][1].append('<p class="%s">%s</p>' % (cls, piece[1]) if cls else "<p>%s</p>" % piece[1])
+    chapters = [c for k, c in enumerate(chapters) if k == 0 or not CONTENTS.match(plain(c[0]))]     # the reader has its own
     return title, meta_text(meta.get("Author")), [(t, body + notes) for t, body, notes in chapters if body or notes], images
 
 

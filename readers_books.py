@@ -28,7 +28,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.6.2"
+VERSION = "1.7.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 

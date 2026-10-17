@@ -42,7 +42,7 @@ reader, the same library, the same wording.
   the middle of a picture shows it on the whole window (the wheel or + and − zoom around the
   pointer, a drag moves it, 0 fits it again, a click or Esc closes it) — the way to read a table.
   Styles and footnote links are dropped; footnotes are small print. MOBI means PalmDoc.
-* A paper in PDF, opened or dropped like a book, is turned into an EPUB, and the EPUB goes on
+* A PDF — a paper, an essay, a novel — opened or dropped like a book, is turned into an EPUB, and the EPUB goes on
   the shelf (and, from its menu, in the library — so the phone reads it too); the PDF itself is
   left as it was. The open dialog, the shelf and the progress line say so. `paper2epub.py`
   finds the blocks of every page with [Marker](https://github.com/datalab-to/marker), from the PDF's own text: headings
@@ -56,6 +56,13 @@ reader, the same library, the same wording.
   converter is set up on first use, in a Python environment of its own (`paper-converter` in
   the app's data folder: Marker and the CPU build of torch, about 2 GB with its models; delete
   the folder to take it away); it never runs inside the app. A paper takes about ten seconds.
+  A book is helped by what the PDF knows besides Marker: its bookmarks give the chapters (the
+  upper levels open chapters, the deeper ones are headings inside); without bookmarks, lines
+  alone such as « – II – » or « Chapter 3 » open them. A line Marker lost is read from the text
+  layer rather than cut out; dialogue Marker took for a list keeps its dashes, a line each; a
+  heading that reads as a line of the text (« Il répondit : ») is a paragraph again; the printed
+  table of contents goes (the reader has its own), and so do a proof's crop marks. Measured on
+  Bel-Ami (472 pages, 80 s) and Lessig's Free Culture (352 pages, 64 s).
   On its own: `<that environment>/bin/python paper2epub.py paper.pdf paper.epub`.
   Papers are for the Linux packages and the source: the Windows and macOS builds have no
   Python of their own to set the converter up with.

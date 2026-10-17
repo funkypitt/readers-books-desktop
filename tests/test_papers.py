@@ -183,6 +183,101 @@ class Converter(unittest.TestCase):
         self.assertEqual(p2e.margin_of(PAGES[0], *p2e.main_column(PAGES)), 197)
 
 
+# A novel, as Marker gives some: its chapter lines as plain text, a line of dialogue taken for a
+# heading, lines it lost (empty blocks whose text only the PDF's text layer has), dialogue taken
+# for a list with its dashes eaten, a printed table of contents, a proof's crop marks.
+STORY = "Il marchait ainsi qu'au temps où il portait l'uniforme des hussards, la poitrine bombée, les jambes un peu entrouvertes. "
+
+
+def novel_page(*blocks):
+    return {"block_type": "Page", "bbox": [0, 0, 420, 600], "children": list(blocks)}
+
+
+NOVEL = [
+    novel_page(block("SectionHeader", [100, 200, 320, 230], "<h1>Bel-Ami</h1>"),
+               block("TableOfContents", [60, 300, 360, 500], "<p>– I – 3 – II – 5</p>")),
+    novel_page(block("SectionHeader", [120, 40, 300, 60], "<h1>Première Partie</h1>"),
+               block("Text", [190, 80, 230, 95], "<p>– I –</p>"),
+               block("Text", [60, 110, 360, 300], "<p>" + STORY * 3 + "</p>"),
+               block("SectionHeader", [60, 310, 220, 325], "<h2>Il répondit sans hésiter :</h2>"),
+               block("Text", [60, 330, 360, 400], "<p>« Je viens de me mettre sous la protection de saint Antoine. »</p>"),
+               block("Text", [60, 410, 360, 425], "<p>❚❘❙❚❘❙❚❘❙</p>"),
+               block("Text", [60, 430, 360, 445], ""),
+               block("Text", [60, 450, 360, 560], "<p>" + STORY + "Il était tard, comme il disait,</p>"),
+               block("Text", [60, 562, 360, 580], "<p>Mais personne ne l'écoutait plus dans la rue.</p>")),
+    novel_page(block("Text", [190, 40, 230, 55], "<p>– II –</p>"),
+               block("Text", [60, 70, 360, 200], "<p>" + STORY * 2 + "</p>"),
+               block("ListGroup", [60, 210, 360, 250], "", [
+                   block("ListItem", [60, 210, 360, 250], "<li> Oui, monsieur.</li>")])),
+    novel_page(block("Text", [190, 40, 230, 55], "<p>– III –</p>"),
+               block("Text", [60, 70, 360, 200], "<p>" + STORY + "</p>"),
+               block("SectionHeader", [60, 210, 360, 225], "<h1>Table des matières</h1>"),
+               block("Text", [60, 230, 360, 260], "<p>– I – 3</p>")),
+]
+NOVEL[3:3] = [novel_page(block("Text", [60, 40, 360, 560], "<p>" + STORY * 4 + "</p>")) for _ in range(6)]     # a book's length
+LAYER = {(1, 430): "« Où vas-tu ? »", (1, 410): "❚❘❙❚❘❙❚❘❙",
+         (2, 210): "– Oui, monsieur.\r\n– Mais qui êtes-vous ?\r\n« Personne. »"}
+
+
+class NovelPdf(NoPdf):
+    outlined = []
+
+    def metadata(self):
+        return {"Title": "Bel-Ami", "Author": "Guy de Maupassant"}
+
+    def __len__(self):
+        return len(NOVEL)
+
+    def text_in(self, number, bbox):
+        return LAYER.get((number, round(bbox[1])), "")
+
+    def outline(self):
+        return self.outlined
+
+
+class Book(unittest.TestCase):
+    def setUp(self):
+        p2e.Pages, p2e.marker_pages = NovelPdf, lambda _path: NOVEL
+        NovelPdf.outlined = []
+
+    def text_of(self, chapters):
+        return "\n".join("\n".join(b for b in body if b) for _t, body in chapters)
+
+    def test_a_novel_without_bookmarks_has_its_chapters_and_all_its_lines(self):
+        title, _authors, chapters, images = p2e.build(path("bel-ami.pdf"))
+        self.assertEqual(title, "Bel-Ami")
+        # "– I –" lines open the chapters; the printed contents are gone, the reader has its own
+        self.assertEqual([t for t, _b in chapters], ["Bel-Ami", "Première Partie", "– I –", "– II –", "– III –"])
+        text = self.text_of(chapters)
+        self.assertNotIn("3 – II – 5", text)
+        self.assertNotIn("Table des matières", text)
+        # a line of dialogue is not a heading; what Marker lost comes from the text layer, as text
+        self.assertIn("<p>Il répondit sans hésiter :</p>", text)
+        self.assertIn("<p>« Où vas-tu ? »</p>", text)
+        self.assertEqual(images, [])
+        self.assertNotIn("❚", text)
+        # dialogue taken for a list: a line each, with its dash
+        self.assertIn("<p>– Oui, monsieur.</p>\n<p>– Mais qui êtes-vous ?</p>\n<p>« Personne. »</p>", text)
+        # two paragraphs of the same page stay two, whatever their last and first words
+        self.assertIn("comme il disait,</p>\n<p>Mais personne", text)
+
+    def test_the_bookmarks_give_the_chapters(self):
+        NovelPdf.outlined = [(0, "Première Partie", 1), (1, "– I –", 1), (1, "– II –", 2), (1, "Épilogue", 9)]
+        _title, _authors, chapters, _images = p2e.build(path("bel-ami.pdf"))
+        # a bookmark with no line of its own opens its chapter at the top of its page; "– III –",
+        # not a bookmark, is a line of that chapter
+        self.assertEqual([t for t, _b in chapters], ["Bel-Ami", "Première Partie", "– I –", "– II –", "Épilogue"])
+        self.assertIn("<p>Il répondit sans hésiter :</p>", self.text_of(chapters))
+
+    def test_bookmarks_numbered_otherwise_than_the_headings_and_what_they_leave_out(self):
+        pieces = [("h", 2, "Abstract", 0), ("p", "Texte.", "", 0, None), ("h", 1, "CHAPTER THREE: Catalogs", 1),
+                  ("p", "Texte.", "", 1, None), ("h", 2, "Let's pause for a moment.", 1), ("h", 2, "Film", 1), ("h", 2, "References", 2)]
+        out, depth = p2e.by_outline(pieces, [(0, "3: Catalogs", 1), (1, "Film", 1)], 40)
+        headings = [(p[2], d) for p, d in zip([p for p in out if p[0] == "h"], depth)]
+        self.assertEqual(headings, [("Abstract", 1), ("CHAPTER THREE: Catalogs", 1), ("Film", 1), ("References", 1)])
+        self.assertIn(("p", "Let's pause for a moment.", "", 1, None), out)
+
+
 class Shelf(unittest.TestCase):
     def settle(self, main, until, what, seconds=20):
         end = time.time() + seconds

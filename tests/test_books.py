@@ -477,6 +477,34 @@ class Folders(unittest.TestCase):
         self.assertEqual(names("OPENED", {"ref:Books/novels/Dune.epub": 5, "ref:Books/science/Cosmos.epub": 9}),
                          ["Cosmos.epub", "Dune.epub", "Carl Sagan - Contact.epub", "Matilda.epub"])
 
+    def test_a_search_finds_every_word_in_name_author_or_folder(self):
+        b = [book("Books/1950s", "Simenon - Maigret et la vieille dame.epub"), book("Books/Élie", "Les Thibault.epub"), book("", "Dune.epub")]
+        names = lambda q: [x["name"] for x in rb.search_books(b, q)]
+        self.assertEqual(names(""), [])
+        self.assertEqual(names("   "), [])
+        self.assertEqual(names("MAIGRET 1950"), ["Simenon - Maigret et la vieille dame.epub"])   # case, folder
+        self.assertEqual(names("simenon dame"), ["Simenon - Maigret et la vieille dame.epub"])   # author, two words
+        self.assertEqual(names("elie"), ["Les Thibault.epub"])                                   # accent in the folder
+        self.assertEqual(names("Thibault, les"), ["Les Thibault.epub"])                          # punctuation
+        self.assertEqual(names("dune"), ["Dune.epub"])                                           # a book of the top
+        self.assertEqual(names("maigret dune"), [])                                              # every word, in one book
+        self.assertEqual(rb.plain_text("L’Étranger — d'Albert_Camus."), "l etranger d albert camus")
+
+    def test_the_search_page_lists_what_was_found_and_offers_to_search_again(self):
+        main = rb.Main()
+        main.remote.index = dict(rb.EMPTY_INDEX, books=list(self.DRIVE))
+        main.search("  sagan  ")
+        self.assertEqual(main.screen, (rb.SEARCH, "sagan"))
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["Carl Sagan - Contact"])
+        self.assertEqual(main.rows[0].title, "sagan · " + rb.n_books(1) + " · " + rb.order_name("NEWEST"))
+        self.assertIn(rb._("search again"), [m[0] for m in main.menu_items if m])
+        main.search("nothing of the kind")        # the open search is replaced, not stacked
+        self.assertEqual(main.screen, (rb.SEARCH, "nothing of the kind"))
+        self.assertEqual(main.stack.count(main.screen), 1)
+        self.assertEqual([r.title for r in main.rows if r.kind == rb.HINT], [rb._("no book matches")])
+        main.search("   ")                        # nothing asked: nothing changes
+        self.assertEqual(main.screen, (rb.SEARCH, "nothing of the kind"))
+
     def test_another_drive_drops_the_choice(self):
         cfg = {"url": "https://a.example/", "library_folders": ["Books"], "library_folders_asked": True}
         rb.set_library_url(cfg, "https://a.example/ ")

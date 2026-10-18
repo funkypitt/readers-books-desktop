@@ -17,6 +17,7 @@ import sys
 import threading
 import uuid
 import time
+import unicodedata
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
@@ -28,7 +29,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -124,6 +125,10 @@ STRINGS = {
   "%d folders could not be read": "%d dossiers n'ont pas pu être lus",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "aucun livre numérique trouvé sur le drive (epub, mobi, azw, fb2)",
   "all books": "tous les livres",
+  "search": "rechercher",
+  "title, author or folder": "titre, auteur ou dossier",
+  "no book matches": "aucun livre ne correspond",
+  "search again": "rechercher encore",
   "top of the drive": "racine du drive",
   "scanned on %s": "parcouru le %s",
   "stop the scan": "arrêter le parcours",
@@ -246,6 +251,10 @@ STRINGS = {
   "%d folders could not be read": "%d Ordner konnten nicht gelesen werden",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "kein E-Book auf dem Drive gefunden (epub, mobi, azw, fb2)",
   "all books": "alle Bücher",
+  "search": "suchen",
+  "title, author or folder": "Titel, Autor oder Ordner",
+  "no book matches": "kein Buch passt dazu",
+  "search again": "erneut suchen",
   "top of the drive": "Wurzel des Drives",
   "scanned on %s": "durchsucht am %s",
   "stop the scan": "Suche anhalten",
@@ -368,6 +377,10 @@ STRINGS = {
   "%d folders could not be read": "%d carpetas no se pudieron leer",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "no se encontró ningún libro electrónico en el drive (epub, mobi, azw, fb2)",
   "all books": "todos los libros",
+  "search": "buscar",
+  "title, author or folder": "título, autor o carpeta",
+  "no book matches": "ningún libro coincide",
+  "search again": "buscar de nuevo",
   "top of the drive": "raíz del drive",
   "scanned on %s": "recorrido el %s",
   "stop the scan": "detener el recorrido",
@@ -490,6 +503,10 @@ STRINGS = {
   "%d folders could not be read": "%d pastas não puderam ser lidas",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "nenhum livro eletrónico encontrado na drive (epub, mobi, azw, fb2)",
   "all books": "todos os livros",
+  "search": "pesquisar",
+  "title, author or folder": "título, autor ou pasta",
+  "no book matches": "nenhum livro corresponde",
+  "search again": "pesquisar de novo",
   "top of the drive": "raiz da drive",
   "scanned on %s": "percorrida a %s",
   "stop the scan": "parar o percurso",
@@ -613,6 +630,10 @@ STRINGS = {
   "%d folders could not be read": "не удалось прочитать папок: %d",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "на диске не найдено электронных книг (epub, mobi, azw, fb2)",
   "all books": "все книги",
+  "search": "поиск",
+  "title, author or folder": "название, автор или папка",
+  "no book matches": "ни одна книга не подходит",
+  "search again": "искать снова",
   "top of the drive": "корень диска",
   "scanned on %s": "просмотрено %s",
   "stop the scan": "остановить просмотр",
@@ -1619,6 +1640,30 @@ def remote_author(book):
     folder's name, where libraries file one author per folder."""
     title = remote_title(book)
     return title.split(" - ")[0].strip() if " - " in title else remote_folder_name(book)
+
+
+_SEPARATORS = re.compile(r"[\s_\-–—.,;:()\[\]'’\"«»]+")
+
+
+def plain_text(text):
+    """Text as searched: lower case, accents and other marks taken off, every separator a space."""
+    bare = "".join(c for c in unicodedata.normalize("NFD", text.lower()) if not unicodedata.combining(c))
+    return _SEPARATORS.sub(" ", bare).strip()
+
+
+def search_books(books, query):
+    """The books whose name, author or folder carries every word of `query`, accents and case
+    aside ("maigret 1950" finds "Simenon - Maigret et la vieille dame.epub" in "Books/1950s").
+    An empty query finds nothing: the list is asked for, not spilled."""
+    words = plain_text(query).split()
+    if not words:
+        return []
+    found = []
+    for b in books:
+        text = plain_text(" ".join((remote_title(b), remote_author(b), b["folder"].replace("/", " "))))
+        if all(w in text for w in words):
+            found.append(b)
+    return found
 
 
 _PROPFIND = ('<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/>'
@@ -3171,6 +3216,26 @@ class Reader(QtWidgets.QWidget):
             return None
         return next((h for h in self.shown if h["chapter"] == self.chapter and h["start"] <= place < h["end"]), None)
 
+    def reaches_middle(self, h, left, right):
+        """True when some of the highlight lies, on this page, between `left` and `right` (the
+        middle third of the window), where a click can open it without taking a page-turn zone."""
+        _font, area = self.frame()
+        for piece in self.pages[self.page]:
+            if not isinstance(piece, Lines):
+                continue
+            block = piece.block
+            for i in range(piece.first, piece.last + 1):
+                line = block.layout.lineAt(i)
+                first = block.to_chapter(line.textStart())
+                last = block.to_chapter(line.textStart() + line.textLength())
+                if h["end"] <= first or h["start"] >= last:
+                    continue
+                x1 = area.left() + line.cursorToX(block.to_laid(max(h["start"], first)))[0]
+                x2 = area.left() + (line.cursorToX(block.to_laid(min(h["end"], last)))[0] if h["end"] < last else line.naturalTextWidth())
+                if min(x1, x2) < right and max(x1, x2) > left:
+                    return True
+        return False
+
     def selection(self):
         if not self.selecting:
             return None
@@ -3320,12 +3385,14 @@ class Reader(QtWidgets.QWidget):
             self.selecting = None
             self.update()
             return
-        found = self.highlight_at(e.pos())
-        if found:
-            return self.main.highlight_menu(e.globalPos(), found)
         # As on a reading tablet: the left third goes back, the right third forward, the
         # middle opens the book's menu — or, on a picture, the picture on the whole window.
+        # A click on a highlight opens it, except in a page-turn zone when the highlight also
+        # runs through the middle, where it can be opened: a whole page highlighted still turns.
         third = self.width() / 3.0
+        found = self.highlight_at(e.pos())
+        if found and (third <= e.x() <= 2 * third or not self.reaches_middle(found, third, 2 * third)):
+            return self.main.highlight_menu(e.globalPos(), found)
         picture = self.picture_at(e.pos())
         if e.x() < third:
             self.turn(False)
@@ -3532,7 +3599,7 @@ class PictureView(QtWidgets.QWidget):
 # The window
 # ------------------------------------------------------------------------------------------
 
-SHELF, BOOK, CHAPTERS, SETTINGS, LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS = "shelf", "book", "chapters", "settings", "library", "folder", "all", "library_folders"
+SHELF, BOOK, CHAPTERS, SETTINGS, LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS, SEARCH = "shelf", "book", "chapters", "settings", "library", "folder", "all", "library_folders", "search"
 ADD_TO_LIBRARY = "add_to_library"       # choosing the folder of the library a book of the shelf is sent to
 UI_SIZES = {"S": 11, "M": 13, "L": 15}
 
@@ -4480,6 +4547,7 @@ class Main(QtWidgets.QMainWindow):
         if not folders and not progress and error is None and index["complete"] and index["scannedAt"] > 0:
             rows.append(Row(_("no e-book found on the drive (epub, mobi, azw, fb2)"), kind=HINT))
         if shown:
+            rows.append(Row(_("search"), _("title, author or folder"), self.ask_search))
             rows.append(Row(_("all books"), n_books(len(shown)), lambda: self.push((ALL_BOOKS,))))
         top = bool(cfg.get("library_top_folders"))
         for path, count, modified, spanned in folders:
@@ -4495,6 +4563,8 @@ class Main(QtWidgets.QMainWindow):
         menu.append((_("every folder"), lambda: self.set("library_top_folders", False)) if top
                     else (_("group by top folder"), lambda: self.set("library_top_folders", True)))
         menu.append((_("order") + " · " + order_name(cfg.get("folder_sort", "NAME")), self.order_menu(FOLDER_ORDERS, cfg.get("folder_sort", "NAME"), "folder_sort")))
+        if shown:
+            menu.append((_("search"), self.ask_search))
         menu.append((_("folders of the library"), lambda: self.push((LIBRARY_FOLDERS,))))
         menu.append((_("settings"), lambda: self.push((SETTINGS,))))
         return _("library"), rows, menu
@@ -4617,7 +4687,44 @@ class Main(QtWidgets.QMainWindow):
         books = sort_books(self.remote.shown(self.cfg), order, opened)
         return self.book_list(_("all books"), books, order, "all_books_sort", folder=True, opened=opened if order == "OPENED" else None)
 
-    def book_list(self, title, books, order, setting, heading=None, folder=False, base="", opened=None, extra=()):
+    def screen_search(self):
+        """The books of the library found by the words asked: every word must be in the name, the
+        author or the folder, accents and case aside; in the order of « all books »."""
+        query = self.screen[1]
+        order = self.cfg.get("all_books_sort", "NEWEST")
+        opened = self.opened_on_shelf()
+        books = sort_books(search_books(self.remote.shown(self.cfg), query), order, opened)
+        title, rows, menu = self.book_list(_("search"), books, order, "all_books_sort", folder=True, opened=opened if order == "OPENED" else None,
+                                           heading=" · ".join((query, n_books(len(books)), order_name(order))), searching=True)
+        if not books:
+            rows.append(Row(_("no book matches"), kind=HINT))
+        return title, rows, menu
+
+    def ask_search(self):
+        """The words to look for; the results replace a search already open."""
+        dialog = QtWidgets.QInputDialog(self)
+        dialog.setWindowTitle("Reader's Books")
+        dialog.setLabelText(_("title, author or folder"))
+        dialog.setOkButtonText(_("search"))
+        dialog.setCancelButtonText(_("cancel"))
+        dialog.setTextValue(self.screen[1] if self.screen[0] == SEARCH else "")
+        for line in dialog.findChildren(QtWidgets.QLineEdit):
+            line.setMinimumWidth(line.fontMetrics().averageCharWidth() * 40)
+        if dialog.exec_() != QtWidgets.QDialog.Accepted:
+            return
+        self.search(dialog.textValue())
+
+    def search(self, query):
+        query = " ".join(query.split())
+        if not query:
+            return
+        if self.screen[0] == SEARCH:
+            self.stack[-1] = (SEARCH, query)
+            self.show_screen(reset=True)
+        else:
+            self.push((SEARCH, query))
+
+    def book_list(self, title, books, order, setting, heading=None, folder=False, base="", opened=None, extra=(), searching=False):
         """The drive's books under a title, the order named above them and the orders offered
         under ⋯ (`extra` = what else the menu offers). A click fetches the book (once) and opens
         it. `folder` names each book's folder on its line, as seen from `base`."""
@@ -4632,6 +4739,7 @@ class Main(QtWidgets.QMainWindow):
             line = " · ".join(x for x in (state, seen, where, date_label(b["modified"]), _ext(b["name"]), size_label(b["size"])) if x)
             rows.append(Row(remote_title(b), line, lambda b=b: self.fetch(b)))
         menu = self.order_menu(BOOK_ORDERS, order, setting) + list(extra)
+        menu += [None, (_("search again"), self.ask_search)] if searching else [None, (_("search"), self.ask_search)]
         return title, rows, menu
 
     def fetch(self, book):

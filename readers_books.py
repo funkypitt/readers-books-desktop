@@ -29,7 +29,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -76,6 +76,14 @@ STRINGS = {
   "library": "bibliothèque",
   "black on white": "noir sur blanc",
   "white on black": "blanc sur noir",
+  "lavender": "lavande",
+  "sage": "sauge",
+  "nordic": "nordique",
+  "terracotta": "terracotta",
+  "coquette": "coquette",
+  "activist": "militante",
+  "sultry": "torride",
+  "nature": "nature",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window.": "rien sur l'étagère. Ouvrir un fichier epub, mobi, fb2 ou texte : d'ici, ou en le déposant sur cette fenêtre.",
   "not started": "pas commencé",
   "read": "lire",
@@ -201,6 +209,14 @@ STRINGS = {
   "library": "Bibliothek",
   "black on white": "Schwarz auf Weiß",
   "white on black": "Weiß auf Schwarz",
+  "lavender": "Lavendel",
+  "sage": "Salbei",
+  "nordic": "nordisch",
+  "terracotta": "Terrakotta",
+  "coquette": "kokett",
+  "activist": "kämpferisch",
+  "sultry": "glühend",
+  "nature": "Natur",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window.": "nichts im Regal. Eine epub-, mobi-, fb2- oder Textdatei öffnen: von hier oder durch Ablegen auf diesem Fenster.",
   "not started": "nicht begonnen",
   "read": "lesen",
@@ -327,6 +343,14 @@ STRINGS = {
   "library": "biblioteca",
   "black on white": "negro sobre blanco",
   "white on black": "blanco sobre negro",
+  "lavender": "lavanda",
+  "sage": "salvia",
+  "nordic": "nórdico",
+  "terracotta": "terracota",
+  "coquette": "coqueta",
+  "activist": "militante",
+  "sultry": "tórrido",
+  "nature": "naturaleza",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window.": "nada en la estantería. Abre un archivo epub, mobi, fb2 o de texto: desde aquí, o soltándolo sobre esta ventana.",
   "not started": "sin empezar",
   "read": "leer",
@@ -453,6 +477,14 @@ STRINGS = {
   "library": "biblioteca",
   "black on white": "preto sobre branco",
   "white on black": "branco sobre preto",
+  "lavender": "lavanda",
+  "sage": "sálvia",
+  "nordic": "nórdico",
+  "terracotta": "terracota",
+  "coquette": "coquete",
+  "activist": "militante",
+  "sultry": "tórrido",
+  "nature": "natureza",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window.": "nada na estante. Abra um ficheiro epub, mobi, fb2 ou de texto: daqui, ou largando-o sobre esta janela.",
   "not started": "por começar",
   "read": "ler",
@@ -579,6 +611,14 @@ STRINGS = {
   "library": "библиотека",
   "black on white": "чёрным по белому",
   "white on black": "белым по чёрному",
+  "lavender": "лаванда",
+  "sage": "шалфей",
+  "nordic": "северный",
+  "terracotta": "терракота",
+  "coquette": "кокетка",
+  "activist": "активистка",
+  "sultry": "знойный",
+  "nature": "природа",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file: from here, or by dropping it on this window.": "на полке пусто. Откройте файл epub, mobi, fb2 или текст: отсюда или перетащив его в это окно.",
   "not started": "не начата",
   "read": "читать",
@@ -2624,10 +2664,62 @@ def import_credentials(cfg, path):
 
 
 # ------------------------------------------------------------------------------------------
+# Colour themes: the two inks (white on black, black on white), then the palettes of the Plume
+# keyboard, in its order. (key, background, text, accent, text on the accent); in the two inks
+# the accent is the text colour, so they look as they always did.
+# ------------------------------------------------------------------------------------------
+
+PALETTES = [
+    ("DARK", "#000000", "#ffffff", "#ffffff", "#000000"),
+    ("LIGHT", "#ffffff", "#000000", "#000000", "#ffffff"),
+    ("LAVANDE", "#1f1a2e", "#f4efff", "#b8a4ff", "#1f1a2e"),
+    ("SAUGE", "#d9e0d4", "#1e2a21", "#4c7a5b", "#ffffff"),
+    ("NORDIQUE", "#2e3440", "#eceff4", "#88c0d0", "#2e3440"),
+    ("TERRACOTTA", "#e6d9cc", "#2b211b", "#c25e38", "#ffffff"),
+    ("COQUETTE", "#f3d9dc", "#4a1f2b", "#d2455e", "#ffffff"),
+    ("MILITANTE", "#f2eee4", "#121212", "#e8412e", "#ffffff"),
+    ("TORRIDE", "#1e0d13", "#f8e9e6", "#e02a50", "#fff4f2"),
+    ("NATURE", "#2b2a24", "#f2efe4", "#d19a4e", "#2b2a24"),
+]
+THEME_NAMES = {"DARK": "white on black", "LIGHT": "black on white", "LAVANDE": "lavender", "SAUGE": "sage",
+               "NORDIQUE": "nordic", "TERRACOTTA": "terracotta", "COQUETTE": "coquette", "MILITANTE": "activist",
+               "TORRIDE": "sultry", "NATURE": "nature"}
+
+
+def palette(key):
+    """{bg, fg, accent, on_accent} of a theme; an unknown key gives the default, white on black."""
+    for name, bg, fg, accent, on_accent in PALETTES:
+        if name == key:
+            return {"bg": bg, "fg": fg, "accent": accent, "on_accent": on_accent}
+    return palette(PALETTES[0][0])
+
+
+def next_theme(key):
+    """The theme after this one, round and round."""
+    keys = [p[0] for p in PALETTES]
+    return keys[(keys.index(key) + 1) % len(keys)] if key in keys else keys[0]
+
+
+def theme_name(key):
+    return _(THEME_NAMES.get(key, THEME_NAMES["DARK"]))
+
+
+def rgba(hex_colour, alpha):
+    """A style-sheet rgba() of a #rrggbb colour."""
+    h = hex_colour.lstrip("#")
+    return "rgba(%d,%d,%d,%s)" % (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), alpha)
+
+
+def is_dark(hex_colour):
+    h = hex_colour.lstrip("#")
+    return (0.299 * int(h[0:2], 16) + 0.587 * int(h[2:4], 16) + 0.114 * int(h[4:6], 16)) < 128
+
+
+# ------------------------------------------------------------------------------------------
 # Settings
 # ------------------------------------------------------------------------------------------
 
-DEFAULTS = {"dark": True, "font": "sans", "text_size": "M", "reader_pt": 0, "book_serif": False,
+DEFAULTS = {"theme": "DARK", "dark": True, "font": "sans", "text_size": "M", "reader_pt": 0, "book_serif": False,
             "keep_awake": True, "url": "", "username": "", "password": "",
             "notes_url": "", "notes_username": "", "notes_password": "",
             # the orders of a folder's books, of all books, of the folders, of the shelf; the library by top
@@ -2644,9 +2736,16 @@ def load_config():
     cfg = dict(DEFAULTS)
     try:
         with open(CONFIG_FILE, encoding="utf-8") as fh:
-            cfg.update(json.load(fh))
+            saved = json.load(fh)
     except Exception:
-        pass
+        saved = {}
+    if not isinstance(saved, dict):
+        saved = {}
+    cfg.update(saved)
+    if "theme" not in saved:        # a config from before the themes: its ink
+        cfg["theme"] = "DARK" if cfg.get("dark", True) else "LIGHT"
+    if cfg["theme"] not in THEME_NAMES:
+        cfg["theme"] = "DARK"
     return cfg
 
 
@@ -3018,6 +3117,7 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
         super().__init__(main)
         self.main = main
         self.fg, self.bg = QtGui.QColor("#fff"), QtGui.QColor("#000")
+        self.accent, self.on_accent = QtGui.QColor("#fff"), QtGui.QColor("#000")
         self.big, self.small = QtGui.QFont(), QtGui.QFont()
 
     def _row(self, index):
@@ -3048,7 +3148,7 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
         row = self._row(index)
         p.save()
         inverted = row.kind == ROW and (row.current or row.inverted or bool(option.state & QtWidgets.QStyle.State_Selected))
-        fg, bg = (self.bg, self.fg) if inverted else (self.fg, self.bg)
+        fg, bg = (self.on_accent, self.accent) if inverted else (self.fg, self.bg)
         p.fillRect(option.rect, bg)
         dim = QtGui.QColor(fg)
         dim.setAlphaF(0.6 if inverted else 0.55)
@@ -3242,9 +3342,9 @@ class Reader(QtWidgets.QWidget):
         start, end = self.text_of(self.chapter).words(*self.selecting)
         return (start, end) if end > start else None
 
-    def paint_marks(self, p, area, fg):
-        """The band behind what is highlighted, a line under what carries a comment, and a
-        stronger band behind what is being selected."""
+    def paint_marks(self, p, area, fg, accent):
+        """The band behind what is highlighted (the accent, faint), a line under what carries a
+        comment (the text colour), and a stronger band behind what is being selected."""
         marks = [(h["start"], h["end"], 0.22, bool((h.get("comment") or "").strip()))
                  for h in self.shown if h["chapter"] == self.chapter]
         chosen = self.selection()
@@ -3268,7 +3368,7 @@ class Reader(QtWidgets.QWidget):
                     x2 = line.cursorToX(block.to_laid(min(end, last)))[0] if end < last else line.naturalTextWidth()
                     if x2 <= x1:
                         continue
-                    band = QtGui.QColor(fg)
+                    band = QtGui.QColor(accent)
                     band.setAlphaF(strength)
                     rect = QtCore.QRectF(area.left() + x1, top + line.y(), x2 - x1, line.height())
                     p.fillRect(rect, band)
@@ -3305,7 +3405,7 @@ class Reader(QtWidgets.QWidget):
         if not self.book:
             return None
         font, area = self.frame()
-        key = (self.entry["id"], self.chapter, area.width(), area.height(), font.family(), font.pixelSize(), self.main.dark)
+        key = (self.entry["id"], self.chapter, area.width(), area.height(), font.family(), font.pixelSize(), self.main.theme)
         if key != self.key:
             dim = QtGui.QColor(self.main.colors["fg"])
             dim.setAlphaF(0.55)
@@ -3464,7 +3564,7 @@ class Reader(QtWidgets.QWidget):
                    fs.elidedText(self.book.title, QtCore.Qt.ElideRight, area.width() - 40))
         p.setFont(self.main.big_font())
         p.drawText(QtCore.QRect(area.right() - 39, 20, 40, fs.height()), QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter, "⋯")
-        self.paint_marks(p, area, fg)
+        self.paint_marks(p, area, fg, QtGui.QColor(self.main.colors["accent"]))
         for piece in page:
             if isinstance(piece, Lines):
                 p.setPen(fg)
@@ -3608,7 +3708,7 @@ class Main(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.cfg = load_config()
-        self.dark = bool(self.cfg.get("dark", True))
+        self.theme = self.cfg.get("theme", "DARK")
         self.library = Library()
         self.remote = RemoteLibrary()
         self.awake = Awake()
@@ -3629,7 +3729,7 @@ class Main(QtWidgets.QMainWindow):
         self.image_stores = {}
         self.seen_change = -1
         self.folders_before = []        # the library's folders as they were when their page was opened
-        self.colors = {"bg": "#000000", "fg": "#ffffff"}
+        self.colors = palette(self.theme)
         self.setWindowTitle("Reader's Books")
         self.setAcceptDrops(True)
         self._build()
@@ -3739,12 +3839,11 @@ class Main(QtWidgets.QMainWindow):
         return self._font(-2)
 
     def apply_style(self):
-        bg, fg = ("#000000", "#ffffff") if self.dark else ("#ffffff", "#000000")
-        dim = "rgba(255,255,255,0.55)" if self.dark else "rgba(0,0,0,0.55)"
-        rule = "rgba(255,255,255,0.25)" if self.dark else "rgba(0,0,0,0.25)"
+        self.colors = palette(self.theme)
+        bg, fg, accent, on_accent = self.colors["bg"], self.colors["fg"], self.colors["accent"], self.colors["on_accent"]
+        dim, rule = rgba(fg, 0.55), rgba(fg, 0.25)
         s = UI_SIZES.get(self.cfg.get("text_size"), 13)
         weight = 300 if self.cfg.get("font", "sans") == "sans" else 400
-        self.colors = {"bg": bg, "fg": fg}
         self.setStyleSheet(f"""
             QMainWindow, QWidget {{ background: {bg}; color: {fg}; font-family: "{self.ui_family()}";
                                     font-size: {s}pt; font-weight: {weight}; }}
@@ -3760,23 +3859,26 @@ class Main(QtWidgets.QMainWindow):
             QScrollBar::add-page, QScrollBar::sub-page {{ background: {bg}; }}
             QMenu {{ background: {bg}; color: {fg}; border: 1px solid {rule}; padding: 6px 0; }}
             QMenu::item {{ padding: 8px 26px; }}
-            QMenu::item:selected {{ background: {fg}; color: {bg}; }}
+            QMenu::item:selected {{ background: {accent}; color: {on_accent}; }}
             QMenu::item:disabled {{ color: {dim}; }}
             QMenu::separator {{ height: 1px; background: {rule}; margin: 6px 0; }}
             QLineEdit {{ background: {bg}; color: {fg}; border: 1px solid {rule}; padding: 6px; }}
             QPushButton {{ background: {bg}; color: {fg}; border: 1px solid {fg}; padding: 6px 18px; }}
-            QPushButton:default {{ background: {fg}; color: {bg}; }}
+            QPushButton:default {{ background: {accent}; color: {on_accent}; }}
             QToolTip {{ background: {bg}; color: {fg}; border: 1px solid {rule}; }}
         """)
         self.delegate.fg, self.delegate.bg = QtGui.QColor(fg), QtGui.QColor(bg)
+        self.delegate.accent, self.delegate.on_accent = QtGui.QColor(accent), QtGui.QColor(on_accent)
         self.delegate.big, self.delegate.small = self.big_font(), self.small_font()
         self.listing.doItemsLayout()
         self.reader.key = None
         self.reader.update()
 
-    def toggle_theme(self):
-        self.dark = not self.dark
-        self.set("dark", self.dark)
+    def next_theme(self):
+        """The theme after the current one: the other ink, then the Plume palettes."""
+        self.theme = next_theme(self.theme)
+        self.cfg["dark"] = is_dark(palette(self.theme)["bg"])      # for a version from before the themes
+        self.set("theme", self.theme)
 
     def set(self, key, value):
         self.cfg[key] = value
@@ -3924,7 +4026,7 @@ class Main(QtWidgets.QMainWindow):
             self.popup(self.rows[i].menu(), self.listing.viewport().mapToGlobal(point), self.rows[i].title)
 
     def theme_item(self):
-        return (_("black on white") if self.dark else _("white on black"), self.toggle_theme)
+        return (theme_name(next_theme(self.theme)), self.next_theme)
 
     # ---- the shelf ----
 
@@ -4352,7 +4454,7 @@ class Main(QtWidgets.QMainWindow):
         sizes = ("S", "M", "L")
         font_names = {"sans": _("sans-serif"), "serif": _("serif"), "mono": _("mono")}
         rows = [
-            Row(_("white on black") if self.dark else _("black on white"), _("colours"), self.toggle_theme),
+            Row(theme_name(self.theme), _("colours"), self.next_theme),
             Row(_("%d · auto", size) if not cfg.get("reader_pt") else str(size), _("reading size — click for larger"), lambda: self.set_reader_size(+1)),
             Row(_("smaller text"), "%d → %d" % (size, max(MIN_READER_PT, size - 1)), lambda: self.set_reader_size(-1)),
             Row(_("automatic size"), _("the size the app starts with"), lambda: self.set_reader_size(0)),

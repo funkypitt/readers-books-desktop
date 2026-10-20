@@ -126,6 +126,50 @@ class Shelf(unittest.TestCase):
         main.close()
 
 
+class Themes(unittest.TestCase):
+    def tearDown(self):
+        if os.path.exists(rb.CONFIG_FILE):
+            os.remove(rb.CONFIG_FILE)
+
+    def test_the_inks_come_first_then_the_plume_palettes_and_every_name_is_translated(self):
+        keys = [p[0] for p in rb.PALETTES]
+        self.assertEqual(keys, ["DARK", "LIGHT", "LAVANDE", "SAUGE", "NORDIQUE", "TERRACOTTA", "COQUETTE", "MILITANTE", "TORRIDE", "NATURE"])
+        self.assertEqual([rb.next_theme(k) for k in keys], keys[1:] + keys[:1])
+        self.assertEqual(rb.next_theme("bogus"), "DARK")
+        for ink in ("DARK", "LIGHT"):                 # the inks look as they always did: the accent is the text colour
+            self.assertEqual(rb.palette(ink)["accent"], rb.palette(ink)["fg"])
+            self.assertEqual(rb.palette(ink)["on_accent"], rb.palette(ink)["bg"])
+        self.assertEqual(rb.palette("TERRACOTTA"), {"bg": "#e6d9cc", "fg": "#2b211b", "accent": "#c25e38", "on_accent": "#ffffff"})
+        self.assertEqual(rb.palette("bogus"), rb.palette("DARK"))
+        for lang, table in rb.STRINGS.items():
+            for key in keys:
+                self.assertIn(rb.THEME_NAMES[key], table, "%s has no name for %s" % (lang, key))
+        self.assertEqual(rb.rgba("#2b211b", 0.55), "rgba(43,33,27,0.55)")
+        self.assertTrue(rb.is_dark("#1f1a2e") and not rb.is_dark("#e6d9cc"))
+
+    def test_a_config_from_before_the_themes_keeps_its_ink(self):
+        os.makedirs(rb.CONFIG_DIR, exist_ok=True)
+        for saved, theme in (({"dark": False}, "LIGHT"), ({"dark": True}, "DARK"), ({}, "DARK"),
+                             ({"theme": "SAUGE", "dark": True}, "SAUGE"), ({"theme": "bogus"}, "DARK")):
+            with open(rb.CONFIG_FILE, "w") as fh:
+                json.dump(saved, fh)
+            self.assertEqual(rb.load_config()["theme"], theme, saved)
+
+    def test_the_menu_entry_names_the_next_theme_and_moves_to_it(self):
+        main = rb.Main()
+        self.assertEqual(main.theme, "DARK")
+        self.assertEqual(main.theme_item()[0], rb._("black on white"))
+        main.next_theme()
+        self.assertEqual((main.theme, main.colors["bg"], main.delegate.accent.name()), ("LIGHT", "#ffffff", "#000000"))
+        self.assertEqual(main.theme_item()[0], rb._("lavender"))
+        main.next_theme()
+        self.assertEqual((main.theme, main.delegate.accent.name(), main.delegate.on_accent.name()), ("LAVANDE", "#b8a4ff", "#1f1a2e"))
+        self.assertIn("background: #b8a4ff; color: #1f1a2e", main.styleSheet())
+        saved = rb.load_config()
+        self.assertEqual((saved["theme"], saved["dark"]), ("LAVANDE", True))
+        main.close()
+
+
 class Pages(unittest.TestCase):
     def test_every_line_is_on_one_page_and_no_page_overflows(self):
         book = rb.parse_book(make_books.epub(path("p.epub")), rb.EPUB, "p")

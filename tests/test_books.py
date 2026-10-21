@@ -139,8 +139,13 @@ class Themes(unittest.TestCase):
         for ink in ("DARK", "LIGHT"):                 # the inks look as they always did: the accent is the text colour
             self.assertEqual(rb.palette(ink)["accent"], rb.palette(ink)["fg"])
             self.assertEqual(rb.palette(ink)["on_accent"], rb.palette(ink)["bg"])
-        self.assertEqual(rb.palette("TERRACOTTA"), {"bg": "#e6d9cc", "fg": "#2b211b", "accent": "#c25e38", "on_accent": "#ffffff"})
+        self.assertEqual(rb.palette("TERRACOTTA"), {"bg": "#e6d9cc", "fg": "#2b211b", "accent": "#c25e38", "on_accent": "#ffffff",
+                                                     "tile": "#fcf7f1", "tile2": "#c8b6a5", "press": "#c8b6a5", "tiles": True})
         self.assertEqual(rb.palette("bogus"), rb.palette("DARK"))
+        for ink in ("DARK", "LIGHT"):                 # no tiles in the inks: text on the page, as always
+            self.assertFalse(rb.palette(ink)["tiles"])
+            self.assertEqual((rb.palette(ink)["tile"], rb.palette(ink)["press"]), (rb.palette(ink)["bg"], rb.palette(ink)["bg"]))
+        self.assertTrue(all(rb.palette(k)["tiles"] for k in keys[2:]))
         for lang, table in rb.STRINGS.items():
             for key in keys:
                 self.assertIn(rb.THEME_NAMES[key], table, "%s has no name for %s" % (lang, key))
@@ -165,6 +170,14 @@ class Themes(unittest.TestCase):
         main.next_theme()
         self.assertEqual((main.theme, main.delegate.accent.name(), main.delegate.on_accent.name()), ("LAVANDE", "#b8a4ff", "#1f1a2e"))
         self.assertIn("background: #b8a4ff; color: #1f1a2e", main.styleSheet())
+        self.assertTrue(main.delegate.tiles)          # a palette: the rows, buttons and menus are cards
+        self.assertEqual((main.delegate.tile.name(), main.delegate.press.name()), ("#3b3352", "#5a4f78"))
+        self.assertIn("QMenu { background: #3b3352", main.styleSheet())
+        self.assertIn("border-radius: 10px", main.styleSheet())
+        main.theme = "LIGHT"
+        main.apply_style()
+        self.assertFalse(main.delegate.tiles)         # an ink: no card anywhere
+        self.assertNotIn("border-radius: 10px", main.styleSheet())
         saved = rb.load_config()
         self.assertEqual((saved["theme"], saved["dark"]), ("LAVANDE", True))
         main.close()

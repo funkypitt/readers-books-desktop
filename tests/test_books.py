@@ -429,6 +429,14 @@ class Highlights(unittest.TestCase):
         shown = rb.anchor_highlights([good, moved, lost], book)
         self.assertEqual([(h["start"], h["end"]) for h in shown], [(16, 27), (16, 27)])
 
+    def test_a_passage_goes_to_the_clipboard_as_it_is(self):
+        main = rb.Main()
+        main.copy_text("Il pleuvait sur la ville.")
+        self.assertEqual(rb.QtWidgets.QApplication.clipboard().text(), "Il pleuvait sur la ville.")
+        for lang, table in rb.STRINGS.items():
+            self.assertIn("copy", table, lang)
+        main.close()
+
     def test_where_the_notes_go(self):
         cfg = {"url": "https://dav.example/", "username": "u", "password": "p", "notes_url": "https://dav.example/Notes"}
         self.assertEqual(rb.notes_account(cfg), ("https://dav.example/Notes/", "u", "p"))

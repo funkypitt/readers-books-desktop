@@ -29,7 +29,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.11.0"
+VERSION = "1.12.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -64,6 +64,7 @@ STRINGS = {
   "add a comment": "ajouter un commentaire",
   "edit the comment": "modifier le commentaire",
   "remove the highlight": "retirer le surlignage",
+  "copy": "copier",
   "export the highlights": "exporter les surlignages",
   "highlights": "surlignages",
   "Reader's Notes folder": "dossier de Reader's Notes",
@@ -197,6 +198,7 @@ STRINGS = {
   "add a comment": "Kommentar hinzufügen",
   "edit the comment": "Kommentar ändern",
   "remove the highlight": "Markierung entfernen",
+  "copy": "kopieren",
   "export the highlights": "Markierungen exportieren",
   "highlights": "Markierungen",
   "Reader's Notes folder": "Ordner von Reader's Notes",
@@ -331,6 +333,7 @@ STRINGS = {
   "add a comment": "añadir un comentario",
   "edit the comment": "editar el comentario",
   "remove the highlight": "quitar el resaltado",
+  "copy": "copiar",
   "export the highlights": "exportar los resaltados",
   "highlights": "resaltados",
   "Reader's Notes folder": "carpeta de Reader's Notes",
@@ -465,6 +468,7 @@ STRINGS = {
   "add a comment": "adicionar um comentário",
   "edit the comment": "editar o comentário",
   "remove the highlight": "retirar o destaque",
+  "copy": "copiar",
   "export the highlights": "exportar os destaques",
   "highlights": "destaques",
   "Reader's Notes folder": "pasta do Reader's Notes",
@@ -599,6 +603,7 @@ STRINGS = {
   "add a comment": "добавить комментарий",
   "edit the comment": "изменить комментарий",
   "remove the highlight": "убрать выделение",
+  "copy": "копировать",
   "export the highlights": "экспортировать выделения",
   "highlights": "выделения",
   "Reader's Notes folder": "папка Reader's Notes",
@@ -4291,7 +4296,12 @@ class Main(QtWidgets.QMainWindow):
         text = self.reader.text_of(chapter).cut(start, end)
         self.popup([(_("highlight"), lambda: self.add_highlight(chapter, start, end, text, False)),
                     (_("comment"), lambda: self.add_highlight(chapter, start, end, text, True)),
+                    (_("copy"), lambda: self.copy_text(text)),
                     None, (_("cancel"), lambda: None)], where)
+
+    def copy_text(self, text):
+        """The passage alone, for a message or a note elsewhere: the export carries the attribution."""
+        QtWidgets.QApplication.clipboard().setText(text)
 
     def ask_comment(self, initial=""):
         dialog = QtWidgets.QInputDialog(self)
@@ -4335,8 +4345,11 @@ class Main(QtWidgets.QMainWindow):
             self.change_highlights([dict(h, deleted=True, text="", comment="", modified=_now()) if h["id"] == found["id"] else h
                                     for h in self.reader.highlights])
 
+        def copy():
+            self.copy_text(self.reader.text_of(found["chapter"]).cut(found["start"], found["end"]))
+
         if not comment:
-            return self.popup([(_("add a comment"), edit), (_("remove the highlight"), remove)], where)
+            return self.popup([(_("add a comment"), edit), (_("copy"), copy), (_("remove the highlight"), remove)], where)
         dialog = QtWidgets.QDialog(self)
         dialog.setWindowTitle("Reader's Books")
         box = QtWidgets.QVBoxLayout(dialog)
@@ -4348,11 +4361,13 @@ class Main(QtWidgets.QMainWindow):
         buttons = QtWidgets.QDialogButtonBox()
         closing = buttons.addButton(_("ok"), QtWidgets.QDialogButtonBox.AcceptRole)
         editing = buttons.addButton(_("edit the comment"), QtWidgets.QDialogButtonBox.ActionRole)
+        copying = buttons.addButton(_("copy"), QtWidgets.QDialogButtonBox.ActionRole)
         removing = buttons.addButton(_("remove the highlight"), QtWidgets.QDialogButtonBox.ActionRole)
         closing.setDefault(True)
         choice = []
         closing.clicked.connect(dialog.accept)
         editing.clicked.connect(lambda: (choice.append(edit), dialog.accept()))
+        copying.clicked.connect(lambda: (choice.append(copy), dialog.accept()))
         removing.clicked.connect(lambda: (choice.append(remove), dialog.accept()))
         box.addWidget(buttons)
         dialog.exec_()

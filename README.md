@@ -90,6 +90,13 @@ reader, the same library, the same wording.
   says which magazine it is, if any).
   Papers are for the Linux packages and the source: the Windows and macOS builds have no
   Python of their own to set the converter up with.
+* The library's page keeps apart what is a tool and what is books: **search** and **sync now**
+  are two framed buttons, with what the sync did under them, and what the library asks for (a
+  choice of folders, a scan to carry on) in small print; under a rule, **on the drive** heads the
+  books only — news, all books and the folders. A sync lists first the folders the last syncs
+  found books in, at once, then the folders on the way to them, then the rest of the drive (where
+  new books are only looked for): on a drive of 20 000 folders, the 77 that hold books are up to
+  date in seconds.
 * **news** in the library (there only when the library holds some): the issues of newspapers and
   magazines from every folder in one list, the newest first by the file's creation date on the
   drive (else its last change). An issue is told from a book as the reader tells a magazine —

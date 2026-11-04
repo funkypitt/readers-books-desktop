@@ -700,12 +700,30 @@ class LibraryPage(unittest.TestCase):
         main.show()
         self.assertEqual(main.stack, [(rb.LIBRARY,)])          # a library set up: the app opens on it
         # at its top, the books on this computer (no book read yet: nothing to carry on), then the sync
-        self.assertEqual([r.title for r in main.rows[:2]], [rb._("on this computer"), rb._("sync now")])
+        self.assertEqual(main.rows[0].title, rb._("on this computer"))
+        self.assertEqual(main.rows[1].kind, rb.TOOLS)
         self.synced(main)
         titles = [r.title for r in main.rows]
-        self.assertEqual(titles[:2], [rb._("on this computer"), rb._("sync now")])
-        self.assertEqual(main.rows[1].secondary, rb._("scanned on %s", rb.date_label(main.remote.index["scannedAt"])))
-        self.assertIn(rb._("keep only some folders?"), titles)
+        self.assertEqual(titles[0], rb._("on this computer"))
+        # the tools are buttons, apart from the books: search and sync, what the sync did under them
+        tools = main.rows[1]
+        self.assertEqual((tools.kind, [t[0] for t in tools.tools]), (rb.TOOLS, [rb._("search"), rb._("sync now")]))
+        self.assertEqual(tools.secondary, rb._("scanned on %s", rb.date_label(main.remote.index["scannedAt"])))
+        self.assertEqual(next(r for r in main.rows if r.title == rb._("keep only some folders?")).kind, rb.NOTE)
+        # then the drive's books under their own heading: collections and folders only
+        at = next(i for i, r in enumerate(main.rows) if r.kind == rb.SECTION and r.title == rb._("on the drive").upper())
+        self.assertTrue(all(r.kind == rb.ROW for r in main.rows[at + 1:]), [(r.kind, r.title) for r in main.rows[at + 1:]])
+        self.assertNotIn(rb._("search"), [r.title for r in main.rows[at + 1:]])
+        # a click on a button does what it says
+        item = main.listing.item(1)
+        rect = main.listing.visualItemRect(item)
+        boxes = main.delegate.tool_rects(tools, rect)
+        main.listing.last_press = boxes[0].center()
+        asked = []
+        main.ask_search = lambda: asked.append(True)
+        main.rows[1].tools[0] = (rb._("search"), main.ask_search)
+        main.activate(item)
+        self.assertEqual(asked, [True])
         self.assertEqual([t for t in titles if "/" in t or t in ("Essais", "Romans")], ["Essais", "Romans", "Romans/Maigret", "transcriptions/Une chaîne"])
         self.assertEqual(next(r.secondary for r in main.rows if r.title == rb._("all books")), rb.n_books(4))
         self.shot(main, "library")
@@ -1047,6 +1065,7 @@ class Magazines(unittest.TestCase):
         if not shutil.which("rclone"):
             self.skipTest("rclone is needed to serve the test drive")
         drive = path("magazines-drive")
+        shutil.rmtree(drive, ignore_errors=True)        # the issues a run before added are not on this drive
         os.makedirs(os.path.join(drive, "journaux"), exist_ok=True)
         now = time.time()
         for n, (name, title) in enumerate([("2026-11-02-24heures.epub", "24 heures — Edition du lundi 2 novembre 2026"),
@@ -1301,6 +1320,22 @@ def file_reader(name):
             fh.seek(start)
             return fh.read(length), size
     return read
+
+
+class SyncOrder(unittest.TestCase):
+    def test_the_folders_with_books_are_listed_first_then_the_way_to_them_then_the_rest(self):
+        w = rb.Walk({"Books/Maigret", "newspapers/journaux"}, lambda ref: ref[len("dav:"):])
+        for ref in ("dav:", "dav:Photos", "dav:Books", "dav:Photos/2020", "dav:newspapers/journaux", "dav:Books/Maigret", "dav:newspapers", "dav:Books/Maigret"):
+            w.add(ref)
+        order = []
+        while True:
+            ref = w.next()
+            if ref is None:
+                break
+            order.append(ref)
+        self.assertEqual(order, ["dav:newspapers/journaux", "dav:Books/Maigret", "dav:", "dav:Books", "dav:newspapers", "dav:Photos", "dav:Photos/2020"])
+        w.retry("dav:x")
+        self.assertEqual(w.next(), "dav:x")
 
 
 class News(unittest.TestCase):

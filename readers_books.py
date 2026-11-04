@@ -30,7 +30,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.17.0"
+VERSION = "1.18.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -151,6 +151,7 @@ STRINGS = {
   "%d folders could not be read": "%d dossiers n'ont pas pu être lus",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "aucun livre numérique trouvé sur le drive (epub, mobi, azw, fb2)",
   "all books": "tous les livres",
+  "on the drive": "sur le drive",
   "news": "actualités",
   "latest %s": "dernier : %s",
   "looking for more… %d/%d": "recherche en cours… %d/%d",
@@ -304,6 +305,7 @@ STRINGS = {
   "%d folders could not be read": "%d Ordner konnten nicht gelesen werden",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "kein E-Book auf dem Drive gefunden (epub, mobi, azw, fb2)",
   "all books": "alle Bücher",
+  "on the drive": "auf dem Laufwerk",
   "news": "Nachrichten",
   "latest %s": "neueste: %s",
   "looking for more… %d/%d": "Suche läuft… %d/%d",
@@ -457,6 +459,7 @@ STRINGS = {
   "%d folders could not be read": "%d carpetas no se pudieron leer",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "no se encontró ningún libro electrónico en el drive (epub, mobi, azw, fb2)",
   "all books": "todos los libros",
+  "on the drive": "en el disco",
   "news": "noticias",
   "latest %s": "último: %s",
   "looking for more… %d/%d": "buscando más… %d/%d",
@@ -610,6 +613,7 @@ STRINGS = {
   "%d folders could not be read": "%d pastas não puderam ser lidas",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "nenhum livro eletrónico encontrado na drive (epub, mobi, azw, fb2)",
   "all books": "todos os livros",
+  "on the drive": "no disco",
   "news": "notícias",
   "latest %s": "último: %s",
   "looking for more… %d/%d": "procurando mais… %d/%d",
@@ -764,6 +768,7 @@ STRINGS = {
   "%d folders could not be read": "не удалось прочитать папок: %d",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "на диске не найдено электронных книг (epub, mobi, azw, fb2)",
   "all books": "все книги",
+  "on the drive": "на диске",
   "news": "новости",
   "latest %s": "последний: %s",
   "looking for more… %d/%d": "идёт поиск… %d/%d",
@@ -3639,6 +3644,43 @@ class Following:
 EMPTY_INDEX = {"scannedAt": 0, "source": "", "books": [], "complete": True, "frontier": [], "failed": [], "folders": 0}
 
 
+class Walk:
+    """The folders a sync has still to list, by what the last syncs found: those that held books,
+    then those on the way to them, then the others; each folder once, known by its path (the
+    drive's own address and the one made from a path may be written differently). The phone's
+    RemoteLibrary.Walk."""
+
+    def __init__(self, known, path_of):
+        self.known = set(known)
+        self.path_of = path_of
+        self.on_the_way = {"/".join(f.split("/")[:i]) for f in self.known for i in range(len(f.split("/")))}
+        self.ranks = ([], [], [])
+        self.seen = set()
+
+    def rank(self, path):
+        return 0 if path in self.known else 1 if path in self.on_the_way else 2
+
+    def add(self, ref):
+        path = self.path_of(ref)
+        if path not in self.seen:
+            self.seen.add(path)
+            self.ranks[self.rank(path)].append(ref)
+
+    def retry(self, ref):
+        """Back first in line (a refused login: the sync carries on from it)."""
+        self.seen.add(self.path_of(ref))
+        self.ranks[0].insert(0, ref)
+
+    def next(self):
+        for r in self.ranks:
+            if r:
+                return r.pop(0)
+        return None
+
+    def all(self):
+        return [ref for r in self.ranks for ref in r]
+
+
 class RemoteLibrary:
     """The drive's e-books as scanned so far, kept on disk so the library opens at once.
 
@@ -3943,16 +3985,27 @@ class RemoteLibrary:
         # A pool of workers over one queue, so a slow folder holds nobody else back. Folders that
         # failed last time get another chance now. Each folder listed is merged into the books
         # known so far, so the library stays whole on the screen while the drive is walked.
+        # The queue goes by what the last syncs found: the folders that held books first (asked for
+        # at once, without waiting for the walk to reach them), then the folders on the way to
+        # them, then the rest of the drive, where new books are only looked for.
         lock = threading.Lock()
         books = list(index["books"])
-        queue = list(dict.fromkeys(index["frontier"] + index["failed"]))
+        queue = Walk({b["folder"] for b in books if in_library(chosen, b["folder"], excluded)}, remote.folder_path)
+        for f in index["frontier"] + index["failed"]:
+            queue.add(f)
+        seeded = set()
+        if from_top:
+            for path in sorted(queue.known):
+                ref = remote.folder_ref(path)
+                seeded.add(ref)
+                queue.add(ref)
         in_flight, failed = set(), []
         state = {"folders": index["folders"], "fatal": None, "dirty": False}
 
         def snapshot(complete):
             with lock:
                 state["dirty"] = False
-                return dict(index, books=list(books), frontier=[] if complete else queue + sorted(in_flight),
+                return dict(index, books=list(books), frontier=[] if complete else queue.all() + sorted(in_flight),
                             failed=list(failed), folders=state["folders"], scannedAt=_now(), complete=complete)
 
         def worker():
@@ -3960,8 +4013,8 @@ class RemoteLibrary:
                 with lock:
                     if state["fatal"] or state["folders"] + len(in_flight) >= MAX_FOLDERS:
                         return
-                    if queue:
-                        folder = queue.pop(0)
+                    folder = queue.next()
+                    if folder is not None:
                         in_flight.add(folder)
                     elif not in_flight:
                         return
@@ -3975,15 +4028,17 @@ class RemoteLibrary:
                     in_flight.discard(folder)
                     if result:
                         # a folder left out is not walked; its books stay known, so it can be taken back
-                        queue.extend(d for d in result[0] if not left_out(excluded, remote.folder_path(d)))
+                        for d in result[0]:
+                            if not left_out(excluded, remote.folder_path(d)):
+                                queue.add(d)
                         books[:] = merge_folder(books, remote.folder_path(folder), [remote.folder_path(d) for d in result[0]], result[1])
                         state["folders"] += 1
                     elif isinstance(error, WrongLogin):
                         # Back on the list: once the login is put right, the scan carries on
                         # from this very folder instead of finding nothing left to do.
                         state["fatal"] = error
-                        queue.insert(0, folder)
-                    elif folder in roots and "404" in str(error):
+                        queue.retry(folder)
+                    elif (folder in roots or folder in seeded) and "404" in str(error):
                         # A chosen folder the drive no longer has (or no transcripts folder yet) is simply empty.
                         path = remote.folder_path(folder)
                         books[:] = [b for b in books if not folder_under(path, b["folder"])]
@@ -5494,14 +5549,16 @@ class Worker(QtCore.QObject):
 # ------------------------------------------------------------------------------------------
 
 ROW, HINT, SECTION, RULE = "row", "hint", "section", "rule"
+TOOLS, NOTE = "tools", "note"       # a page's buttons (not books), and what it asks for in small print
 THUMB = 64
 
 
 class Row:
     """`current` = the row one stands on (the list opens on it); `inverted` = drawn the same way
     without being it (a folder chosen for the library)."""
-    def __init__(self, title="", secondary="", action=None, menu=None, kind=ROW, current=False, lines=2, thumb=None, inverted=False, thumb_size=None):
+    def __init__(self, title="", secondary="", action=None, menu=None, kind=ROW, current=False, lines=2, thumb=None, inverted=False, thumb_size=None, tools=None):
         self.title, self.secondary, self.action, self.menu = title, secondary, action, menu
+        self.tools = tools or []        # TOOLS: (label, action) per button
         self.kind, self.current, self.lines, self.thumb, self.inverted = kind, current, lines, thumb, inverted
         self.thumb_size = thumb_size or THUMB
 
@@ -5532,6 +5589,14 @@ TILE_CORNER, TILE_GAP_H, TILE_GAP_V = 12, 8, 3      # a card's radius and its ma
 
 class RowDelegate(QtWidgets.QStyledItemDelegate):
     PAD_H, PAD_V = 24, 11
+    TOOL_H, TOOL_GAP = 40, 10
+
+    def tool_rects(self, row, rect):
+        """Where each button of a TOOLS row is drawn (and clicked)."""
+        n = max(1, len(row.tools))
+        left, top = rect.left() + self.PAD_H - 6, rect.top() + self.PAD_V
+        width = (rect.width() - 2 * (self.PAD_H - 6) - (n - 1) * self.TOOL_GAP) // n
+        return [QtCore.QRect(left + i * (width + self.TOOL_GAP), top, width, self.TOOL_H) for i in range(n)]
 
     def __init__(self, main):
         super().__init__(main)
@@ -5540,6 +5605,11 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
         self.accent, self.on_accent = QtGui.QColor("#fff"), QtGui.QColor("#000")
         self.tile, self.press, self.tiles = QtGui.QColor("#000"), QtGui.QColor("#000"), False
         self.big, self.small = QtGui.QFont(), QtGui.QFont()
+
+    def tool_font(self):
+        f = QtGui.QFont(self.small)
+        f.setPointSizeF(self.small.pointSizeF() * 1.12 if self.small.pointSizeF() > 0 else 11)
+        return f
 
     def _row(self, index):
         i = index.data(QtCore.Qt.UserRole)
@@ -5559,6 +5629,10 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
             return QtCore.QSize(width, fs.height() + 20)
         if row.kind == HINT:
             return QtCore.QSize(width, len(wrap(row.title, self.small, width - 2 * self.PAD_H, 12)) * fs.height() + 2 * self.PAD_V)
+        if row.kind == TOOLS:
+            return QtCore.QSize(width, self.TOOL_H + 2 * self.PAD_V + (fs.height() + 6 if row.secondary else 0))
+        if row.kind == NOTE:
+            return QtCore.QSize(width, fs.height() * 2 + 12)
         height = len(wrap(row.title, self.big, self._width(row, width), row.lines)) * fb.height()
         if row.secondary:
             height += fs.height() + 2
@@ -5598,6 +5672,36 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
             p.setPen(dim)
             p.drawText(QtCore.QRect(r.left(), r.bottom() - fs.height() + 6, r.width(), fs.height()),
                        QtCore.Qt.AlignLeft, fs.elidedText(row.title, QtCore.Qt.ElideRight, r.width()))
+        elif row.kind == TOOLS:
+            # buttons, not books: a thin frame (a card with tiles), the text a size smaller
+            p.setRenderHint(QtGui.QPainter.Antialiasing, True)
+            frame = QtGui.QColor(self.fg)
+            frame.setAlphaF(0.3)
+            for (label, _a), box in zip(row.tools, self.tool_rects(row, option.rect)):
+                if self.tiles:
+                    p.setPen(QtCore.Qt.NoPen)
+                    p.setBrush(self.tile)
+                else:
+                    p.setPen(QtGui.QPen(frame, 1))
+                    p.setBrush(QtCore.Qt.NoBrush)
+                p.drawRoundedRect(QtCore.QRectF(box).adjusted(0.5, 0.5, -0.5, -0.5), TILE_CORNER if self.tiles else 8, TILE_CORNER if self.tiles else 8)
+                p.setPen(self.fg)
+                p.setFont(self.tool_font())
+                p.drawText(box, QtCore.Qt.AlignCenter, QtGui.QFontMetrics(self.tool_font()).elidedText(label, QtCore.Qt.ElideRight, box.width() - 12))
+            p.setRenderHint(QtGui.QPainter.Antialiasing, False)
+            if row.secondary:
+                p.setFont(self.small)
+                p.setPen(dim)
+                p.drawText(QtCore.QRect(option.rect.left(), option.rect.top() + self.PAD_V + self.TOOL_H + 6, option.rect.width(), fs.height()),
+                           QtCore.Qt.AlignHCenter, fs.elidedText(row.secondary, QtCore.Qt.ElideRight, r.width()))
+        elif row.kind == NOTE:
+            p.setFont(self.tool_font())
+            p.setPen(fg)
+            ft = QtGui.QFontMetrics(self.tool_font())
+            p.drawText(QtCore.QRect(r.left(), option.rect.top() + 4, r.width(), ft.height()), QtCore.Qt.AlignLeft, ft.elidedText("› " + row.title, QtCore.Qt.ElideRight, r.width()))
+            p.setFont(self.small)
+            p.setPen(dim)
+            p.drawText(QtCore.QRect(r.left(), option.rect.top() + 6 + ft.height(), r.width(), fs.height()), QtCore.Qt.AlignLeft, fs.elidedText(row.secondary, QtCore.Qt.ElideRight, r.width()))
         elif row.kind == HINT:
             p.setFont(self.small)
             p.setPen(dim)
@@ -5646,6 +5750,12 @@ class Clickable(QtWidgets.QLabel):
 
 class Listing(QtWidgets.QListWidget):
     """Up and down walk the rows that do something; the rest is the list's."""
+    last_press = QtCore.QPoint()
+
+    def mousePressEvent(self, e):
+        self.last_press = e.pos()
+        super().mousePressEvent(e)
+
     def keyPressEvent(self, e):
         if e.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter) and self.currentItem():
             self.itemActivated.emit(self.currentItem())
@@ -6584,6 +6694,13 @@ class Main(QtWidgets.QMainWindow):
 
     def activate(self, item):
         i = item.data(QtCore.Qt.UserRole)
+        if i is not None and i < len(self.rows) and self.rows[i].kind == TOOLS:
+            rect = self.listing.visualItemRect(item)
+            for (_label, action), box in zip(self.rows[i].tools, self.delegate.tool_rects(self.rows[i], rect)):
+                if box.contains(self.listing.last_press):
+                    self.listing.clearSelection()
+                    action()
+            return
         if i is not None and i < len(self.rows) and self.rows[i].action:
             self.listing.clearSelection()
             self.listing.setCurrentItem(None)
@@ -7266,10 +7383,14 @@ class Main(QtWidgets.QMainWindow):
             return _("library"), [Row(LIBRARY_HINT(), kind=HINT)] + self.account_rows() + [Row(kind=RULE)] + self.credentials_rows(), None
         index, progress, error = remote.index, remote.progress if remote.scanning else None, remote.error
         rows = self.home_rows()
-        # the sync, by hand, with where it is or when it last ran
+        folders, shown = remote.folders(cfg), remote.shown(cfg)
+        # the tools, set apart from the books: buttons, what the sync did or does under them, and
+        # what it asks for (a choice of folders, a scan to carry on, an error) in small print
         state = (_("scanning… %d folders, %d books", progress[0], progress[1]) if progress
                  else _("scanned on %s", date_label(index["scannedAt"])) if index["scannedAt"] > 0 else "")
-        rows.append(Row(_("sync now"), state, lambda: None if remote.scanning else self.scan(False)))
+        tools = [(_("search"), self.ask_search)] if shown else []
+        tools.append((_("stop the scan"), self.stop_scan) if progress else (_("sync now"), lambda: self.scan(False)))
+        rows.append(Row(kind=TOOLS, tools=tools, secondary=state))
         if error is not None and not progress:
             rows.append(Row(_("the drive refused the login") if isinstance(error, WrongLogin)
                             else _("the drive could not be read: %s", str(error)[:160] or type(error).__name__), kind=HINT))
@@ -7277,18 +7398,18 @@ class Main(QtWidgets.QMainWindow):
         known = [f for f in remote.known_folders() if f[0]]
         if (not progress and index["complete"] and index["scannedAt"] > 0 and not cfg.get("library_folders_asked")
                 and not chosen_folders(cfg) and len(known) > 1):
-            rows.append(Row(_("keep only some folders?"), _("%d folders hold books — choose the ones for the library, or leave the whole drive", len(known)), self.offer_folders))
+            rows.append(Row(_("keep only some folders?"), _("%d folders hold books — choose the ones for the library, or leave the whole drive", len(known)), self.offer_folders, kind=NOTE))
         unfinished = not progress and not index["complete"] and index["scannedAt"] > 0
         if unfinished:
             rows.append(Row(_("continue the scan"), _("the scan stopped after %d folders · %d books so far", index["folders"], len(index["books"])),
-                            lambda: self.scan(False)))
+                            lambda: self.scan(False), kind=NOTE))
         if not progress and index["complete"] and index["failed"]:
-            rows.append(Row(_("continue the scan"), _("%d folders could not be read", len(index["failed"])), lambda: self.scan(False)))
-        folders, shown = remote.folders(cfg), remote.shown(cfg)
+            rows.append(Row(_("continue the scan"), _("%d folders could not be read", len(index["failed"])), lambda: self.scan(False), kind=NOTE))
         if not folders and not progress and error is None and index["complete"] and index["scannedAt"] > 0:
             rows.append(Row(_("no e-book found on the drive (epub, mobi, azw, fb2)"), kind=HINT))
         if shown:
-            rows.append(Row(_("search"), _("title, author or folder"), self.ask_search))
+            # then the books of the drive, and nothing else: its collections and its folders
+            rows += [Row(kind=RULE), Row(_("on the drive").upper(), kind=SECTION)]
             # the newspapers and magazines, together, the newest first: there only when the library has some
             if not progress and index["scannedAt"] > 0:
                 remote.sort_books(cfg, {e["source"]: e.get("magazine") for e in self.library.books if e.get("source")})

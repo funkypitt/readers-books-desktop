@@ -29,7 +29,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.14.0"
+VERSION = "1.15.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -930,21 +930,24 @@ def u16(text):
     return len(text.encode("utf-16-le")) // 2
 
 
-ITALIC, BOLD = 1, 2
+ITALIC, BOLD, SMALL_CAPS, SUPER, SUB, UNDERLINE, STRIKE, MONO, UPPER, LOWER, CAPITALIZE = 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
+FLAGS, SIZE_SHIFT = 2047, 16
 
 
 class Para:
     """A paragraph: its text, as it is counted (highlights are places in it), and its kind.
-    `styles` marks the words in italic or bold: runs (start, end, ITALIC | BOLD) of the text, in
-    characters of the string; they change nothing in the text itself."""
-    __slots__ = ("text", "kind", "styles")
+    `styles` marks the words set apart: runs (start, end, flags) of the text, in characters of
+    the string — ITALIC, BOLD and the others above, and a size in per cent from SIZE_SHIFT (0 =
+    the paragraph's own). `look` is how the book sets the paragraph (Look). Neither changes
+    anything in the text itself."""
+    __slots__ = ("text", "kind", "styles", "look")
 
-    def __init__(self, text, kind=NORMAL, styles=None):
-        self.text, self.kind, self.styles = text, kind, styles or None
+    def __init__(self, text, kind=NORMAL, styles=None, look=None):
+        self.text, self.kind, self.styles, self.look = text, kind, styles or None, look
 
     def slice(self, start, end):
         runs = [(max(a, start) - start, min(b, end) - start, f) for a, b, f in (self.styles or ()) if min(b, end) > max(a, start)]
-        return Para(self.text[start:end], self.kind, runs)
+        return Para(self.text[start:end], self.kind, runs, self.look.slice(start, end) if self.look else None)
 
 
 class TextBlock:
@@ -957,8 +960,8 @@ class ImageBlock:
     """A picture inside the book file; `source` is its entry in the EPUB."""
     length = 1
 
-    def __init__(self, source):
-        self.source = source
+    def __init__(self, source, look=None):
+        self.source, self.look = source, look
 
 
 class Chapter:
@@ -986,6 +989,885 @@ class Book:
 
 class Unsupported(Exception):
     pass
+
+
+# ------------------------------------------------------------------------------------------
+# CSS: the little of it a reader with its own font, size, margins and colours follows — the
+# publisher's alignment, indents, spacing, sizes of headings and small print, quotations, lists,
+# verse, small capitals, superscripts, rules, drop caps, page breaks and tables. Selectors are
+# kept when simple (an element, a class, an element with classes, these in a chain of
+# descendants or children); any other rule is left out. Rule for rule the phone's Css.kt and
+# Styling.kt, so that a book is set alike on both.
+# ------------------------------------------------------------------------------------------
+
+AUTO, LEFT, CENTER, RIGHT, JUSTIFY = 0, 1, 2, 3, 4
+DISC, CIRCLE, SQUARE, DECIMAL, LOWER_ALPHA, UPPER_ALPHA, LOWER_ROMAN, UPPER_ROMAN = 1, 2, 3, 4, 5, 6, 7, 8
+NAN = float("nan")
+
+
+def _isnan(x):
+    return x != x
+
+
+class Look:
+    """How the book sets a paragraph (or a picture), from its style sheets as far as a reader
+    with its own font, size, margins and colours follows them: never a character of the text.
+    The fields are the phone's (Model.kt, Look); lengths in ems of the reader's size, NaN or AUTO
+    when the book said nothing."""
+    __slots__ = ("align", "indent", "left", "right", "above", "page_break", "rule", "size", "flags", "level",
+                 "marker", "number", "drop_cap", "soft", "cells", "table", "width", "pixels")
+
+    def __init__(self, align=AUTO, indent=NAN, left=0.0, right=0.0, above=0.0, page_break=False, rule=False, size=1.0,
+                 flags=0, level=0, marker=0, number=0, drop_cap=0, soft=None, cells=None, table=0, width=NAN, pixels=0):
+        self.align, self.indent, self.left, self.right, self.above = align, indent, left, right, above
+        self.page_break, self.rule, self.size, self.flags, self.level = page_break, rule, size, flags, level
+        self.marker, self.number, self.drop_cap, self.soft, self.cells = marker, number, drop_cap, soft, cells
+        self.table, self.width, self.pixels = table, width, pixels
+
+    def slice(self, start, end):
+        first = start == 0
+        soft = [k - start for k in (self.soft or ()) if start <= k < end] or None
+        cells = None
+        if self.cells:
+            cells = []
+            for c in self.cells:
+                s, e = max(c[0], start), min(c[1], end)
+                if e > s:
+                    cells.append((s - start, e - start) + tuple(c[2:]))
+            cells = cells or None
+        return Look(self.align, self.indent if first else 0.0, self.left, self.right, self.above if first else 0.0,
+                    first and self.page_break, first and self.rule, self.size, self.flags, self.level,
+                    self.marker if first else 0, self.number, self.drop_cap if first else 0, soft, cells, self.table,
+                    self.width, self.pixels)
+
+
+class _Compound:
+    __slots__ = ("tag", "classes")
+
+    def __init__(self, tag, classes):
+        self.tag, self.classes = tag, classes
+
+
+class _Selector:
+    """`parts` right to left; child[i]: parts[i] is a child (not only a descendant) of parts[i + 1]."""
+    __slots__ = ("parts", "child", "first_letter", "specificity")
+
+    def __init__(self, parts, child, first_letter):
+        self.parts, self.child, self.first_letter = parts, child, first_letter
+        self.specificity = sum(len(p.classes) * 10 + (1 if p.tag else 0) for p in parts)
+
+
+class _Rule:
+    __slots__ = ("selector", "decls", "order")
+
+    def __init__(self, selector, decls, order):
+        self.selector, self.decls, self.order = selector, decls, order
+
+
+_CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+_COMPOUND = re.compile(r"^([a-zA-Z][\w-]*)?((?:\.[\w-]+)*)$")
+_LENGTH = re.compile(r"^([+-]?(?:\d+\.?\d*|\.\d+))(em|rem|%|px|pt|ex|ch)?$")
+EM_PER_PERCENT = 0.2
+SIZE_WORDS = {"xx-small": 0.6, "x-small": 0.75, "small": 0.89, "medium": 1.0, "large": 1.2, "x-large": 1.5,
+              "xx-large": 2.0, "xxx-large": 3.0}
+
+
+def css_declarations(body):
+    out = []
+    for d in body.split(";"):
+        colon = d.find(":")
+        if colon <= 0:
+            continue
+        name = d[:colon].strip().lower()
+        value = d[colon + 1:].strip()
+        important = value.lower().endswith("!important")
+        if important:
+            value = value[:-10].strip()
+        if name and value:
+            out.append((name, value.lower(), important))
+    return out
+
+
+def _skip_block(css, start):
+    depth, j = 0, start
+    while j < len(css):
+        if css[j] == "{":
+            depth += 1
+        elif css[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return j + 1
+        j += 1
+    return len(css)
+
+
+def _css_selector(text):
+    t = text.strip()
+    if not t:
+        return None
+    first_letter = False
+    for p in ("::first-letter", ":first-letter"):
+        if t.lower().endswith(p):
+            first_letter, t = True, t[:-len(p)].rstrip()
+            break
+    if not t or any(c in '[]*+~:#()"\'@\\' for c in t):
+        return None
+    parts, child, pending = [], [], False
+    for tok in [x for x in re.split(r"\s+", t.replace(">", " > ")) if x]:
+        if tok == ">":
+            if not parts:
+                return None
+            pending = True
+            continue
+        m = _COMPOUND.match(tok)
+        if not m:
+            return None
+        tag = (m.group(1) or "").lower() or None
+        classes = [c for c in m.group(2).split(".") if c]
+        if tag is None and not classes:
+            return None
+        parts.append(_Compound(tag, classes))
+        child.append(pending)
+        pending = False
+    if not parts or pending:
+        return None
+    rl = parts[::-1]
+    flags = [child[len(rl) - 1 - k] for k in range(len(rl) - 1)]
+    return _Selector(rl, flags, first_letter)
+
+
+def css_parse(text, first_order=0):
+    """The rules of a style sheet; `first_order` numbers them after those already read."""
+    css = _CSS_COMMENT.sub(" ", text)
+    rules, order, i, n = [], first_order, 0, len(css)
+    while i < n:
+        c = css[i]
+        if c.isspace() or c in ";}":
+            i += 1
+            continue
+        if c == "@":
+            j = i
+            while j < n and css[j] not in ";{":
+                j += 1
+            i = _skip_block(css, j) if j < n and css[j] == "{" else j + 1
+            continue
+        start = css.find("{", i)
+        if start < 0:
+            break
+        close = css.find("}", start)
+        end = n if close < 0 else close
+        decls = css_declarations(css[start + 1:end])
+        if decls:
+            for sel in css[i:start].split(","):
+                s = _css_selector(sel)
+                if s:
+                    rules.append(_Rule(s, decls, order))
+                    order += 1
+        i = end + 1
+    return rules
+
+
+def css_em(value, font_size=False):
+    """A length in ems; None for what is not one. px/pt at 16 px / 12 pt the em (not for sizes)."""
+    v = value.strip()
+    if v == "0":
+        return 0.0
+    m = _LENGTH.match(v)
+    if not m:
+        return None
+    x = float(m.group(1))
+    unit = m.group(2) or ""
+    if unit in ("em", "rem"):
+        return x
+    if unit == "%":
+        return x / 100.0 if font_size else x * EM_PER_PERCENT
+    if unit in ("ex", "ch"):
+        return x * 0.5
+    if unit == "px":
+        return None if font_size else x / 16.0
+    if unit == "pt":
+        return None if font_size else x / 12.0
+    if unit == "":
+        return 0.0 if x == 0 else None
+    return None
+
+
+def css_sides(value):
+    v = value.strip().split()
+    if len(v) == 1:
+        return [v[0]] * 4
+    if len(v) == 2:
+        return [v[0], v[1], v[0], v[1]]
+    if len(v) == 3:
+        return [v[0], v[1], v[2], v[1]]
+    if len(v) == 4:
+        return v
+    return None
+
+
+class Sheet:
+    """Rules indexed by the element or first class of their rightmost part."""
+    def __init__(self, rules):
+        self.by_key, self.empty = {}, not rules
+        for r in rules:
+            last = r.selector.parts[0]
+            self.by_key.setdefault("." + last.classes[0] if last.classes else last.tag, []).append(r)
+
+
+_BREAKS = {"always", "page", "left", "right", "recto", "verso"}
+_MARKERS = {"none": 0, "disc": DISC, "circle": CIRCLE, "square": SQUARE, "decimal": DECIMAL,
+            "decimal-leading-zero": DECIMAL, "lower-alpha": LOWER_ALPHA, "lower-latin": LOWER_ALPHA,
+            "upper-alpha": UPPER_ALPHA, "upper-latin": UPPER_ALPHA, "lower-roman": LOWER_ROMAN, "upper-roman": UPPER_ROMAN}
+
+
+class Style:
+    """What a style sheet makes of one element. Inherited: alignment, indent, size, weight,
+    slant, small capitals, case, monospace, line breaks kept, raised or lowered, underline and
+    strike, list marker. Its own: margins, page breaks, float, width, a ::first-letter rule."""
+    INHERITED = ("align", "indent", "size", "size_set", "bold", "weight_set", "italic", "small_caps", "transform",
+                 "mono", "pre", "valign", "underline", "strike", "list_type")
+
+    def __init__(self):
+        self.align, self.indent, self.size, self.size_set = AUTO, NAN, 1.0, False
+        self.bold = self.weight_set = self.italic = self.small_caps = False
+        self.transform, self.mono, self.pre, self.valign = 0, False, False, 0
+        self.underline = self.strike = False
+        self.list_type = -1
+        self.mt = self.mb = self.ml = self.mr = self.pt = self.pb = self.pl = self.pr = 0.0
+        self.break_before = self.break_after = self.float_left = self.first_letter = False
+        self.width = NAN
+        self.own_indent = NAN
+
+    def inherit(self):
+        s = Style()
+        for k in Style.INHERITED:
+            setattr(s, k, getattr(self, k))
+        return s
+
+    @property
+    def flags(self):
+        return ((ITALIC if self.italic else 0) | (BOLD if self.bold else 0) | (SMALL_CAPS if self.small_caps else 0)
+                | (SUPER if self.valign == 1 else 0) | (SUB if self.valign == 2 else 0)
+                | (UNDERLINE if self.underline else 0) | (STRIKE if self.strike else 0) | (MONO if self.mono else 0)
+                | {1: UPPER, 2: LOWER, 3: CAPITALIZE}.get(self.transform, 0))
+
+    def apply(self, name, value, parent):
+        if name == "text-align":
+            a = {"left": LEFT, "start": LEFT, "-webkit-left": LEFT, "center": CENTER, "-webkit-center": CENTER,
+                 "middle": CENTER, "right": RIGHT, "end": RIGHT, "-webkit-right": RIGHT, "justify": JUSTIFY}.get(value)
+            if a is not None:
+                self.align = a
+        elif name == "text-indent":
+            e = css_em(value)
+            if e is not None:
+                self.own_indent = e
+        elif name in ("margin", "padding"):
+            v = css_sides(value)
+            if v:
+                e = [css_em(x) for x in v]
+                keys = ("mt", "mr", "mb", "ml") if name == "margin" else ("pt", "pr", "pb", "pl")
+                for k, x in zip(keys, e):
+                    if x is not None:
+                        setattr(self, k, x)
+        elif name in _SIDES:
+            e = css_em(value)
+            if e is not None:
+                setattr(self, _SIDES[name], e)
+        elif name == "font-size":
+            f = SIZE_WORDS.get(value)
+            if f is None:
+                if value == "smaller":
+                    f = parent.size * 0.83
+                elif value == "larger":
+                    f = parent.size * 1.2
+                else:
+                    e = css_em(value, font_size=True)
+                    if e is not None:
+                        f = e if value.endswith("rem") else parent.size * e
+            if f is not None and f > 0:
+                self.size, self.size_set = f, True
+        elif name == "font-weight":
+            n = int(value) if value.isdigit() else None
+            if value in ("bold", "bolder") or (n or 0) >= 600:
+                self.bold, self.weight_set = True, True
+            elif value in ("normal", "lighter") or (n if n is not None else 1000) < 600:
+                self.bold, self.weight_set = False, True
+        elif name == "font-style":
+            if value in ("italic", "oblique"):
+                self.italic = True
+            elif value == "normal":
+                self.italic = False
+        elif name in ("font-variant", "font-variant-caps"):
+            if "small-caps" in value:
+                self.small_caps = True
+            elif value in ("normal", "none"):
+                self.small_caps = False
+        elif name == "text-transform":
+            self.transform = {"uppercase": 1, "lowercase": 2, "capitalize": 3, "none": 0}.get(value, self.transform)
+        elif name == "vertical-align":
+            self.valign = {"super": 1, "sub": 2, "baseline": 0}.get(value, self.valign)
+        elif name in ("text-decoration", "text-decoration-line"):
+            if "none" in value:
+                self.underline = self.strike = False
+            if "underline" in value:
+                self.underline = True
+            if "line-through" in value:
+                self.strike = True
+        elif name == "white-space":
+            if value in ("pre", "pre-wrap", "pre-line", "break-spaces"):
+                self.pre = True
+            elif value in ("normal", "nowrap"):
+                self.pre = False
+        elif name in ("page-break-before", "break-before"):
+            if value in _BREAKS:
+                self.break_before = True
+            elif value in ("auto", "avoid"):
+                self.break_before = False
+        elif name in ("page-break-after", "break-after"):
+            if value in _BREAKS:
+                self.break_after = True
+            elif value in ("auto", "avoid"):
+                self.break_after = False
+        elif name in ("list-style-type", "list-style"):
+            for w in value.split():
+                if w in _MARKERS:
+                    self.list_type = _MARKERS[w]
+        elif name == "float":
+            self.float_left = value == "left"
+        elif name == "width":
+            if value.endswith("%"):
+                try:
+                    x = float(value[:-1].strip())
+                except ValueError:
+                    x = 0
+                if x > 0:
+                    self.width = min(x, 100.0) / 100.0
+
+
+_SIDES = {"margin-top": "mt", "margin-bottom": "mb", "margin-left": "ml", "margin-right": "mr",
+          "padding-top": "pt", "padding-bottom": "pb", "padding-left": "pl", "padding-right": "pr"}
+
+_VOID = {"br", "hr", "img", "col", "meta", "link", "input", "wbr", "source", "area", "base", "param", "track", "embed",
+         "image", "empty-line"}
+_BLOCK = {"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ul", "ol", "dl", "dt", "dd", "blockquote", "pre",
+          "section", "article", "aside", "header", "footer", "nav", "figure", "figcaption", "table", "thead", "tbody",
+          "tfoot", "tr", "td", "th", "caption", "center", "body", "html", "main", "address", "hgroup", "details",
+          "summary", "form", "fieldset", "title", "subtitle", "epigraph", "poem", "stanza", "v", "cite",
+          "text-author", "annotation"}
+_NO_MARGIN = {"html", "body", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption"}
+_PAGE = {"html", "body", "thead", "tbody", "tfoot", "tr", "td", "th", "caption"}
+_MONO = {"code", "kbd", "samp", "tt", "pre"}
+_CAPTION = re.compile("caption|legend")
+_DROP_CAP = re.compile(r"(drop-?cap.*|dropcap.*|lettrine.*|initiale?|first-?letter|big-?initial)$")
+_ATTR = re.compile(r"""([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+))""")
+_TAG_NAME = re.compile(r"^</?\s*([a-zA-Z][\w:-]*)")
+
+
+class _Node:
+    __slots__ = ("tag", "classes", "inline", "parent", "attrs", "counter", "ordinal", "span")
+
+    def __init__(self, tag, classes, inline, parent, attrs):
+        self.tag, self.classes, self.inline, self.parent, self.attrs = tag, classes, inline, parent, attrs
+        self.counter, self.ordinal, self.span = 0, 0, 1
+
+
+class Tree:
+    """The elements of one page, as their tags open and close, with the style of each. Node 0
+    is the page itself."""
+
+    def __init__(self, sheet, fb2):
+        self.sheet, self.fb2 = sheet, fb2
+        self.nodes = [_Node("", [], None, -1, {})]
+        self.styles = [Style()]
+        self.alike = {}
+        self.current = 0
+
+    def tag(self, raw):
+        """A tag as it was in the page (from its last « < »). Returns the name of an element
+        without inside (br, hr…), which the caller places itself."""
+        t = raw[raw.rfind("<"):]
+        if t.startswith("<!") or t.startswith("<?"):
+            return None
+        m = _TAG_NAME.match(t)
+        if not m:
+            return None
+        name = m.group(1).split(":")[-1].lower()
+        if t.startswith("</"):
+            self._close(name)
+            return None
+        if name in _VOID:
+            return name
+        if t.endswith("/>"):
+            return None
+        self._open(name, self.attributes(t))
+        return None
+
+    @staticmethod
+    def attributes(t):
+        body = t[1:]
+        k = 0
+        while k < len(body) and not body[k].isspace() and body[k] not in ">/":
+            k += 1
+        out = {}
+        for m in _ATTR.finditer(body[k:]):
+            v = m.group(2) if m.group(2) is not None else m.group(3) if m.group(3) is not None else m.group(4) or ""
+            out[m.group(1).split(":")[-1].lower()] = v
+        return out
+
+    def leaf(self, name, attrs):
+        self.nodes.append(self._node(name, attrs, self.current))
+        self.styles.append(None)
+        return len(self.nodes) - 1
+
+    def _node(self, name, attrs, parent):
+        classes = [c for c in (attrs.get("class") or "").split() if c]
+        inline = css_declarations(attrs["style"].lower()) if "style" in attrs else None
+        return _Node(name, classes, inline, parent, attrs)
+
+    def _nearest(self, start, names, stop=()):
+        n = start
+        while n > 0:
+            t = self.nodes[n].tag
+            if t in names:
+                return n
+            if t in stop:
+                return -1
+            n = self.nodes[n].parent
+        return -1
+
+    def _int(self, v, default):
+        try:
+            return int((v or "").strip())
+        except ValueError:
+            return default
+
+    def _open(self, name, attrs):
+        if name in _BLOCK:
+            k = self._nearest(self.current, {"p"}, _BLOCK - {"p"})
+            if k > 0:
+                self.current = self.nodes[k].parent
+        closing = {"li": ({"li"}, {"ul", "ol"}), "td": ({"td", "th"}, {"tr", "table"}), "th": ({"td", "th"}, {"tr", "table"}),
+                   "tr": ({"tr"}, {"table"}), "dt": ({"dt", "dd"}, {"dl"}), "dd": ({"dt", "dd"}, {"dl"})}.get(name)
+        if closing:
+            k = self._nearest(self.current, *closing)
+            if k > 0:
+                self.current = self.nodes[k].parent
+        n = self._node(name, attrs, self.current)
+        if name in ("ol", "ul"):
+            n.counter = self._int(attrs.get("start"), 1) - 1
+        elif name == "li":
+            k = self._nearest(self.current, {"ul", "ol"})
+            if k > 0:
+                lst = self.nodes[k]
+                lst.counter = self._int(attrs.get("value"), lst.counter + 1)
+                n.ordinal = lst.counter
+        elif name == "tr":
+            k = self._nearest(self.current, {"table"})
+            if k > 0:
+                n.ordinal = self.nodes[k].counter
+                self.nodes[k].counter += 1
+        elif name in ("td", "th"):
+            k = self._nearest(self.current, {"tr"}, {"table"})
+            if k > 0:
+                row = self.nodes[k]
+                n.ordinal = row.counter
+                n.span = min(20, max(1, self._int(attrs.get("colspan"), 1)))
+                row.counter += n.span
+        self.nodes.append(n)
+        self.styles.append(None)
+        self.current = len(self.nodes) - 1
+
+    def _close(self, name):
+        n = self.current
+        while n > 0 and self.nodes[n].tag != name:
+            n = self.nodes[n].parent
+        if n > 0:
+            self.current = self.nodes[n].parent
+
+    # ---- styles ----
+
+    def style(self, n):
+        s = self.styles[n]
+        if s is not None:
+            return s
+        pending, p = [], n
+        while p > 0 and self.styles[p] is None:
+            pending.append(p)
+            p = self.nodes[p].parent
+        for k in reversed(pending):
+            # siblings alike are styled alike: no rule here looks at anything but the ancestors
+            node = self.nodes[k]
+            key = (node.parent, node.tag, tuple(node.classes), tuple(node.inline or ()), node.attrs.get("align"))
+            style = self.alike.get(key)
+            if style is None:
+                style = self.alike[key] = self._compute(k)
+            self.styles[k] = style
+        return self.styles[n]
+
+    def _compute(self, n):
+        node = self.nodes[n]
+        parent = self.styles[node.parent]
+        s = parent.inherit()
+        decls = []          # (priority, order, name, value)
+        for i, (name, value) in enumerate(self._ua(n)):
+            decls.append((-1, i, name, value))
+        if "align" in node.attrs:
+            decls.append((0, -1, "text-align", node.attrs["align"].strip().lower()))
+        if self.sheet and not self.sheet.empty:
+            seen = set()
+            for key in [node.tag] + ["." + c for c in node.classes]:
+                for r in self.sheet.by_key.get(key, ()):
+                    if id(r) in seen or not self._matches(r.selector, n):
+                        continue
+                    seen.add(id(r))
+                    if r.selector.first_letter:
+                        if self._big_letter(r.decls):
+                            s.first_letter = True
+                        continue
+                    for name, value, important in r.decls:
+                        decls.append((r.selector.specificity + (100000 if important else 0), r.order, name, value))
+        for name, value, important in node.inline or ():
+            decls.append((50000 + (100000 if important else 0), 0, name, value))
+        decls.sort(key=lambda d: (d[0], d[1]))
+        if node.tag in _MONO:
+            s.mono = True
+        for _p, _o, name, value in decls:
+            s.apply(name, value, parent)
+        if not _isnan(s.own_indent):
+            s.indent = s.own_indent * s.size
+        for k in ("mt", "mb", "ml", "mr", "pt", "pb", "pl", "pr"):
+            setattr(s, k, getattr(s, k) * s.size)
+        return s
+
+    @staticmethod
+    def _big_letter(decls):
+        for name, value, _i in decls:
+            if name == "float" and value == "left":
+                return True
+            if name == "font-size":
+                f = SIZE_WORDS.get(value)
+                if f is None:
+                    f = css_em(value, font_size=True)
+                if (f or 0) >= 1.5:
+                    return True
+        return False
+
+    def _matches(self, sel, n):
+        if not self._compound(sel.parts[0], n):
+            return False
+        cur = n
+        for k in range(1, len(sel.parts)):
+            cur = self.nodes[cur].parent
+            if sel.child[k - 1]:
+                if cur <= 0 or not self._compound(sel.parts[k], cur):
+                    return False
+            else:
+                while cur > 0 and not self._compound(sel.parts[k], cur):
+                    cur = self.nodes[cur].parent
+                if cur <= 0:
+                    return False
+        return True
+
+    def _compound(self, c, n):
+        node = self.nodes[n]
+        if c.tag is not None and c.tag != node.tag:
+            return False
+        return all(k in node.classes for k in c.classes)
+
+    def _ua(self, n):
+        """What every reader does with these elements when the book says nothing."""
+        node = self.nodes[n]
+        t, fb2 = node.tag, self.fb2
+        out = []
+        if t in ("h1", "h2", "h3", "h5", "h6"):
+            out.append(("font-size", {"h1": "2em", "h2": "1.5em", "h3": "1.17em", "h5": "0.83em", "h6": "0.67em"}[t]))
+            out.append(("font-weight", "bold"))
+        elif t == "h4" or t in ("b", "strong"):
+            out.append(("font-weight", "bold"))
+        elif t in ("i", "em", "var", "dfn", "emphasis"):
+            out.append(("font-style", "italic"))
+        elif t in ("u", "ins"):
+            out.append(("text-decoration", "underline"))
+        elif t in ("s", "strike", "del", "strikethrough"):
+            out.append(("text-decoration", "line-through"))
+        elif t == "sup":
+            out.append(("vertical-align", "super"))
+        elif t == "sub":
+            out.append(("vertical-align", "sub"))
+        elif t == "pre":
+            out.append(("white-space", "pre"))
+        elif t == "small":
+            out.append(("font-size", "smaller"))
+        elif t == "big":
+            out.append(("font-size", "larger"))
+        elif t == "center":
+            out.append(("text-align", "center"))
+        elif t == "th":
+            out += [("font-weight", "bold"), ("text-align", "center")]
+        elif t == "caption":
+            out.append(("text-align", "center"))
+        elif t == "figcaption":
+            out += [("text-align", "center"), ("font-size", "0.85em")]
+        elif t == "blockquote":
+            out.append(("margin", "0.5em 1.5em"))
+        elif t in ("ul", "ol"):
+            out.append(("padding-left", "1.5em"))
+            depth, p = 0, node.parent
+            while p > 0:
+                if self.nodes[p].tag in ("ul", "ol"):
+                    depth += 1
+                p = self.nodes[p].parent
+            out.append(("list-style-type", "decimal" if t == "ol" else ("disc", "circle")[depth] if depth < 2 else "square"))
+        elif t == "dd":
+            out.append(("margin-left", "1.5em"))
+        elif t == "figure":
+            out.append(("margin", "0.5em 0"))
+        elif t == "cite":
+            out.append(("margin", "0.5em 1.5em") if fb2 else ("font-style", "italic"))
+        elif fb2 and t == "title":
+            out += [("text-align", "center"), ("font-weight", "bold"), ("font-size", "1.3em")]
+        elif fb2 and t == "subtitle":
+            out += [("text-align", "center"), ("font-weight", "bold")]
+        elif fb2 and t == "epigraph":
+            out += [("margin-left", "2em"), ("font-style", "italic")]
+        elif fb2 and t == "text-author":
+            out.append(("text-align", "right"))
+        elif fb2 and t == "poem":
+            out.append(("margin-left", "2em"))
+        elif fb2 and t == "stanza":
+            out.append(("margin-bottom", "0.5em"))
+        elif fb2 and t == "v":
+            out.append(("text-indent", "0"))
+        if any(_CAPTION.search(c.lower()) for c in node.classes):
+            out.append(("text-align", "center"))
+        return out
+
+    # ---- shapes the reader needs ----
+
+    def is_block(self, n):
+        return n == 0 or self.nodes[n].tag in _BLOCK
+
+    def block_of(self, n):
+        while n > 0 and self.nodes[n].tag not in _BLOCK:
+            n = self.nodes[n].parent
+        return n
+
+    def within(self, n, ancestor):
+        while n > 0:
+            if n == ancestor:
+                return True
+            n = self.nodes[n].parent
+        return ancestor == 0
+
+    def chain(self, n):
+        out = []
+        while n > 0:
+            out.append(n)
+            n = self.nodes[n].parent
+        return out
+
+    def cell_of(self, n):
+        while n > 0:
+            t = self.nodes[n].tag
+            if t in ("td", "th"):
+                return n
+            if t == "table":
+                return -1
+            n = self.nodes[n].parent
+        return -1
+
+    def table_of(self, n):
+        while n > 0:
+            if self.nodes[n].tag == "table":
+                return n
+            n = self.nodes[n].parent
+        return -1
+
+    def row_of(self, n):
+        while n > 0:
+            t = self.nodes[n].tag
+            if t == "tr":
+                return n
+            if t == "table":
+                return -1
+            n = self.nodes[n].parent
+        return -1
+
+    def is_header(self, cell):
+        return self.nodes[cell].tag == "th" or self._nearest(cell, {"thead"}, {"table"}) > 0
+
+    def is_drop_cap(self, n, block):
+        node = self.nodes[n]
+        if any(_DROP_CAP.match(c.lower()) for c in node.classes):
+            return True
+        s = self.style(n)
+        return s.float_left and s.size >= self.style(block).size * 1.5
+
+
+MIN_SIZE, MAX_SIZE, MAX_ABOVE, MAX_INDENT, MAX_SIDE, MAX_LEFT, MAX_RIGHT = 0.8, 1.6, 2.5, 3.0, 4.0, 8.0, 4.0
+
+
+def _clamp(x, lo, hi):
+    return lo if x < lo else hi if x > hi else x
+
+
+class _Presenter:
+    """Makes the Look of each paragraph and picture of a page, in their order: what each one
+    opens and closes of the page's elements gives the space before it, its page break, the
+    marker of a list item."""
+
+    def __init__(self, tree, node_at, set_in, hard_at, rules_at, gaps_at):
+        self.tree, self.node_at, self.set_in = tree, node_at, set_in
+        self.hard_at, self.rules_at, self.gaps_at = hard_at, rules_at, gaps_at
+        self.before, self.last_at, self.pending_rule = set(), -1, False
+
+    def hard(self, at):
+        return at in self.hard_at or self.tree.style(self.node_at[at]).pre
+
+    def rule_next(self):
+        self.pending_rule = True
+
+    def _opening(self, node, at):
+        tree = self.tree
+        chain = set(tree.chain(node))
+        opened, closed = chain - self.before, self.before - chain
+        above, page_break = 0.0, False
+        for n in opened:
+            st = tree.style(n)
+            if st.break_before:
+                page_break = True
+            if tree.is_block(n) and tree.nodes[n].tag not in _PAGE:
+                above = max(above, st.mt + st.pt)
+        for n in closed:
+            st = tree.style(n)
+            if st.break_after:
+                page_break = True
+            if tree.is_block(n) and tree.nodes[n].tag not in _PAGE:
+                above = max(above, st.mb + st.pb)
+        if any(self.last_at < g <= at for g in self.gaps_at):
+            above = max(above, 1.0)
+        rule = self.pending_rule or any(self.last_at < r <= at for r in self.rules_at)
+        self.pending_rule = False
+        self.before, self.last_at = chain, at
+        return _clamp(above, 0.0, MAX_ABOVE), page_break, rule, opened
+
+    def _margins(self, block):
+        tree = self.tree
+        left = right = 0.0
+        n = block
+        while n > 0:
+            node = tree.nodes[n]
+            if tree.is_block(n) and node.tag not in _NO_MARGIN:
+                st = tree.style(n)
+                left += _clamp(st.ml + st.pl, 0.0, MAX_SIDE)
+                right += _clamp(st.mr + st.pr, 0.0, MAX_SIDE)
+            n = node.parent
+        return min(left, MAX_LEFT), min(right, MAX_RIGHT)
+
+    def picture(self, node, at):
+        if node is None:
+            return None
+        above, page_break, rule, _opened = self._opening(node, at)
+        tree = self.tree
+        st = tree.style(node)
+        w = (tree.nodes[node].attrs.get("width") or "").strip() or None
+        width = st.width
+        if _isnan(width) and w and w.endswith("%"):
+            try:
+                width = _clamp(float(w[:-1]) / 100.0, 0.05, 1.0)
+            except ValueError:
+                pass
+        pixels = 0
+        if w and not w.endswith("%"):
+            try:
+                pixels = max(0, int(float(w[:-2] if w.endswith("px") else w)))
+            except ValueError:
+                pixels = 0
+        align = tree.style(tree.block_of(tree.nodes[node].parent)).align
+        return Look(align=align, above=above, page_break=page_break, rule=rule, width=width, pixels=pixels)
+
+    def paragraph(self, t, kind):
+        tree, node_at, set_in = self.tree, self.node_at, self.set_in
+        first = t.at[0]
+        node = node_at[first]
+        above, page_break, rule, opened = self._opening(node, first)
+        block = tree.block_of(node)
+        bs = tree.style(block)
+        left, right = self._margins(block)
+        marker = number = level = 0
+        n = block
+        while n > 0:
+            tag = tree.nodes[n].tag
+            if tag == "li" and marker == 0 and n in opened:
+                marker, number = max(0, tree.style(n).list_type), tree.nodes[n].ordinal
+            if level == 0 and len(tag) == 2 and tag[0] == "h" and tag[1] in "123456":
+                level = int(tag[1])
+            n = tree.nodes[n].parent
+        size = _clamp(0.8 if kind == SMALL and not bs.size_set else bs.size, MIN_SIZE, MAX_SIZE)
+        block_flags = bs.flags | (BOLD if kind == LEAD and not bs.weight_set else 0)
+        soft = [i for i, c in enumerate(t.chars) if c == "\n" and t.at[i] == -1] or None
+
+        known = {}
+
+        def flag_of(at):
+            key = node_at[at] * 4 + set_in[at]
+            f = known.get(key)
+            if f is None:
+                st = tree.style(node_at[at])
+                f = (set_in[at] | st.flags) & ~block_flags
+                ratio = _clamp(st.size, MIN_SIZE, MAX_SIZE) / size
+                if not f & (SUPER | SUB) and (ratio < 0.97 or ratio > 1.03):
+                    f |= int(ratio * 100 + 0.5) << SIZE_SHIFT
+                known[key] = f
+            return f
+        styles = t.styles(flag_of)
+        indent = bs.indent if _isnan(bs.indent) else _clamp(bs.indent, -MAX_INDENT, MAX_INDENT)
+        table = tree.table_of(node)
+        look = Look(align=bs.align, indent=indent, left=left, right=right, above=above, page_break=page_break,
+                    rule=rule, size=size, flags=block_flags, level=level, marker=marker, number=number,
+                    drop_cap=self._drop_cap(t, node, block, bs), soft=soft, cells=self._cells(t, node),
+                    table=max(0, table))
+        return styles, look
+
+    def _drop_cap(self, t, node, block, bs):
+        tree = self.tree
+        big, p = -1, node
+        while p > 0 and p != block:
+            if tree.is_drop_cap(p, block):
+                big = p
+            p = tree.nodes[p].parent
+        if big > 0:
+            k = 0
+            while k < len(t.chars) and t.at[k] >= 0 and tree.within(self.node_at[t.at[k]], big):
+                k += 1
+            return k if 1 <= k <= 3 and k < len(t.chars) and not any(c.isspace() for c in t.chars[:k]) else 0
+        if not bs.first_letter:
+            return 0
+        k = 0
+        while k < 2 and k < len(t.chars) and not t.chars[k].isalnum() and not t.chars[k].isspace():
+            k += 1
+        return k + 1 if k < len(t.chars) - 1 and t.chars[k].isalnum() else 0
+
+    def _cells(self, t, node):
+        tree = self.tree
+        if tree.table_of(node) <= 0:
+            return None
+        n = len(t.chars)
+        cell_at = [tree.cell_of(self.node_at[a]) if a >= 0 else -2 for a in t.at]
+        for k in range(n):
+            if cell_at[k] == -2:
+                cell_at[k] = cell_at[k - 1] if 0 < k < n - 1 and cell_at[k - 1] >= 0 and cell_at[k - 1] == cell_at[k + 1] else -1
+        out, k = [], 0
+        while k < n:
+            c, e = cell_at[k], k + 1
+            while e < n and cell_at[e] == c:
+                e += 1
+            if c > 0:
+                row = tree.row_of(c)
+                out.append((k, e, tree.nodes[row].ordinal if row > 0 else 0, tree.nodes[c].ordinal, tree.nodes[c].span,
+                            1 if tree.is_header(c) else 0))
+            k = e
+        return out or None
 
 
 # ------------------------------------------------------------------------------------------
@@ -1086,14 +1968,20 @@ class _Traced:
         j = len(self.chars.rstrip())
         return self.cut(i, max(i, j))
 
-    def lines(self):
-        """Its lines stripped, the empty ones dropped, joined again by line breaks."""
-        parts, start = [], 0
+    def lines(self, hard=None):
+        """Its lines stripped, the empty ones dropped, joined again by line breaks. A line break
+        put in between is -1, or -2 when `hard` says the one it stands for stays a line break."""
+        parts, joins, gap_hard, start = [], [], False, 0
         for i in range(len(self.chars) + 1):
             if i == len(self.chars) or self.chars[i] == "\n":
                 piece = self.cut(start, i)
                 if piece.chars.strip():
+                    if parts:
+                        joins.append(-2 if gap_hard else -1)
                     parts.append(piece.strip())
+                    gap_hard = False
+                if i < len(self.chars) and hard is not None and parts and self.at[i] >= 0 and hard(self.at[i]):
+                    gap_hard = True
                 start = i + 1
         if len(parts) == 1:
             return parts[0]
@@ -1101,7 +1989,7 @@ class _Traced:
         for k, p in enumerate(parts):
             if k:
                 chars.append("\n")
-                at.append(-1)
+                at.append(joins[k - 1])
             chars.append(p.chars)
             at.extend(p.at)
         return _Traced("".join(chars), at)
@@ -1119,11 +2007,12 @@ class _Traced:
         return _Traced("".join(chars), at)
 
     def styles(self, set_in):
+        """The runs, from what each character of the source was set in (`set_in(place)`)."""
         runs, i, n = [], 0, len(self.chars)
         while i < n:
-            f = set_in[self.at[i]] if self.at[i] >= 0 else 0
+            f = set_in(self.at[i]) if self.at[i] >= 0 else 0
             j = i + 1
-            while j < n and (set_in[self.at[j]] if self.at[j] >= 0 else f) == f:
+            while j < n and (set_in(self.at[j]) if self.at[j] >= 0 else f) == f:
                 j += 1
             if f:
                 runs.append((i, j, f))
@@ -1145,17 +2034,47 @@ class _Traced:
         return _Traced("".join(chars), at)
 
 
-def to_blocks(text, image):
+# The book's presentation: every tag left after the steps below is followed by a mark and its
+# number (two characters of the private use area), and every picture is preceded by one; the marks
+# go out with italic and bold, before the text is touched, so that the text is the same character
+# for character, and each character knows the element it was in.
+TAG_MARK, PICTURE_MARK, PUA, PUA_SIZE = "\u0007", "\u0008", 0xE000, 6400
+_STYLE_BLOCK = re.compile(r"<style\b[^>]*>(.*?)</style>", re.I | re.S)
+
+
+def _number(k):
+    return chr(PUA + k // PUA_SIZE) + chr(PUA + k % PUA_SIZE)
+
+
+def page_rules(text, first_order):
+    """The rules of the <style> blocks of a page."""
+    out = []
+    for m in _STYLE_BLOCK.finditer(text):
+        out += css_parse(m.group(1).replace("<!--", " ").replace("-->", " "), first_order + len(out))
+    return out
+
+
+def to_blocks(text, image, rules=(), fb2=False):
     """Paragraphs with their kind, and the pictures between them. `image` maps an `src` to what
     the reader can load, or None to drop it. Kinds are marked with control characters before the
-    tags are stripped. Words in italic or bold keep it as runs beside the text (Para.styles): the
-    text itself is exactly what it is without them, so a place in it is the same either way."""
+    tags are stripped. Words in italic or bold keep it as runs beside the text (Para.styles), and
+    each paragraph how the book sets it (Para.look, from `rules`, the page's own style blocks and
+    the style attributes): the text itself is exactly what it is without them, so a place in it
+    is the same either way. `fb2` sets FictionBook's own elements (poems, epigraphs…)."""
+    styled = TAG_MARK not in text and PICTURE_MARK not in text
+    tree = Tree(Sheet(list(rules) + page_rules(text, len(rules))), fb2) if styled else None
+    pictures = []
     s = _COMMENTS.sub("", text)
     s = _SVG_IMAGE.sub(lambda m: '<img src="%s"/>' % m.group(1), s)
 
     def picture(m):
         found = image(m.group(1))
-        return "\n\n%s%s\n\n" % (IMG, found) if found else " "
+        if not found:
+            return " "
+        if styled:
+            pictures.append(m.group(0))
+            return "\n\n%s%s%s%s\n\n" % (PICTURE_MARK, _number(len(pictures) - 1), IMG, found)
+        return "\n\n%s%s\n\n" % (IMG, found)
     s = _IMG.sub(picture, s)
     s = _DROP.sub(" ", s)
     s = _HEADING_OPEN.sub(lambda m: m.group(0) + MARK + "H", s)
@@ -1172,26 +2091,67 @@ def to_blocks(text, image):
     marked = not _EMPHASIS_MARKS.search(s)
     if marked:
         s = _EMPHASIS.sub(_emphasis, s)
+    tags = []
+    if styled:
+        def tag(m):
+            tags.append(m.group(0))
+            return m.group(0) + TAG_MARK + _number(len(tags) - 1)
+        s = _ANY_TAG.sub(tag, s)
     s = _BR.sub("\n", s)
     s = _PARA_BREAK.sub("\n\n", s)
     s = _ANY_TAG.sub("", s)
     s = decode_entities(s)
-    # the marks out: the text without them, and what each character is set in
-    plain, set_in, italic, bold = [], [], 0, 0
-    for c in s:
-        if marked and c in ITALIC_ON + ITALIC_OFF + BOLD_ON + BOLD_OFF:
-            if c == ITALIC_ON:
-                italic += 1
-            elif c == ITALIC_OFF:
-                italic = max(0, italic - 1)
-            elif c == BOLD_ON:
-                bold += 1
-            else:
-                bold = max(0, bold - 1)
+    # the marks out: the text without them, what each character is set in, the element it is in
+    plain, set_in, node_at, italic, bold = [], [], [], 0, 0
+    hard_at, rules_at, gaps_at, picture_node = set(), [], [], {}
+    special = re.compile("[\u0003-\u0008]" if marked else "[\u0007\u0008]")
+    length = 0                  # characters in plain so far
+    i, n = 0, len(s)
+    while i < n:
+        m = special.search(s, i)
+        j = m.start() if m else n
+        if j > i:               # a stretch of text, all set in the same
+            plain.append(s[i:j])
+            set_in.extend([(ITALIC if italic else 0) | (BOLD if bold else 0)] * (j - i))
+            if tree is not None:
+                node_at.extend([tree.current] * (j - i))
+            length += j - i
+        if not m:
+            break
+        c = s[j]
+        i = j + 1
+        if c in (TAG_MARK, PICTURE_MARK):
+            if tree is not None and j + 2 < n:
+                k = (ord(s[j + 1]) - PUA) * PUA_SIZE + (ord(s[j + 2]) - PUA)
+                if c == TAG_MARK:
+                    if 0 <= k < len(tags):
+                        name = tree.tag(tags[k])
+                        if name == "br":
+                            if length and plain[-1][-1] == "\n":
+                                hard_at.add(length - 1)
+                        elif name == "hr":
+                            rules_at.append(length)
+                        elif name == "empty-line":
+                            gaps_at.append(length)
+                elif 0 <= k < len(pictures):
+                    picture_node[length] = tree.leaf("img", tree.attributes(pictures[k]))
+                i = j + 3
+                continue
+            # the page's own control character (no presentation then): kept as text
+            plain.append(c)
+            set_in.append((ITALIC if italic else 0) | (BOLD if bold else 0))
+            length += 1
             continue
-        plain.append(c)
-        set_in.append((ITALIC if italic else 0) | (BOLD if bold else 0))
+        if c == ITALIC_ON:
+            italic += 1
+        elif c == ITALIC_OFF:
+            italic = max(0, italic - 1)
+        elif c == BOLD_ON:
+            bold += 1
+        else:
+            bold = max(0, bold - 1)
     whole = _Traced.collapse("".join(plain))
+    look = _Presenter(tree, node_at, set_in, hard_at, rules_at, gaps_at) if tree is not None else None
     blocks, paras, start = [], [], 0
     raws = []
     for m in _BLANK_LINE.finditer(whole.chars):
@@ -1199,14 +2159,15 @@ def to_blocks(text, image):
         start = m.end()
     raws.append(whole.cut(start, len(whole.chars)))
     for raw in raws:
-        para = raw.lines()
+        para = raw.lines(look.hard if look else None)
         if not para.chars:
             continue
         if para.chars.startswith(IMG):
             if paras:
                 blocks.append(TextBlock(paras))
                 paras = []
-            blocks.append(ImageBlock(para.chars[1:].split("\n")[0].strip()))
+            blocks.append(ImageBlock(para.chars[1:].split("\n")[0].strip(),
+                                     look.picture(picture_node.get(para.at[0]), para.at[0]) if look else None))
             continue
         kind, t = NORMAL, para
         while len(t.chars) > 1 and t.chars[0] == MARK:
@@ -1214,9 +2175,16 @@ def to_blocks(text, image):
             t = t.cut(2, len(t.chars)).lstrip()
         t = t.without(_MARKS)
         if t.chars in ("---", "♦"):       # the pipeline's separators
+            if t.chars == "---" and look:
+                look.rule_next()
             continue
-        if t.chars:
-            paras.append(Para(t.chars, kind, t.styles(set_in)))
+        if not t.chars:
+            continue
+        if look is None:
+            paras.append(Para(t.chars, kind, t.styles(set_in.__getitem__)))
+        else:
+            styles, l = look.paragraph(t, kind)
+            paras.append(Para(t.chars, kind, styles, l))
     if paras:
         blocks.append(TextBlock(paras))
     return blocks
@@ -1274,6 +2242,9 @@ def parse_book(path, fmt, fallback_title):
     if book.magazine:
         magazine = [Article(first_part[a.chapter], a.category, a.title, a.author, a.image) for a in book.magazine]
     return Book(book.title, chapters, magazine)
+
+
+_LINK_TAG = re.compile(r"<link\b[^>]*>", re.I)
 
 
 def _attr(tag, name):
@@ -1356,6 +2327,25 @@ def _parse_epub(path, fallback_title):
             for href, text in re.findall(r'<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>', nav, re.I | re.S):
                 titles.setdefault(_norm(_resolve(nav_dir, href)), strip_tags(text).strip())
 
+        # The publisher's style sheets, each read once; the rules a page links to, in its order.
+        sheets = {}
+
+        def style_sheets(text, chapter_dir):
+            out = []
+            for tag in _LINK_TAG.findall(text):
+                if "stylesheet" not in (_attr(tag, "rel") or "").lower() and "css" not in (_attr(tag, "type") or "").lower():
+                    continue
+                href = _attr(tag, "href")
+                if not href:
+                    continue
+                where = _resolve(chapter_dir, href)
+                if where not in sheets:
+                    css = read(where)
+                    sheets[where] = css_parse(css) if css is not None else []
+                for r in sheets[where]:
+                    out.append(_Rule(r.selector, r.decls, len(out)))
+            return out
+
         chapters, by_path, htmls = [], {}, []
         for index, idref in enumerate(spine):
             if idref not in items:
@@ -1373,7 +2363,7 @@ def _parse_epub(path, fallback_title):
                 p = _resolve(chapter_dir, src)
                 return p if p in names else None
 
-            blocks = to_blocks(text, image)
+            blocks = to_blocks(text, image, style_sheets(text, chapter_dir))
             if not blocks:
                 continue
             by_path[_norm(where)] = len(chapters)
@@ -1530,7 +2520,7 @@ def _parse_fb2(xml, fallback_title):
     body = "\n".join(re.findall(r"<body\b.*?</body>", plain, re.I | re.S)) or plain
     chapters = []
     for i, section in enumerate(re.split(r"<section\b[^>]*>", body, flags=re.I)):
-        blocks = to_blocks(section, lambda src: None)
+        blocks = to_blocks(section, lambda src: None, fb2=True)
         if not blocks:
             continue
         m = re.search(r"<title>(.*?)</title>", section, re.S)
@@ -3397,123 +4387,427 @@ class ImageStore:
 # ------------------------------------------------------------------------------------------
 
 LINE_BREAK = " "
-INDENT = "  "
+INDENT_EMS = 2.0            # the reader's own indent, when the book says nothing
+
+
+def _u16_offsets(text):
+    """For each character of a string (and its end), its place counted in UTF-16 units."""
+    if len(text.encode("utf-16-le")) == 2 * len(text):
+        return range(len(text) + 1)
+    out, n = [], 0
+    for c in text:
+        out.append(n)
+        n += 2 if ord(c) > 0xFFFF else 1
+    out.append(n)
+    return out
+
+
+class TextMap:
+    """Where the characters of a laid-out string are in the chapter's text: runs of the text, in
+    order (laid, place, length, in UTF-16 units), with what lies between them (an indent, the line
+    between two pieces of a table cell) belonging to no place."""
+
+    def __init__(self):
+        self.laid, self.place, self.length = [], [], []
+
+    def run(self, laid, place, n):
+        if n <= 0:
+            return
+        if self.laid and self.laid[-1] + self.length[-1] == laid and self.place[-1] + self.length[-1] == place:
+            self.length[-1] += n
+            return
+        self.laid.append(laid)
+        self.place.append(place)
+        self.length.append(n)
+
+    @staticmethod
+    def _last(values, x):
+        lo, hi, r = 0, len(values) - 1, -1
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            if values[mid] <= x:
+                r, lo = mid, mid + 1
+            else:
+                hi = mid - 1
+        return r
+
+    def to_chapter(self, laid):
+        if not self.laid:
+            return 0
+        r = max(0, self._last(self.laid, laid))
+        into = laid - self.laid[r]
+        return self.place[r] if into < 0 else self.place[r] + min(into, self.length[r])
+
+    def to_laid(self, place):
+        if not self.laid:
+            return 0
+        r = self._last(self.place, place)
+        if r < 0:
+            return self.laid[0]
+        return self.laid[r] + min(place - self.place[r], self.length[r])
 
 
 class Lines:
-    """Lines first..last of one laid-out block, placed at y on the page."""
-    def __init__(self, y, char_base, block, first, last):
-        self.y, self.block, self.first, self.last = y, block, first, last
-        self.start_char = char_base + block.layout.lineAt(first).textStart()
+    """Lines first..last of one laid-out run, placed at y on the page; `x`/`clip` for a table cell."""
+    def __init__(self, y, block, first, last, x=0, clip=-1):
+        self.y, self.block, self.first, self.last, self.x, self.clip = y, block, first, last, x, clip
+        self.start_char = block.to_chapter(block.layout.lineAt(first).textStart())
 
 
 class Picture:
-    def __init__(self, y, char_base, source, width, height):
-        self.y, self.start_char, self.source, self.width, self.height = y, char_base, source, width, height
+    def __init__(self, y, char_base, source, width, height, x=0):
+        self.y, self.start_char, self.source, self.width, self.height, self.x = y, char_base, source, width, height, x
 
 
-class LaidBlock:
-    """One run of paragraphs as a single text layout, with the top and bottom of every line.
+class Rule:
+    """A short centred line, drawn where the book has a rule."""
+    def __init__(self, y, x1, x2, place):
+        self.y, self.x1, self.x2, self.start_char = y, x1, x2, place
 
-    One string for the whole run: the paragraphs are separated by line separators and indented
-    with em spaces, headings, leads and small print are formats on that same string."""
 
-    def __init__(self, block, font, dim, width, base=0):
-        self.base = base            # the place of the block's first character in its chapter
-        self.indents = []           # where, in the laid-out string, an indent was put in
-        parts, formats, pos = [], [], 0
-        for i, p in enumerate(block.paragraphs):
-            if i:
-                parts.append(LINE_BREAK)
-                pos += 1
-            indent = i > 0 and p.kind == NORMAL and block.paragraphs[i - 1].kind == NORMAL
-            text = (INDENT if indent else "") + p.text.replace("\n", LINE_BREAK + (INDENT if indent else ""))
-            length = u16(text)
-            if indent:
-                at = pos
-                for piece in p.text.split("\n"):
-                    self.indents.append(at)
-                    at += 2 + u16(piece) + 1
-            if p.kind != NORMAL:
-                fmt = QtGui.QTextCharFormat()
-                f = QtGui.QFont(font)
-                if p.kind == HEADING:
-                    f.setPixelSize(round(font.pixelSize() * 1.3))
-                    f.setWeight(QtGui.QFont.Bold)
-                elif p.kind == LEAD:
-                    f.setWeight(QtGui.QFont.Bold)
-                else:
-                    f.setPixelSize(round(font.pixelSize() * 0.8))
-                    fmt.setForeground(dim)
-                fmt.setFont(f)
-                r = QtGui.QTextLayout.FormatRange()
-                r.start, r.length, r.format = pos, length, fmt
-                formats.append(r)
-            # italic and bold: formats on the laid-out string, where every line of an indented
-            # paragraph is two em spaces further on (the indents are not text)
-            for a, b, flags in p.styles or ():
-                def laid(k, p=p, pos=pos, indent=indent):
-                    head = p.text[:k]
-                    return pos + (2 + 2 * head.count("\n") if indent else 0) + u16(head)
-                fmt = QtGui.QTextCharFormat()
-                if flags & ITALIC:
-                    fmt.setFontItalic(True)
-                if flags & BOLD:
-                    fmt.setFontWeight(QtGui.QFont.Bold)
-                r = QtGui.QTextLayout.FormatRange()
-                r.start, r.length, r.format = laid(a), laid(b) - laid(a), fmt
-                formats.append(r)
-            parts.append(text)
-            pos += length
-        self.layout = QtGui.QTextLayout("".join(parts), font)
-        option = QtGui.QTextOption()
-        option.setWrapMode(QtGui.QTextOption.WrapAtWordBoundaryOrAnywhere)
-        self.layout.setTextOption(option)
-        self.layout.setFormats(formats)
+class Grid:
+    """The borders of one table row: (x, width) of each cell."""
+    def __init__(self, y, height, cells, place):
+        self.y, self.height, self.cells, self.start_char = y, height, cells, place
+
+
+class Frame:
+    """What a page is laid out with: the reader's font and dim ink, the width and height of the
+    text, the screen's density, the book's pictures, and whether it is a magazine."""
+    def __init__(self, font, dim, width, page_height, images, magazine=False, density=1.0):
+        self.font, self.dim, self.width, self.page_height = font, dim, width, page_height
+        self.images, self.magazine, self.density = images, magazine, density
+        self.em = font.pixelSize()
         # Lines sit 1.7 em apart whatever the face: 1.45 times the line of the interface fonts,
         # less for a face drawn with tall line boxes of its own (Literata).
         natural = QtGui.QFontMetricsF(font).height() / max(1, font.pixelSize())
-        spacing = 1.7 / natural if natural > 1.3 else 1.45
-        self.tops, self.bottoms = [], []
-        y = 0
+        self.spacing = 1.7 / natural if natural > 1.3 else 1.45
+        self.line_step = int(round(QtGui.QFontMetricsF(font).height() * self.spacing))
+
+    def px(self, ems):
+        return int(round(ems * self.em))
+
+
+CASES = UPPER | LOWER | CAPITALIZE | SMALL_CAPS
+
+
+def _cases_of(p):
+    look = p.look
+    if look is None:
+        return None
+    base = look.flags & CASES
+    if not base and not any(f & CASES for _a, _b, f in p.styles or ()):
+        return None
+    out = [base] * len(p.text)
+    for a, b, f in p.styles or ():
+        for k in range(a, b):
+            out[k] |= f & CASES
+    return out
+
+
+def _cased(c, mode, prev):
+    """A character as drawn in its case: one for one, so the places do not move."""
+    if not mode:
+        return c
+    if mode & UPPER:
+        u = c.upper()
+    elif mode & LOWER:
+        u = c.lower()
+    elif mode & CAPITALIZE and c.isalpha() and (prev is None or not prev.isalnum()):
+        u = c.upper()
+    elif mode & SMALL_CAPS and not mode & CAPITALIZE:
+        u = c.upper()
+    else:
+        u = c
+    return u if len(u) == 1 else c
+
+
+def _marker_text(look):
+    m, n = look.marker, look.number
+    if m == DISC:
+        return "•"
+    if m == CIRCLE:
+        return "◦"
+    if m == SQUARE:
+        return "▪"
+    if m == DECIMAL:
+        return "%d." % n
+    if m in (LOWER_ALPHA, UPPER_ALPHA):
+        s, k = "", n
+        if k <= 0:
+            s = str(n)
+        while k > 0:
+            k -= 1
+            s = chr(ord("a") + k % 26) + s
+            k //= 26
+        return (s.upper() if m == UPPER_ALPHA else s) + "."
+    if m in (LOWER_ROMAN, UPPER_ROMAN):
+        if not 0 < n < 4000:
+            s = str(n)
+        else:
+            s, k = "", n
+            for v, r in ((1000, "m"), (900, "cm"), (500, "d"), (400, "cd"), (100, "c"), (90, "xc"), (50, "l"), (40, "xl"),
+                         (10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i")):
+                while k >= v:
+                    s += r
+                    k -= v
+        return (s.upper() if m == UPPER_ROMAN else s) + "."
+    return None
+
+
+def _hard_breaks(p):
+    soft = set(p.look.soft or ()) if p.look else set()
+    return {k for k, c in enumerate(p.text) if c == "\n" and k not in soft}
+
+
+class _Formats:
+    """QTextLayout formats on a laid-out string, from flags (Para) and sizes."""
+
+    def __init__(self, font):
+        self.font, self.ranges = font, []
+
+    def add(self, start, length, flags, size=0.0, dim=None, base_size=1.0):
+        if length <= 0:
+            return
+        fmt = QtGui.QTextCharFormat()
+        if flags & ITALIC:
+            fmt.setFontItalic(True)
+        if flags & BOLD:
+            fmt.setFontWeight(QtGui.QFont.Bold)
+        if flags & UNDERLINE:
+            fmt.setFontUnderline(True)
+        if flags & STRIKE:
+            fmt.setFontStrikeOut(True)
+        if flags & MONO:
+            fmt.setFontFamily("monospace")
+            fmt.setFontStyleHint(QtGui.QFont.Monospace)
+        if flags & (SUPER | SUB):
+            fmt.setVerticalAlignment(QtGui.QTextCharFormat.AlignSuperScript if flags & SUPER else QtGui.QTextCharFormat.AlignSubScript)
+        elif size:
+            fmt.setProperty(QtGui.QTextFormat.FontPixelSize, max(1, round(self.font.pixelSize() * size)))
+        if dim is not None:
+            fmt.setForeground(dim)
+        r = QtGui.QTextLayout.FormatRange()
+        r.start, r.length, r.format = start, length, fmt
+        self.ranges.append(r)
+
+
+class LaidBlock:
+    """A run of paragraphs as one text layout, with the top and bottom of every line.
+
+    One string for the whole run: the paragraphs are separated by line separators; the reader's
+    own indent, the book's margins, indents, list markers and drop caps are where each line is put, its sizes and the rest formats on the same string. A run never has
+    space between its paragraphs (a space between paragraphs starts a new run)."""
+
+    def __init__(self, block, start, end, base, frame, no_drop=(), width=None):
+        f = frame
+        font = f.font
+        self.map = TextMap()
+        self.drops = []             # (paragraph, laid start, laid end, letters, font, x)
+        self.markers = []           # (laid start, text, x of the text)
+        chunks = []                 # (laid start, first px, rest px, align, drop px)
+        parts, pos, place = [], 0, base
+        fm = _Formats(font)
+        for i in range(start, end):
+            p = block.paragraphs[i]
+            look = p.look
+            if i > start:
+                self.map.run(pos, place - 1, 1)
+                parts.append(LINE_BREAK)
+                pos += 1
+            para_start = pos
+            prev_kind = block.paragraphs[i - 1].kind if i > 0 else None
+            centred = look is not None and look.align in (CENTER, RIGHT)
+            indent = (i > 0 and p.kind == NORMAL and prev_kind == NORMAL and
+                      (look is None or (_isnan(look.indent) and not centred and look.drop_cap == 0 and look.marker == 0
+                                        and not look.flags & MONO)))
+            hard = _hard_breaks(p) if look is not None else {k for k, c in enumerate(p.text) if c == "\n"}
+            cases = _cases_of(p)
+            u = _u16_offsets(p.text)
+            laid_of = [0] * (len(p.text) + 1)
+            para_chunks = [pos]
+            for k, c in enumerate(p.text):
+                laid_of[k] = pos
+                if c == "\n":
+                    if k in hard:
+                        parts.append(LINE_BREAK)
+                        pos += 1
+                        para_chunks.append(pos)
+                    else:
+                        parts.append(" ")
+                        pos += 1
+                else:
+                    d = _cased(c, cases[k], p.text[k - 1] if k else None) if cases else c
+                    parts.append(d)
+                    pos += 2 if ord(d) > 0xFFFF else 1
+            laid_of[len(p.text)] = pos
+            # the text's places, run by run between the indents
+            run_from = 0
+            for q in range(1, len(p.text) + 1):
+                if q == len(p.text) or laid_of[q] != laid_of[q - 1] + (u[q] - u[q - 1]):
+                    self.map.run(laid_of[run_from], place + u[run_from], u[q] - u[run_from])
+                    run_from = q
+            para_end = pos
+            place += u[len(p.text)] + 1
+            if look is None:
+                for a, b, flags in p.styles or ():
+                    fm.add(laid_of[a], laid_of[b] - laid_of[a], flags & FLAGS)
+                if p.kind == HEADING:
+                    fm.add(para_start, para_end - para_start, BOLD, 1.3)
+                elif p.kind == LEAD:
+                    fm.add(para_start, para_end - para_start, BOLD)
+                elif p.kind == SMALL:
+                    fm.add(para_start, para_end - para_start, 0, 0.8, f.dim)
+                for c0 in para_chunks:          # the reader's own indent, on every line of it
+                    chunks.append((c0, f.px(INDENT_EMS) if indent else 0, 0, AUTO, 0))
+                continue
+            dropped = look.drop_cap if 0 < look.drop_cap <= len(p.text) and i not in no_drop else 0
+            fm.add(para_start, para_end - para_start, 0, look.size if look.size != 1.0 else 0.0,
+                   f.dim if p.kind == SMALL else None)
+            fm.add(laid_of[dropped], para_end - laid_of[dropped], look.flags, look.size if look.size != 1.0 else 0.0,
+                   base_size=look.size)
+            for a, b, flags in p.styles or ():
+                a = max(a, dropped)
+                if b > a:
+                    pct = flags >> SIZE_SHIFT
+                    fm.add(laid_of[a], laid_of[b] - laid_of[a], flags & FLAGS, look.size * pct / 100.0 if pct else 0.0,
+                           base_size=look.size)
+            if cases:
+                k = dropped
+                while k < len(p.text):
+                    if cases[k] & SMALL_CAPS and not cases[k] & (UPPER | LOWER) and p.text[k].islower():
+                        e = k
+                        while e < len(p.text) and cases[e] & SMALL_CAPS and p.text[e].islower():
+                            e += 1
+                        fm.add(laid_of[k], laid_of[e] - laid_of[k], 0, look.size * 0.8)
+                        k = e
+                    else:
+                        k += 1
+            # a list's marker sits in the margin: the margin is never narrower than it
+            marker = _marker_text(look)
+            left = max(min(f.px(look.left), f.width * 35 // 100),
+                       int(round(QtGui.QFontMetricsF(font).horizontalAdvance(marker) + f.em * 0.6)) if marker else 0)
+            first = 0 if _isnan(look.indent) or dropped else f.px(look.indent)
+            drop_px = 0
+            if dropped:
+                letters = p.text[:dropped]
+                if cases:
+                    letters = "".join(_cased(c, cases[k], p.text[k - 1] if k else None) for k, c in enumerate(letters))
+                big = QtGui.QFont(font)
+                big.setWeight(QtGui.QFont.Bold)
+                cap = max(QtGui.QFontMetricsF(font).capHeight(), f.em * 0.6)
+                big.setPixelSize(max(1, int(round(f.em * (f.line_step + cap) / cap))))
+                drop_px = int(round(QtGui.QFontMetricsF(big).horizontalAdvance(letters) + f.em * 0.2))
+                self.drops.append((i, para_start, para_end, letters, big, left))
+                # the letters stay in the text, taking no room: drawn large in the margin instead
+                hide = QtGui.QTextCharFormat()
+                hide.setForeground(QtGui.QColor(0, 0, 0, 0))
+                hide.setProperty(QtGui.QTextFormat.FontPixelSize, 1)
+                hide.setFontLetterSpacingType(QtGui.QFont.AbsoluteSpacing)
+                hide.setFontLetterSpacing(-1)
+                r = QtGui.QTextLayout.FormatRange()
+                r.start, r.length, r.format = laid_of[0], laid_of[dropped] - laid_of[0], hide
+                fm.ranges.append(r)
+            if marker:
+                self.markers.append((para_start, marker, left))
+            for n, c0 in enumerate(para_chunks):
+                fp = min(max(0, left + (f.px(INDENT_EMS) if indent else 0) + (first + drop_px if n == 0 else 0)), f.width // 2)
+                chunks.append((c0, fp, left, look.align, drop_px if n == 0 else 0))
+        self.text = "".join(parts)
+        self.layout = QtGui.QTextLayout(self.text, font)
+        option = QtGui.QTextOption()
+        option.setWrapMode(QtGui.QTextOption.WrapAtWordBoundaryOrAnywhere)
+        justify = any(block.paragraphs[i].look is not None and block.paragraphs[i].look.align == JUSTIFY for i in range(start, end))
+        if justify:
+            option.setAlignment(QtCore.Qt.AlignJustify)
+        self.layout.setTextOption(option)
+        self.layout.setFormats(fm.ranges)
+        width = f.width if width is None else width
+        starts = [c[0] for c in chunks]
+        self.tops, self.bottoms, self.drop_lines = [], [], []
+        y, chunk_line = 0, {}
         self.layout.beginLayout()
         while True:
             line = self.layout.createLine()
             if not line.isValid():
                 break
-            line.setLineWidth(width)
-            line.setPosition(QtCore.QPointF(0, y))
+            # the chunk (a line of a paragraph between hard breaks) this line is in
+            at = line.textStart()
+            k = max(0, TextMap._last(starts, at))
+            c0, first_px, rest_px, align, drop_px = chunks[k]
+            nth = chunk_line.get(k, 0)
+            chunk_line[k] = nth + 1
+            margin = first_px if nth == 0 else (rest_px + (drop_px if nth == 1 else 0))
+            line.setLineWidth(max(8, width - margin))
+            x = margin
+            if align in (CENTER, RIGHT):
+                spare = width - margin - line.naturalTextWidth()
+                x += max(0, spare / 2 if align == CENTER else spare)
+            line.setPosition(QtCore.QPointF(x, y))
             self.tops.append(y)
-            y += int(round(line.height() * spacing))
+            y += int(round(line.height() * f.spacing))
             self.bottoms.append(y)
         self.layout.endLayout()
+        for d in self.drops:
+            self.drop_lines.append(self.line_of(d[1]))
+
+    def line_of(self, laid):
+        for i in range(self.layout.lineCount()):
+            line = self.layout.lineAt(i)
+            if line.textStart() <= laid < line.textStart() + line.textLength():
+                return i
+        return max(0, self.layout.lineCount() - 1)
 
     def to_chapter(self, laid):
         """A place in the laid-out string as a place in the chapter (the indents are not text)."""
-        c = laid
-        for at in self.indents:
-            if at + 2 <= laid:
-                c -= 2
-            elif at < laid:
-                c -= laid - at
-        return self.base + c
+        return self.map.to_chapter(laid)
 
     def to_laid(self, place):
-        laid = place - self.base
-        for at in self.indents:
-            if at <= laid:
-                laid += 2
-            else:
-                break
-        return laid
+        return self.map.to_laid(place)
+
+    def paint_extras(self, p, offset, first, last, fg):
+        """What is drawn beside the text: list markers, drop caps (lines first..last shown)."""
+        for at, text, left in self.markers:
+            i = self.line_of(at)
+            if first <= i <= last:
+                line = self.layout.lineAt(i)
+                p.setFont(self.layout.font())
+                p.setPen(fg)
+                fmx = QtGui.QFontMetricsF(self.layout.font())
+                gap = self.layout.font().pixelSize() * 0.4
+                p.drawText(QtCore.QPointF(offset.x() + left - gap - fmx.horizontalAdvance(text), offset.y() + line.y() + line.ascent()), text)
+        for (_i, at, _end, letters, big, left), i in zip(self.drops, self.drop_lines):
+            if first <= i <= last:
+                line = self.layout.lineAt(i)
+                second = self.layout.lineAt(i + 1) if i + 1 < self.layout.lineCount() else None
+                base = (second.y() + second.ascent()) if second is not None else line.y() + line.ascent() + (self.bottoms[i] - self.tops[i])
+                p.setFont(big)
+                p.setPen(fg)
+                p.drawText(QtCore.QPointF(offset.x() + left, offset.y() + base), letters)
 
 
-def paginate(chapter, font, dim, width, page_height, images):
+def _same_run(a, b):
+    x, y = a.look, b.look
+    if x is None or y is None:
+        return x is None and y is None
+    return (x.align == JUSTIFY) == (y.align == JUSTIFY) and x.right == y.right and (x.cells is None) == (y.cells is None)
+
+
+def _apart(p):
+    look = p.look
+    return look is not None and (look.above > 0 or look.rule or look.page_break or look.level == 1)
+
+
+def paginate(chapter, frame):
+    """Pages of the chapter. Paragraphs go in runs (LaidBlock); the space the book puts between
+    them, a rule, a page break, a chapter heading on a new page come between runs; a picture
+    keeps its own size unless it is large; a table is a grid of cells, each a small layout."""
+    f = frame
     pages, pieces = [], []
     state = {"y": 0}
-    char_base = 0
-    place = 0                   # the same count, for highlights: see chapter_text
-    gap = int(font.pixelSize() * 0.8)
+    place = 0
+    block_gap = f.px(0.8)
+    body_seen = False
 
     def new_page():
         if pieces:
@@ -3521,45 +4815,281 @@ def paginate(chapter, font, dim, width, page_height, images):
             del pieces[:]
         state["y"] = 0
 
+    def space(px):
+        if state["y"] > 0:
+            state["y"] += px
+
+    def rule(at):
+        h = f.px(0.9)
+        if state["y"] + h > f.page_height:
+            new_page()
+        w = f.width // 4
+        pieces.append(Rule(state["y"] + h // 2, (f.width - w) // 2, (f.width + w) // 2, at))
+        state["y"] += h
+
+    def place_lines(laid, keep_first, drop_lines):
+        count = len(laid.tops)
+        height = laid.bottoms[-1] if count else 0
+        if keep_first and state["y"] > 0 and state["y"] + height + keep_first > f.page_height and height + keep_first <= f.page_height:
+            new_page()
+        line = 0
+        while line < count:
+            top = laid.tops[line]
+            last = line
+            while last < count and laid.bottoms[last] - top <= f.page_height - state["y"]:
+                last += 1
+            if last < count and last - 1 > line and (last - 1) in drop_lines:
+                last -= 1
+            if last == line:
+                if state["y"] > 0:      # try again at the top of a fresh page
+                    new_page()
+                    continue
+                last += 1               # a single line taller than the page
+            pieces.append(Lines(state["y"], laid, line, last - 1))
+            state["y"] += laid.bottoms[last - 1] - top
+            line = last
+            if line < count:
+                new_page()
+
     for block in chapter.blocks:
+        first_of_block = True
         if isinstance(block, TextBlock):
-            laid = LaidBlock(block, font, dim, width, place)
-            if state["y"] > 0:
-                state["y"] += gap
-            line, count = 0, len(laid.tops)
-            while line < count:
-                top = laid.tops[line]
-                last = line
-                while last < count and laid.bottoms[last] - top <= page_height - state["y"]:
-                    last += 1
-                if last == line:
-                    if state["y"] > 0:      # try again at the top of a fresh page
-                        new_page()
+            paras = block.paragraphs
+            place_of = [0]
+            for p in paras:
+                place_of.append(place_of[-1] + u16(p.text) + 1)
+            i = 0
+            while i < len(paras):
+                p = paras[i]
+                look = p.look
+                gap = max(block_gap if first_of_block else 0, f.px(look.above if look else 0.0))
+                heading_break = look is not None and look.level == 1 and not f.magazine and body_seen
+                if ((look is not None and look.page_break) or heading_break) and state["y"] > 0:
+                    new_page()
+                space(gap)
+                if look is not None and look.rule:
+                    rule(place + place_of[i])
+                first_of_block = False
+                if look is not None and look.cells is not None:
+                    j = i + 1
+                    while j < len(paras) and paras[j].look is not None and paras[j].look.cells is not None \
+                            and paras[j].look.table == look.table and not _apart(paras[j]):
+                        j += 1
+                    rows = _table(block, i, j, place + place_of[i], place_of, place, f)
+                    if rows is not None:
+                        for height, edges, cells, at in rows:
+                            if state["y"] + height > f.page_height and state["y"] > 0:
+                                new_page()
+                            pieces.append(Grid(state["y"], height, edges, at))
+                            for x, w, dy, laid in cells:
+                                pieces.append(Lines(state["y"] + dy, laid, 0, len(laid.tops) - 1, x, w))
+                            state["y"] += height
+                        i = j
                         continue
-                    last += 1               # a single line taller than the page
-                pieces.append(Lines(state["y"], char_base, laid, line, last - 1))
-                state["y"] += laid.bottoms[last - 1] - top
-                line = last
-                if line < count:
-                    new_page()
+                j = i + 1
+                while j < len(paras) and _same_run(p, paras[j]) and not _apart(paras[j]) \
+                        and (paras[j].look is not None and paras[j].look.cells is not None) == (look is not None and look.cells is not None):
+                    j += 1
+                right = min(f.px(look.right if look else 0.0), f.width // 4)
+                laid = LaidBlock(block, i, j, place + place_of[i], f, width=f.width - right)
+                short = {d[0] for d, line in zip(laid.drops, laid.drop_lines)
+                         if line == laid.line_of(max(d[1], d[2] - 1))}
+                if short:
+                    laid = LaidBlock(block, i, j, place + place_of[i], f, no_drop=short, width=f.width - right)
+                heading = j == i + 1 and look is not None and look.level > 0
+                place_lines(laid, f.line_step * 2 if heading else 0, set(laid.drop_lines))
+                if any(paras[k].kind == NORMAL and (paras[k].look.level if paras[k].look else 0) == 0 for k in range(i, j)):
+                    body_seen = True
+                i = j
+            place += block.length
         else:
-            size = images.size(block.source) if images else None
-            if size and size[0] >= 48 and size[1] >= 48:
-                w = width
+            size = f.images.size(block.source) if f.images else None
+            look = block.look
+            if size and size[0] >= 16 and size[1] >= 16:
+                natural = (look.pixels if look is not None and look.pixels > 0 else size[0]) * f.density
+                if look is not None and not _isnan(look.width):
+                    w = f.width * look.width
+                elif look is None or natural >= f.width * 0.75:
+                    w = f.width
+                else:
+                    w = natural
+                w = max(1, min(f.width, int(w)))
                 h = w * size[1] // size[0]
-                if h > page_height:
-                    h = page_height
+                if h > f.page_height:
+                    h = f.page_height
                     w = h * size[0] // size[1]
-                if state["y"] > 0:
-                    state["y"] += gap
-                if state["y"] + h > page_height:
+                if look is not None and look.page_break and state["y"] > 0:
                     new_page()
-                pieces.append(Picture(state["y"], char_base, block.source, w, h))
+                space(max(block_gap, f.px(look.above if look else 0.0)))
+                if look is not None and look.rule:
+                    rule(place)
+                if state["y"] + h > f.page_height:
+                    new_page()
+                align = look.align if look is not None else AUTO
+                x = 0 if align == LEFT else f.width - w if align == RIGHT else (f.width - w) // 2
+                pieces.append(Picture(state["y"], place, block.source, w, h, x))
                 state["y"] += h
-        char_base += block.length
-        place += block.length
+            place += 1
     new_page()
     return pages or [[]]
+
+
+class _Cell:
+    def __init__(self, col, span, header):
+        self.col, self.span, self.header, self.pieces = col, span, header, []
+
+
+class _CellBlock:
+    """One table cell's text, laid out at its width: the same shape as a LaidBlock."""
+
+    def __init__(self, text, formats, mapping, font, width, spacing, aligns):
+        self.map, self.drops, self.markers, self.drop_lines = mapping, [], [], []
+        self.text = text
+        self.layout = QtGui.QTextLayout(text, font)
+        option = QtGui.QTextOption()
+        option.setWrapMode(QtGui.QTextOption.WrapAtWordBoundaryOrAnywhere)
+        self.layout.setTextOption(option)
+        self.layout.setFormats(formats)
+        starts = [a[0] for a in aligns]
+        self.tops, self.bottoms = [], []
+        y = 0
+        self.layout.beginLayout()
+        while True:
+            line = self.layout.createLine()
+            if not line.isValid():
+                break
+            line.setLineWidth(max(8, width))
+            k = max(0, TextMap._last(starts, line.textStart()))
+            align = aligns[k][1] if aligns else AUTO
+            x = 0
+            if align in (CENTER, RIGHT):
+                spare = width - line.naturalTextWidth()
+                x = max(0, spare / 2 if align == CENTER else spare)
+            line.setPosition(QtCore.QPointF(x, y))
+            self.tops.append(y)
+            y += int(round(line.height() * spacing))
+            self.bottoms.append(y)
+        self.layout.endLayout()
+
+    def to_chapter(self, laid):
+        return self.map.to_chapter(laid)
+
+    def to_laid(self, place):
+        return self.map.to_laid(place)
+
+    def paint_extras(self, *_args):
+        pass
+
+
+def _table(block, start, end, at, place_of, base, f):
+    """Paragraphs start..end of a block, rows of one table, as a grid: thin borders, the columns
+    shared by what they hold, each cell's text wrapped in it. None when it cannot be one (too many
+    columns, a row taller than a page): the rows are then read as paragraphs."""
+    rows = {}
+    for i in range(start, end):
+        for c in block.paragraphs[i].look.cells:
+            row = rows.setdefault(c[2], {})
+            cell = row.setdefault(c[3], _Cell(c[3], c[4], c[5] == 1))
+            cell.pieces.append((i, c[0], c[1]))
+    if not rows:
+        return None
+    columns = max(cell.col + cell.span for r in rows.values() for cell in r.values())
+    if columns < 1 or columns > 12:
+        return None
+    pad = max(2, f.px(0.3))
+    font = f.font
+    texts = []
+    for r in sorted(rows):
+        made = []
+        for col in sorted(rows[r]):
+            cell = rows[r][col]
+            parts, pos, mapping, fm, aligns = [], 0, TextMap(), _Formats(font), []
+            for n, (pi, a, b) in enumerate(cell.pieces):
+                p = block.paragraphs[pi]
+                if n:
+                    parts.append(LINE_BREAK)
+                    pos += 1
+                start_pos = pos
+                hard = _hard_breaks(p)
+                cases = _cases_of(p)
+                u = _u16_offsets(p.text)
+                laid_of = {}
+                for k in range(a, b):
+                    laid_of[k] = pos
+                    ch = p.text[k]
+                    if ch == "\n":
+                        d = LINE_BREAK if k in hard else " "
+                    else:
+                        d = _cased(ch, cases[k], p.text[k - 1] if k else None) if cases else ch
+                    parts.append(d)
+                    pos += 2 if ord(d) > 0xFFFF else 1
+                laid_of[b] = pos
+                mapping.run(start_pos, base + place_of[pi] + u[a], u[b] - u[a])
+                look = p.look
+                fm.add(start_pos, pos - start_pos, look.flags | (BOLD if cell.header else 0), look.size if look.size != 1.0 else 0.0)
+                for ra, rb_, flags in p.styles or ():
+                    ra, rb_ = max(ra, a), min(rb_, b)
+                    if rb_ > ra:
+                        pct = flags >> SIZE_SHIFT
+                        fm.add(laid_of[ra], laid_of[rb_] - laid_of[ra], flags & FLAGS, look.size * pct / 100.0 if pct else 0.0, base_size=look.size)
+                aligns.append((start_pos, look.align))
+            text = "".join(parts)
+            # measured with its own formats: a header in bold, a word in capitals
+            probe = QtGui.QTextLayout(text, font)
+            probe.setFormats(fm.ranges)
+            probe.beginLayout()
+            wants = 0.0
+            while True:
+                line = probe.createLine()
+                if not line.isValid():
+                    break
+                line.setLineWidth(100000)
+                wants = max(wants, line.naturalTextWidth())
+            probe.endLayout()
+            needs = 0.0
+            fmw = QtGui.QFontMetricsF(QtGui.QFont(font))
+            for word in re.split(r"[  ]", text):
+                if word:
+                    needs = max(needs, fmw.horizontalAdvance(word) * (1.08 if cell.header else 1.0))
+            made.append((cell, text, fm.ranges, mapping, aligns, wants + 2 * pad + 2, needs + 2 * pad + 2))
+        texts.append(made)
+    wants = [1.0] * columns
+    needs = [0.0] * columns
+    for made in texts:
+        for cell, _t, _f, _m, _a, w, n in made:
+            if cell.span == 1:
+                wants[cell.col] = max(wants[cell.col], w)
+                needs[cell.col] = max(needs[cell.col], n)
+    total = sum(wants)
+    widths = [f.width * w / total for w in wants]
+    short = [c for c in range(columns) if widths[c] < needs[c]]
+    if short:
+        wanted = sum(needs[c] - widths[c] for c in short)
+        spare = sum(max(0.0, widths[c] - needs[c]) for c in range(columns) if c not in short)
+        if spare > 0:
+            k = min(1.0, spare / wanted)
+            for c in range(columns):
+                if c in short:
+                    widths[c] += (needs[c] - widths[c]) * k
+                else:
+                    widths[c] -= max(0.0, widths[c] - needs[c]) * (wanted * k / spare)
+    xs = [0]
+    for c in range(columns):
+        xs.append(xs[-1] + int(widths[c]))
+    xs[columns] = f.width - 1
+    out = []
+    for made in texts:
+        cells, edges, height = [], [], 0
+        for cell, text, formats, mapping, aligns, _w, _n in made:
+            x0, x1 = xs[cell.col], xs[min(columns, cell.col + cell.span)]
+            laid = _CellBlock(text, formats, mapping, font, max(8, x1 - x0 - 2 * pad), f.spacing, aligns)
+            cells.append((x0 + pad, x1 - x0 - 2 * pad, pad, laid))
+            edges.append((x0, x1 - x0))
+            height = max(height, (laid.bottoms[-1] if laid.bottoms else 0) + 2 * pad)
+        if height > f.page_height:
+            return None
+        out.append((height, edges, cells, at))
+    return out
 
 
 def page_start(page):
@@ -3886,10 +5416,13 @@ class Reader(QtWidgets.QWidget):
             top = block.tops[piece.first]
             if not piece.y <= y < piece.y + block.bottoms[piece.last] - top:
                 continue
+            if piece.clip >= 0 and not piece.x <= x < piece.x + piece.clip:
+                continue
             for i in range(piece.first, piece.last + 1):
                 if y < piece.y + block.bottoms[i] - top:
                     line = block.layout.lineAt(i)
-                    return block.to_chapter(line.xToCursor(max(0.0, min(float(x), line.naturalTextWidth()))))
+                    lx = float(x - piece.x)
+                    return block.to_chapter(line.xToCursor(max(line.x(), min(lx, line.x() + line.naturalTextWidth()))))
         return None
 
     def highlight_at(self, pos):
@@ -3912,8 +5445,8 @@ class Reader(QtWidgets.QWidget):
                 last = block.to_chapter(line.textStart() + line.textLength())
                 if h["end"] <= first or h["start"] >= last:
                     continue
-                x1 = area.left() + line.cursorToX(block.to_laid(max(h["start"], first)))[0]
-                x2 = area.left() + (line.cursorToX(block.to_laid(min(h["end"], last)))[0] if h["end"] < last else line.naturalTextWidth())
+                x1 = area.left() + piece.x + line.cursorToX(block.to_laid(max(h["start"], first)))[0]
+                x2 = area.left() + piece.x + (line.cursorToX(block.to_laid(min(h["end"], last)))[0] if h["end"] < last else line.x() + line.naturalTextWidth())
                 if min(x1, x2) < right and max(x1, x2) > left:
                     return True
         return False
@@ -3947,12 +5480,12 @@ class Reader(QtWidgets.QWidget):
                     if end <= first or start >= last:
                         continue
                     x1 = line.cursorToX(block.to_laid(max(start, first)))[0]
-                    x2 = line.cursorToX(block.to_laid(min(end, last)))[0] if end < last else line.naturalTextWidth()
+                    x2 = line.cursorToX(block.to_laid(min(end, last)))[0] if end < last else line.x() + line.naturalTextWidth()
                     if x2 <= x1:
                         continue
                     band = QtGui.QColor(accent)
                     band.setAlphaF(strength)
-                    rect = QtCore.QRectF(area.left() + x1, top + line.y(), x2 - x1, line.height())
+                    rect = QtCore.QRectF(area.left() + piece.x + x1, top + line.y(), x2 - x1, line.height())
                     p.fillRect(rect, band)
                     if commented:
                         p.fillRect(QtCore.QRectF(rect.left(), rect.bottom() - 1, rect.width(), 2), fg)
@@ -3991,7 +5524,8 @@ class Reader(QtWidgets.QWidget):
         if key != self.key:
             dim = QtGui.QColor(self.main.colors["fg"])
             dim.setAlphaF(0.55)
-            self.pages = paginate(self.book.chapters[self.chapter], font, dim, area.width(), area.height(), self.images)
+            self.pages = paginate(self.book.chapters[self.chapter],
+                                  Frame(font, dim, area.width(), area.height(), self.images, bool(self.book.magazine)))
             self.key = key
             self.page = min(page_for(self.pages, self.wanted), len(self.pages) - 1)
             self.wanted = page_start(self.pages[self.page])
@@ -4132,7 +5666,7 @@ class Reader(QtWidgets.QWidget):
             return None
         _font, area = self.frame()
         for piece in self.pages[self.page]:
-            if isinstance(piece, Picture) and QtCore.QRect(area.left() + (area.width() - piece.width) // 2, area.top() + piece.y,
+            if isinstance(piece, Picture) and QtCore.QRect(area.left() + piece.x, area.top() + piece.y,
                                                            piece.width, piece.height).contains(pos):
                 return piece.source
         return None
@@ -4204,14 +5738,24 @@ class Reader(QtWidgets.QWidget):
         for piece in page:
             if isinstance(piece, Lines):
                 p.setPen(fg)
-                offset = QtCore.QPointF(area.left(), area.top() + piece.y - piece.block.tops[piece.first])
+                offset = QtCore.QPointF(area.left() + piece.x, area.top() + piece.y - piece.block.tops[piece.first])
                 for i in range(piece.first, piece.last + 1):
                     piece.block.layout.lineAt(i).draw(p, offset)
+                piece.block.paint_extras(p, offset, piece.first, piece.last, fg)
+            elif isinstance(piece, Rule):
+                p.fillRect(QtCore.QRectF(area.left() + piece.x1, area.top() + piece.y, piece.x2 - piece.x1, 1), dim)
+            elif isinstance(piece, Grid):
+                pen = QtGui.QPen(dim)
+                pen.setWidth(1)
+                p.setPen(pen)
+                p.setBrush(QtCore.Qt.NoBrush)
+                for x, w in piece.cells:
+                    p.drawRect(QtCore.QRect(area.left() + x, area.top() + piece.y, w, piece.height))
             else:
                 ratio = self.devicePixelRatioF()
                 pixmap = self.images.pixmap(piece.source, int(piece.width * ratio), int(piece.height * ratio)) if self.images else None
                 if pixmap:
-                    p.drawPixmap(QtCore.QRect(area.left() + (area.width() - piece.width) // 2, area.top() + piece.y,
+                    p.drawPixmap(QtCore.QRect(area.left() + piece.x, area.top() + piece.y,
                                               piece.width, piece.height), pixmap)
         # A bare number means the format had no chapter heading: not worth a label.
         title = self.book.chapters[self.chapter].title

@@ -90,6 +90,14 @@ reader, the same library, the same wording.
   before « — Edition du … »).
 * Italic and bold show in every book; the text itself, where highlights are counted, is the same
   as without them.
+* Books and magazines are set the way their publisher set them, from the book's own style
+  sheets: headings in their sizes, centred, right-aligned and justified text, indents and the
+  space between paragraphs, quotations and verse in their margins, lists with bullets and
+  numbers, tables as grids, small capitals, raised notes, rules, pictures at their own size with
+  their captions, large initials, a new page where the book asks for one, the lines of code and
+  verse. The font, size, margins and colours stay the reader's; text written over several lines
+  of the source reads as one paragraph. Nothing of this changes the text, where highlights are
+  counted.
 * A folder of the library can be followed (right click on it): it then sits near the top of the
   library with the number of its new books, counted from the last listing of the drive. Nothing
   is downloaded by itself: a click lists that folder again, fetches its new books one after the
@@ -142,13 +150,17 @@ the settings and the library's account, readable by your account only.
 
     python3 tests/test_books.py
     python3 tests/bench_sync.py
+    python3 tests/canonical.py check SNAPSHOT BOOKS...
 
 The first runs on books made up by `tests/make_books.py`; its last case drives the library page
 against a small drive it serves itself (`rclone serve webdav`, skipped without rclone) and
 saves its screenshots in `$READERS_BOOKS_SHOTS` when that is set. The second is the
 synchronisation in all its forms — two and three devices sharing one drive, highlights,
 comments, removals, the place in the book, logins refused, the note in Reader's Notes — against
-a real WebDAV server (`rclone serve webdav`, which it starts itself).
+a real WebDAV server (`rclone serve webdav`, which it starts itself). The third reads books
+and compares the text of every chapter with a snapshot taken by an earlier version
+(`canonical.py write`): the presentation must never move a highlight; the phone's CanonicalTest
+reads the same snapshot.
 
 ## Crédits / Credits
 

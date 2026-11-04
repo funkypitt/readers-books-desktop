@@ -32,6 +32,11 @@ def path(name):
     return os.path.join(TMP, name)
 
 
+def laid_out(block, font, width, base=0):
+    """A whole text block as one run, as the pager lays it out."""
+    return rb.LaidBlock(block, 0, len(block.paragraphs), base, rb.Frame(font, rb.QtGui.QColor("#888"), width, 10000, None))
+
+
 class Parsing(unittest.TestCase):
     def test_an_epub_gives_chapters_with_their_titles_and_pictures(self):
         p = make_books.epub(path("a.epub"))
@@ -192,7 +197,7 @@ class Pages(unittest.TestCase):
         font.setPixelSize(18)
         for width, height in ((500, 700), (320, 410), (700, 300)):
             for chapter in book.chapters[:3]:
-                pages = rb.paginate(chapter, font, rb.QtGui.QColor("#888"), width, height, store)
+                pages = rb.paginate(chapter, rb.Frame(font, rb.QtGui.QColor("#888"), width, height, store))
                 starts = [rb.page_start(p) for p in pages]
                 self.assertEqual(starts, sorted(starts))
                 self.assertEqual(len(set(starts)), len(starts))
@@ -216,9 +221,9 @@ class Pages(unittest.TestCase):
         block = rb.TextBlock([rb.Para("Titre", rb.HEADING), rb.Para("Un 😀 deux"), rb.Para("Trois\nquatre")])
         font = rb.QtGui.QFont(rb.SANS_FAMILY)
         font.setPixelSize(16)
-        laid = rb.LaidBlock(block, font, rb.QtGui.QColor("#888"), 300)
-        # the two em spaces of the third paragraph's indent, twice (it holds a line break)
-        self.assertEqual(len(laid.layout.text().encode("utf-16-le")) // 2, block.length - 1 + 4)
+        laid = laid_out(block, font, 300)
+        # one for one: the reader's own indent is a margin, not characters
+        self.assertEqual(len(laid.layout.text().encode("utf-16-le")) // 2, block.length - 1)
 
 
 class Credentials(unittest.TestCase):
@@ -386,7 +391,7 @@ class Highlights(unittest.TestCase):
         block = rb.TextBlock([rb.Para("Un"), rb.Para("Deux\ntrois"), rb.Para("Quatre 😀 cinq")])
         font = rb.QtGui.QFont(rb.SANS_FAMILY)
         font.setPixelSize(16)
-        laid = rb.LaidBlock(block, font, rb.QtGui.QColor("#888"), 400, base=100)
+        laid = laid_out(block, font, 400, base=100)
         text = rb.Text16(laid.layout.text())
         chapter = rb.Text16(rb.chapter_text(rb.Chapter("c", [block])))
         self.assertEqual(chapter.length, block.length)
@@ -394,8 +399,9 @@ class Highlights(unittest.TestCase):
             at = rb.u16(rb.chapter_text(rb.Chapter("c", [block])).split(word)[0])
             self.assertEqual(text.cut(laid.to_laid(100 + at), laid.to_laid(100 + at) + len(word)), word)
             self.assertEqual(laid.to_chapter(laid.to_laid(100 + at)), 100 + at)
-        # a place inside an indent is the character that follows it
-        self.assertEqual(laid.to_chapter(laid.indents[0] + 1), laid.to_chapter(laid.indents[0] + 2))
+        # the indented lines begin further on the page, with nothing put in the text
+        self.assertEqual(laid.layout.lineAt(0).x(), 0)
+        self.assertGreater(laid.layout.lineAt(1).x(), 0)
 
     def test_a_passage_is_widened_to_whole_words(self):
         t = rb.Text16("Il pleuvait sur la ville, aujourd'hui.\n")
@@ -1234,7 +1240,8 @@ class Emphasis(unittest.TestCase):
         self.assertEqual(runs(paras[0]), [("oui ", rb.ITALIC, 9), ("non", rb.BOLD, 20), ("peut-", rb.ITALIC, 27), ("être", rb.ITALIC | rb.BOLD, 32)])
         self.assertEqual(runs(paras[1]), [("Tout en italique", rb.ITALIC, 0)])
         self.assertEqual((paras[2].kind, runs(paras[2])), (rb.HEADING, [("titre", rb.ITALIC, 3)]))
-        self.assertEqual((paras[3].kind, runs(paras[3])), (rb.LEAD, [("chapô", rb.BOLD, 3)]))
+        # a lead is in bold as a whole: its bold words have nothing more to set
+        self.assertEqual((paras[3].kind, runs(paras[3]), paras[3].look.flags & rb.BOLD), (rb.LEAD, [], rb.BOLD))
 
     def test_marks_at_the_edges_of_lines_and_paragraphs_change_nothing(self):
         for html in ["<p><i> </i></p><p>a</p>", "<p>a <i>\n b</i>\n c</p>", "<p>un<br/><i>deux</i><br/> trois</p>",
@@ -1255,8 +1262,8 @@ class Emphasis(unittest.TestCase):
         # laid out: the italic word is italic, the place of every word unchanged
         font = rb.QtGui.QFont(rb.SANS_FAMILY)
         font.setPixelSize(20)
-        laid = rb.LaidBlock(styled[0], font, rb.QtGui.QColor("gray"), 600)
-        self.assertEqual(laid.layout.text().replace(rb.LINE_BREAK, "\n").replace(rb.INDENT, ""), a.rstrip("\n"))
+        laid = laid_out(styled[0], font, 600)
+        self.assertEqual(laid.layout.text().replace(rb.LINE_BREAK, "\n"), a.rstrip("\n"))
         italic = [r for r in laid.layout.formats() if r.format.fontItalic()]
         self.assertEqual([laid.layout.text()[r.start:r.start + r.length] for r in italic], ["dit", "tous"])
         bold = [r for r in laid.layout.formats() if r.format.fontWeight() == rb.QtGui.QFont.Bold]
@@ -1289,3 +1296,118 @@ class Emphasis(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+LAYOUT_CASES = [
+    # (css, html): the publisher's presentation; the text must come out as it did without it
+    ("p { text-indent: 1.5em; text-align: justify; margin: 0 }", "<p>Un</p><p>Deux\ntrois</p>"),
+    ("ul { list-style: square } ol { list-style-type: lower-roman }",
+     "<ul><li>a</li><li>b<ul><li>c</li></ul></li></ul><ol start=\"3\"><li>x</li><li value=\"9\">y</li></ol>"),
+    ("", "<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td><p>deux</p><p>lignes</p></td></tr></table><p>après</p>"),
+    ("", "<table><tr><td>A</td>\n<td>B</td></tr><tr><td colspan=\"2\">C</td></tr></table>"),
+    (".poem p { text-indent: -1em; margin-left: 1em }", "<div class=\"poem\"><p>vers un</p><p>vers deux</p></div>"),
+    ("", "<pre>ligne un\n  ligne deux\n\nligne trois</pre><p>a<br/>b\nc</p>"),
+    ("p.first::first-letter { font-size: 3em; float: left }", "<p class=\"first\">«Lettrine» au début.</p>"),
+    (".drop-cap { font-size: 2.8em; float: left }", "<p class=\"first\"><span class=\"drop-cap\">M</span>arie</p>"),
+    (".sc { font-variant: small-caps } .note { vertical-align: super }",
+     "<p>La <span class=\"sc\">Petite</span> note<sup>1</sup><span class=\"note\">2</span> H<sub>2</sub>O <u>u</u> <s>s</s> <code>c</code></p>"),
+    ("", "<p>avant</p><hr/><p>après</p><div class=\"separator\">---</div><p>fin</p>"),
+    (".saut { page-break-before: always } h1 { text-align: center }", "<h1>Titre</h1><p class=\"saut\">page</p>"),
+    ("", "<figure><img src=\"a.png\" width=\"120\"/><figcaption>Légende</figcaption></figure><p class=\"caption\">x</p>"),
+    ("p { color: red; float: right; font-size: 30px; position: absolute } @media x { p { margin: 9em } }",
+     "<p style=\"text-align:right; margin-left: 50%\">droite</p><p align=\"center\">centre</p>"),
+    ("", "<p>\u0007 un caractère de contrôle <i>x</i></p>"),
+    ("a > b, [x] p, p:hover, #id p { font-size: 4em }", "<p>rien</p>"),
+]
+
+
+class Layout(unittest.TestCase):
+    """The book's presentation (Look) beside the text: the text of every case is what it was."""
+
+    def blocks(self, css, html):
+        return rb.to_blocks(html, lambda s: s, rb.css_parse(css))
+
+    def test_the_text_is_what_it_was_whatever_the_style_sheet(self):
+        for css, html in LAYOUT_CASES:
+            self.assertEqual(describe(legacy_to_blocks(html, lambda s: s)), describe(self.blocks(css, html)), html)
+        book = make_books.layout_epub(path("layout.epub"))
+        import zipfile
+        with zipfile.ZipFile(book) as z:
+            for name in z.namelist():
+                if name.endswith(".xhtml"):
+                    html = z.read(name).decode("utf-8")
+                    self.assertEqual(describe(legacy_to_blocks(html, lambda s: s)),
+                                     describe(rb.to_blocks(html, lambda s: s, rb.css_parse(make_books.LAYOUT_CSS))), name)
+
+    def test_what_the_book_sets(self):
+        ps = self.blocks(*LAYOUT_CASES[0])[0].paragraphs
+        self.assertEqual((ps[0].look.align, ps[0].look.indent, ps[1].look.soft), (rb.JUSTIFY, 1.5, [4]))
+        ps = self.blocks(*LAYOUT_CASES[1])[0].paragraphs
+        self.assertEqual([(p.text, p.look.marker, p.look.number) for p in ps],
+                         [("a", rb.SQUARE, 1), ("b", rb.SQUARE, 2), ("c", rb.SQUARE, 1), ("x", rb.LOWER_ROMAN, 3), ("y", rb.LOWER_ROMAN, 9)])
+        self.assertEqual([p.look.left for p in ps], [1.5, 1.5, 3.0, 1.5, 1.5])
+        ps = self.blocks(*LAYOUT_CASES[2])[0].paragraphs
+        self.assertEqual(ps[0].text, "AB")
+        self.assertEqual(ps[0].look.cells, [(0, 1, 0, 0, 1, 1), (1, 2, 0, 1, 1, 1)])
+        self.assertEqual([p.look.cells for p in ps[1:3]], [[(0, 1, 1, 0, 1, 0)], [(0, 4, 1, 1, 1, 0)]])
+        self.assertEqual(ps[3].look.cells, [(0, 6, 1, 1, 1, 0)])
+        self.assertIsNone(ps[4].look.cells)
+        ps = self.blocks(*LAYOUT_CASES[3])[0].paragraphs
+        self.assertEqual([c[3:5] for c in ps[1].look.cells], [(0, 2)])
+        ps = self.blocks(*LAYOUT_CASES[4])[0].paragraphs
+        self.assertEqual([(p.look.left, p.look.indent) for p in ps], [(1.0, -1.0), (1.0, -1.0)])
+        ps = self.blocks(*LAYOUT_CASES[5])[0].paragraphs
+        self.assertEqual([p.text for p in ps], ["ligne un\nligne deux", "ligne trois", "a\nb\nc"])
+        self.assertEqual((ps[0].look.soft, ps[0].look.flags & rb.MONO, ps[2].look.soft), (None, rb.MONO, [3]))
+        self.assertEqual(self.blocks(*LAYOUT_CASES[6])[0].paragraphs[0].look.drop_cap, 2)
+        self.assertEqual(self.blocks(*LAYOUT_CASES[7])[0].paragraphs[0].look.drop_cap, 1)
+        p = self.blocks(*LAYOUT_CASES[8])[0].paragraphs[0]
+        self.assertEqual([(p.text[a:b], f & rb.FLAGS) for a, b, f in p.styles],
+                         [("Petite", rb.SMALL_CAPS), ("12", rb.SUPER), ("2", rb.SUB), ("u", rb.UNDERLINE),
+                          ("s", rb.STRIKE), ("c", rb.MONO)])
+        ps = self.blocks(*LAYOUT_CASES[9])[0].paragraphs
+        self.assertEqual([(p.text, p.look.rule) for p in ps], [("avant", False), ("après", True), ("fin", True)])
+        ps = self.blocks(*LAYOUT_CASES[10])[0].paragraphs
+        self.assertEqual([(p.look.align, p.look.level, p.look.page_break, p.look.size) for p in ps],
+                         [(rb.CENTER, 1, False, 1.6), (rb.AUTO, 0, True, 1.0)])
+        blocks = self.blocks(*LAYOUT_CASES[11])
+        self.assertEqual((blocks[0].look.pixels, blocks[0].look.align), (120, rb.AUTO))
+        self.assertEqual([(p.look.align, p.look.size) for p in blocks[1].paragraphs], [(rb.CENTER, 0.85), (rb.CENTER, 0.8)])
+        ps = self.blocks(*LAYOUT_CASES[12])[0].paragraphs
+        self.assertEqual([(p.look.align, p.look.left, p.look.size, p.look.flags) for p in ps], [(rb.RIGHT, 4.0, 1.0, 0), (rb.CENTER, 0.0, 1.0, 0)])
+        self.assertIsNone(self.blocks(*LAYOUT_CASES[13])[0].paragraphs[0].look)
+        self.assertEqual(self.blocks(*LAYOUT_CASES[14])[0].paragraphs[0].look.size, 1.0)
+
+    def test_the_pages_of_a_book_with_a_style_sheet(self):
+        book = rb.parse_book(make_books.layout_epub(path("layout.epub")), rb.EPUB, "layout")
+        store = rb.ImageStore(path("layout.epub"))
+        font = rb.QtGui.QFont(rb.SANS_FAMILY)
+        font.setPixelSize(18)
+        for width, height in ((500, 700), (320, 480)):
+            kinds = set()
+            for c, chapter in enumerate(book.chapters):
+                pages = rb.paginate(chapter, rb.Frame(font, rb.QtGui.QColor("#888"), width, height, store))
+                text = rb.Text16(rb.chapter_text(chapter))
+                starts = [rb.page_start(p) for p in pages]
+                self.assertEqual(starts, sorted(starts))
+                for page in pages:
+                    for piece in page:
+                        kinds.add(type(piece).__name__)
+                        if isinstance(piece, rb.Lines):
+                            laid = piece.block
+                            self.assertLessEqual(piece.y + laid.bottoms[piece.last] - laid.tops[piece.first], height)
+                            # every line shows the chapter's own characters where the map says they are
+                            for i in range(piece.first, piece.last + 1):
+                                line = laid.layout.lineAt(i)
+                                a = laid.to_chapter(line.textStart())
+                                word = text.cut(a, a + 3).strip()
+                                if word and "\n" not in word and word.isalpha():
+                                    shown = rb.Text16(laid.layout.text()).cut(laid.to_laid(a), laid.to_laid(a) + 3)
+                                    self.assertEqual(shown.lower(), text.cut(a, a + 3).lower())
+                        elif not isinstance(piece, (rb.Rule, rb.Grid)):
+                            self.assertLessEqual(piece.y + piece.height, height)
+                # the paragraph its style sheet sends to a new page begins one
+                if c == 3:
+                    first = rb.Text16(rb.chapter_text(chapter)).cut(starts[-1], starts[-1] + 15)
+                    self.assertTrue(any(rb.Text16(rb.chapter_text(chapter)).cut(s, s + 2) == "Ce" for s in starts), starts)
+            self.assertTrue({"Lines", "Picture", "Rule", "Grid"} <= kinds, kinds)

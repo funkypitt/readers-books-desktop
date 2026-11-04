@@ -18,7 +18,7 @@ A scanned PDF (no text on most pages) is read first by Tesseract, if it is insta
 language it reads best among those installed; the rest goes as for any PDF. Without Tesseract,
 its pages are pictures, and --progress says {"notice": "no-ocr"}.
 
-An issue of The Economist or of The New Yorker is recognised by its typefaces and made by
+An issue of The Economist, The New Yorker or Le Monde diplomatique is recognised by its typefaces and made by
 magazine2epub.py instead: an article per chapter, as the magazine view of the apps wants.
 
 A book is helped by what the PDF knows besides Marker: its bookmarks give the chapters, its text
@@ -1045,7 +1045,7 @@ def write_epub(path, title, authors, chapters, images, language="en"):
 
 
 def magazine(pdf_path, epub_path):
-    """An issue of The Economist or of The New Yorker goes to magazine2epub.py (next to this file),
+    """An issue of The Economist, The New Yorker or Le Monde diplomatique goes to magazine2epub.py (next to this file),
     which knows their pages: articles, sections, pictures, no advertisements. None otherwise."""
     import importlib.util
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "magazine2epub.py")

@@ -81,6 +81,78 @@ class ReadingOrder(unittest.TestCase):
         self.assertEqual(order[0], tail)
 
 
+def chars(text, x=10.0, advance=6.0, gap=0.0, size=10.0, font="HelveticaNeueLTPro-Bd-SC750"):
+    """Glyphs on one baseline, `gap` points apart (a letter-spaced line when it is wide)."""
+    out = []
+    for c in text:
+        if c == " ":
+            x += advance
+            continue
+        out.append(m2e.Char(c, x, 100, x + advance, 110, 108, size, font))
+        x += advance + gap
+    return out
+
+
+class Diplo(unittest.TestCase):
+    def test_a_letter_spaced_line_reads_as_words(self):
+        line = m2e.Line(chars("Par  notre  envoyé", gap=2.5))
+        self.assertEqual(line.text, "Par notre envoyé")
+        # a formula's few letters among spaces are not letter-spaced text
+        self.assertEqual(m2e.Line(chars("x + y = z", gap=0.2, font="Times")).text.replace(" ", ""), "x+y=z")
+
+    def test_words_a_ligature_cut_are_mended_and_others_left(self):
+        if not m2e._dictionary("fr"):
+            self.skipTest("no French word list")
+        self.assertEqual(m2e.mend_words("Intelligence artifi cielle"), "Intelligence artificielle")
+        self.assertEqual(m2e.mend_words("une lourdeur jugée ine cace"), "une lourdeur jugée inefficace")
+        self.assertEqual(m2e.mend_words("le <i>système édu catif</i>"), "le <i>système éducatif</i>")
+        self.assertEqual(m2e.mend_words("il a ce que Jean Dupont veut"), "il a ce que Jean Dupont veut")
+
+    def test_bylines_and_issue_date(self):
+        self.assertEqual(m2e.clean_byline("Par notre envoyé spécial Pierre Daum *"), "Pierre Daum")
+        self.assertEqual(m2e.clean_byline("Par Magali Della Sudda * et Grégory Rzepski"), "Magali Della Sudda et Grégory Rzepski")
+        d = m2e.Diplo()
+        date = d.issue_date(["No 872 - 73 e année. Novembre 2026 Mensuel - 28 pages"])
+        self.assertEqual((date, d.iso(date)), ("Novembre 2026", "2026-11-01"))
+
+    def article(self, title, items, page, byline=None, stand=None):
+        a = m2e.Article(None)
+        a.title, a.items, a.first_page = [title] if title else [], list(items), page
+        a.byline, a.stand = [byline] if byline else [], [stand] if stand else []
+        return a
+
+    def test_an_article_from_the_front_page_goes_on_where_it_says(self):
+        front = self.article("La dislocation de l’Occident", [("p", "Lorsque l’on dit M.\xa0Trump capable de s’allier avec"),
+                                                             ("p", "<i>(Lire la suite page 13.)</i>")], 0, "Emmanuel Todd")
+        other = self.article("Paix improbable", [("p", "Qui veut la paix ?")], 6)
+        tail = self.article("La dislocation de l’Occident", [("p", "<i>(Suite de la première page.)</i> M.\xa0Poutine, on oublie"),
+                                                            ("p", "Fin.")], 12)
+        out = m2e.Diplo().stitch([front, other, tail])
+        self.assertEqual([a.title[0] for a in out], ["La dislocation de l’Occident", "Paix improbable"])
+        self.assertEqual([v for _k, v in out[0].items], ["Lorsque l’on dit M.\xa0Trump capable de s’allier avec M.\xa0Poutine, on oublie", "Fin."])
+
+    def test_a_headline_read_apart_from_its_article_is_put_back(self):
+        # the columns first (standfirst, byline), the headline on the facing page after them
+        body = self.article(None, [("p", "Malgré mon admiration pour Cézanne, l’image a parcouru la"),
+                                   ("picture", None)], 13, "Ernest Pignon-Ernest", "Dessinateur hors pair…")
+        head = self.article("De Santiago à Port-au-Prince", [("p", "ville en flottant sur l’eau.")], 14)
+        out = m2e.Diplo().stitch([body, head])
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].title, ["De Santiago à Port-au-Prince"])
+        self.assertEqual(out[0].items[0], ("p", "Malgré mon admiration pour Cézanne, l’image a parcouru la ville en flottant sur l’eau."))
+        self.assertEqual(out[0].items[1][0], "picture")
+
+    def test_the_issue_is_french(self):
+        path = os.path.join(TMP, "diplo.epub")
+        m2e.write_epub(path, "Le Monde diplomatique — Novembre 2026", "Le Monde diplomatique", "2026-11-01", None,
+                       [{"title": "Soudain, la solidarité", "category": "Dossier", "author": "Benoît Bréville",
+                         "body": ["<h1>Soudain, la solidarité</h1>", "<p>Texte.</p>"]}], [], "fr")
+        import zipfile
+        with zipfile.ZipFile(path) as z:
+            self.assertIn("<dc:language>fr</dc:language>", z.read("OEBPS/content.opf").decode())
+            self.assertIn('xml:lang="fr"', z.read("OEBPS/chapter-01.xhtml").decode())
+
+
 class Epub(unittest.TestCase):
     def test_the_issue_is_a_magazine_with_its_sections_titles_and_authors(self):
         rb = load("rb_magazine", "readers_books.py")

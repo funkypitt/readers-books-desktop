@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""An issue of The Economist or of The New Yorker in PDF, as an EPUB made like a magazine:
+"""An issue of The Economist, The New Yorker or Le Monde diplomatique in PDF, as an EPUB made like a magazine:
 one chapter per article, each with its section, its title, its standfirst and its byline,
 in the order of the printed issue.
 
     magazine2epub.py issue.pdf issue.epub [--progress]
-    magazine2epub.py --which issue.pdf          # prints "economist", "newyorker" or nothing
+    magazine2epub.py --which issue.pdf          # prints "economist", "newyorker", "diplo" or nothing
 
 The PDF's own text is read glyph by glyph (pypdfium2): every line knows its font, its size and
 its place, so each magazine's typography says what a line is — body text, headline, rubric,
@@ -142,8 +142,31 @@ class Line:
             self._add(ch, c.font, c.size)
             before, prev = prev, c
         self.text = "".join(s[0] for s in self.spans).strip()
+        tokens = self.text.split()
+        if len(tokens) >= 3 and sum(len(t) for t in tokens) <= 2.2 * len(tokens) and self._tracked(ink):
+            self._untrack(ink)      # letter-spaced: « P a r  n o t r e » is « Par notre »
         self.accent = sum(1 for c in ink if c.accent) > 0.8 * len(ink)
         self.role = None
+
+    def _tracked(self, ink):
+        """Letters set apart all along the line, not a formula's few letters among spaces."""
+        gaps = sorted(b.x0 - a.x1 for a, b in zip(ink, ink[1:]))
+        letters = sum(1 for c in ink if c.c.isalpha() or c.c in ",.’'*-")
+        return bool(gaps) and gaps[len(gaps) // 2] > 0.1 * self.size and letters >= 0.9 * len(ink)
+
+    def _untrack(self, ink):
+        """Spaces again where the gap is wider than the letters' own spacing."""
+        gaps = sorted(b.x0 - a.x1 for a, b in zip(ink, ink[1:]))
+        if not gaps:
+            return
+        cut = gaps[len(gaps) // 2] + 0.15 * self.size
+        self.spans, prev = [], None
+        for c in ink:
+            if prev is not None and c.x0 - prev.x1 > cut and not self.spans[-1][0].endswith(" "):
+                self._add(" ", prev.font, prev.size)
+            self._add(c.c, c.font, c.size)
+            prev = c
+        self.text = "".join(s[0] for s in self.spans).strip()
 
     def _add(self, ch, font, size):
         if self.spans and self.spans[-1][1] == font and self.spans[-1][2] == size:
@@ -190,7 +213,7 @@ def _bounds(obj):
     return l.value, b.value, r.value, t.value
 
 
-def page_objects(page):
+def page_objects(page, frames=False):
     """The page's raster pictures and vector paths, as boxes (x0, top, x1, bottom), form
     XObjects opened."""
     height, width = page.get_height(), page.get_width()
@@ -223,6 +246,8 @@ def page_objects(page):
                         raw.FPDFPageObj_GetFillColor(obj, r_, g_, b2, a_) and a_.value > 0 and \
                         min(r_.value, g_.value, b2.value) < 248 and max(r_.value, g_.value, b2.value) > 150:
                     panels.append(box)
+                elif frames and not fill.value and stroke.value and raw.FPDFPath_CountSegments(obj) <= 6:
+                    panels.append(box)      # a box drawn round a piece: a rectangle, stroked
 
     r_, g_, b2, a_ = r, g, b_, a
     walk(raw.FPDFPage_CountObjects(page.raw), lambda i: raw.FPDFPage_GetObject(page.raw, i))
@@ -469,7 +494,385 @@ class NewYorker:
         a.category, a.rubric = dept or "The New Yorker", []
 
 
-PROFILES = (Economist(), NewYorker())
+MOIS = {m: i + 1 for i, m in enumerate(("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
+                                        "septembre", "octobre", "novembre", "décembre"))}
+
+
+class Diplo:
+    """Le Monde diplomatique: a monthly newspaper. No face of its own (Times, Helvetica, Gill Sans),
+    articles that start on the front page and go on further in (« Lire la suite page 21 »),
+    headlines across two facing pages, boxed pieces signed with initials, footnotes."""
+    key = "diplo"
+    name = "Le Monde diplomatique"
+    lang = "fr"
+    skip_sections = ()
+    cover_is_page = True            # the front page carries the openings of three articles
+    spreads = True
+    framed_panels = True
+    heads_in_boxes = True
+    lone_rubric_is_head = True
+    cut_at_heads = True
+    split_heads = True
+    byline_word = "Par"
+    foreign_fonts = ("Myriad", "Arial", "HelveticaNeue-", "Wingdings", "Helvetica-")
+
+    @staticmethod
+    def house(font):
+        return not font.startswith(Diplo.foreign_fonts)
+
+    @staticmethod
+    def recognise(fonts, first_text):
+        copper = sum(k for f, k in fonts.items() if f.startswith("Copperplate"))
+        return copper > 0 and "monde diplomatique" in first_text.lower()
+
+    @staticmethod
+    def issue_date(pages_text):
+        for t in pages_text[:3]:
+            m = re.search(r"\b(%s)\s+(\d{4})\b" % "|".join(MOIS), t, re.I)
+            if m:
+                return "%s %s" % (m.group(1).capitalize(), m.group(2))
+        return None
+
+    @staticmethod
+    def iso(date):
+        m = re.match(r"(\S+)\s+(\d{4})", date or "")
+        if not m or m.group(1).lower() not in MOIS:
+            return None
+        return "%s-%02d-01" % (m.group(2), MOIS[m.group(1).lower()])
+
+    def role(self, l, page_h):
+        f, s, t = l.font, l.size, l.text
+        if l.bottom < 62 or l.top < 45 or l.top > page_h - 25:
+            return "furniture"
+        if not self.house(f):
+            return "foreign"
+        if f.startswith("Elo"):
+            return "skip"           # the big quotation marks round a sentence pulled out
+        if f.startswith(("WalbaumGrotesk", "TimesNewRomanPSMT", "TimesNewRomanPS-")):
+            return "chart"          # the charts, the tables
+        if s >= 18 and len(t) <= 2 and t[-1:].isalpha() and (len(t) == 1 or not t[0].isalnum()):
+            return "drop"
+        if f.startswith("Copperplate"):
+            if s >= 30:
+                return "section"    # the title of a dossier, across the page
+            if re.match(r"P\s*a\s*r\s", t):
+                return "byline"
+            if s >= 15:
+                return "section"    # COURRIER DES LECTEURS
+            if s >= 12.5 or "SC" in f:
+                return "byline?"    # the second line of a byline, or a quotation pulled out
+            return "sig"            # the name at the end: « Pierre Daum. »
+        if "SC750" in f:
+            if f.startswith("GillSansMTStd-Medium") and s >= 12:
+                return "rubric"     # Littératures, Histoire, Arts: over a headline
+            if f.startswith("GillSansMTStd-Medium"):
+                return "sig"
+            if f.startswith("GillSans-Bold"):
+                return "body"       # a review's name in the press review (the contents' « Page 12 : » aside)
+            if re.match(r"P\s*a\s*r\s", t):
+                return "byline"
+            if f.startswith("TimesNewRomanPSStd-Bold"):
+                return "sub"        # the dated entries of a chronicle
+            return "byline?"
+        if f.startswith(("LASVALLES",)):
+            return "furniture"
+        if "BoldIt" in f and s >= 16:
+            return "skip"           # a sentence pulled out, said again in the text
+        if f.startswith("HelveticaNeueLTPro-Hv"):
+            return "skip"           # the front page's teasers
+        if (f.startswith("TimesNewRomanPSStd-Regular") and 11.5 <= s <= 12.5 or f.startswith("GillSansMTStd-Medium") and s >= 10) \
+                and t.isupper() and len(t) < 30:
+            return "region"         # AMÉRIQUES, POÉSIE, DANS LES REVUES: the short reviews under it
+        if f.startswith("TimesNewRomanPSStd-Regular") and s <= 7.6 and t.isupper() and len(t) < 40:
+            return "sig"            # a short review's reviewer
+        if f.startswith("TimesNewRomanPSStd") and "Italic" not in f:
+            if s >= 20:
+                return "head"
+            if 17 <= s < 20:
+                return "rubric?"
+            if 15 <= s < 17:
+                return "sub"
+            if 11.5 <= s < 15:
+                return "stand?" if s >= 12.5 else "sub"
+        if f.startswith("HelveticaNeueLTPro"):
+            if s >= 26:
+                return "head"
+            if "Roman" in f and s >= 16:
+                return "head"       # a boxed piece's title
+            if "Bd" in f and s >= 13:
+                return "sub"
+            if "Md" in f and s >= 11.5:
+                return "stand?"
+        if f.startswith("HelveticaNeueLTPro-Roman") and t.isupper() and len(t) < 30:
+            return "skip"           # ÉDITION ABONNÉS
+        if f.startswith("TimesNRMTPro"):
+            if s >= 10.5:
+                return "stand?"
+            if s <= 7.8:
+                return "caption"
+        if f.startswith("TimesNewRomanPSStd-Italic") and s >= 11:
+            return "stand?"
+        if f.startswith("TimesNewRomanPSStd") and s <= 7.6:
+            return "footnote" if s >= 7 else "skip"
+        if f.startswith("GillSansMTStd") and s <= 6.5:
+            return "skip"           # photographers' credits, set upright along the picture
+        if 7.8 <= s <= 10.6:
+            return "body"
+        return "skip"
+
+    pictures_need_credit = True
+
+    @staticmethod
+    def own_pictures(pics, lines, foreign):
+        """The paper's own pictures, not the advertisements nor the page's ornaments: a work shown
+        carries a caption or a photographer's credit set upright along it; a book's cover is on
+        the books' pages; a strip across the top is the page's ornament."""
+        books = any(getattr(l, "region", False) or l.role == "rubric" and "SC750" in l.font for l in lines)
+        credits = [l for l in lines if l.font.startswith("GillSans") and l.size <= 6.5]
+        captions = [l for l in lines if l.role == "caption"]
+        near = lambda pc, l, pad: _overlap(pc.x0 - pad, pc.x1 + pad, l.x0, l.x1) > 0 and _overlap(pc.top - pad, pc.bottom + pad, l.top, l.bottom) > 0
+        kept = []
+        for pc in pics:
+            w, h = pc.x1 - pc.x0, pc.bottom - pc.top
+            if h < 90 and w > 4 * h:
+                continue                        # a strip of pictures over the page
+            if any(near(pc, l, 20) for l in foreign):
+                continue                        # beside an advertisement's text
+            if sum(1 for l in lines if l.font.startswith("Times") and l.size <= 6 and near(pc, l, 20)) >= 3:
+                continue                        # in the masthead's small print
+            if getattr(pc, "chart", False) or books or sum(1 for l in credits if near(pc, l, 14)) >= 3 or \
+                    any(near(pc, l, 30) for l in captions):
+                kept.append(pc)
+        return kept
+
+    def fix_roles(self, lines, above):
+        """What the faces alone cannot tell: the rest of a byline, the contents block."""
+        for l in lines:
+            if l.role == "region":
+                l.role, l.region = "head", True
+        for _ in range(3):
+            for l in lines:
+                if l.role == "byline?":
+                    prev = above(l, 22)
+                    near = above(l, 60)
+                    l.role = "byline" if (prev is not None and prev.role == "byline") or \
+                        (near is not None and near.role in ("head", "stand?") and "SC" in l.font) else "skip"
+        for l in lines:             # the text under a dossier's title: its opening, read as text
+            if l.role == "stand?":
+                chain = above(l, 60)
+                while chain is not None and chain.role in ("stand?", "body"):
+                    chain = above(chain, 60)
+                if chain is not None and chain.role == "section":
+                    l.role = "body"
+        # a standfirst away from its headline (on the facing page): the byline under it says what it is
+        for l in sorted(lines, key=lambda l: -l.top):
+            if l.role == "stand?":
+                nxt = [m for m in lines if m.top >= l.bottom - 1 and _overlap(l.x0, l.x1, m.x0, m.x1) > 0 and m.top - l.bottom < 60]
+                nxt = min(nxt, key=lambda m: m.top) if nxt else None
+                if nxt is not None and nxt.role in ("byline", "stand"):
+                    l.role = "stand"
+        for head in [l for l in lines if l.text.replace(" ", "").lower().startswith("sommairedu")]:
+            for l in lines:         # a dossier's own contents, in a column: said again by the articles
+                if l is head or (l.top > head.top - 2 and l.top - head.bottom < 260 and _overlap(head.x0, head.x1, l.x0, l.x1) > 0):
+                    l.role = "skip"
+        if any(l.text.replace(" ", "").upper() == "SOMMAIRE" for l in lines):
+            for l in lines:
+                if l.font.startswith("GillSans") and l.role in ("body", "sub"):
+                    l.role = "skip"
+
+    def section_head(self, box):
+        return False
+
+    def contents_page(self, lines):
+        return False
+
+    def contents(self, lines):
+        return []
+
+    def page_section(self, lines, current):
+        """The dossier's pages say DOSSIER at the top; the books' pages carry their labels."""
+        if any(l.font.startswith("LASVALLES") for l in lines):
+            return current or "Dossier"
+        return None
+
+    def section_of_header(self, lines):
+        return None
+
+    def section_title(self, text, spans=()):
+        if text.isupper():
+            text = text[:1] + text[1:].lower()
+        return text, None
+
+    def settle(self, a):
+        a.byline = [clean_byline(" ".join(a.byline))] if a.byline else []
+        a.title = [mend_words(t) for t in a.title]
+        a.stand = [mend_words(t) for t in a.stand]
+        a.items = [(k, mend_words(v)) if k in ("p", "sub", "verse") else (k, [(k2, mend_words(v2)) if k2 in ("p", "sub") else (k2, v2) for k2, v2 in v]) if k == "box" else (k, v) for k, v in a.items]
+        if getattr(a, "region", False):         # short reviews, by region or field
+            a.title = [" ".join(a.title).capitalize()]
+            a.category = "Les livres du mois" if not a.title[0].startswith("Dans les revues") else "Dans les revues"
+        if a.category is None and a.rubric:
+            a.category, a.rubric = " ".join(a.rubric).strip(), []
+        if a.category and a.category.lower() in ("littératures", "du monde"):
+            a.category = "Littératures du monde"        # the label across two facing pages
+        if getattr(a, "parent", None) is not None:
+            a.category = a.parent.category      # a boxed piece: its article's
+        a.category = a.category or "Le Monde diplomatique"
+
+    def stitch(self, articles):
+        articles = self.mend_pieces(articles)
+        return self.follow_jumps(articles)
+
+    @staticmethod
+    def mend_pieces(articles):
+        """What the page's order cut apart: a headline read before or after its article (on the
+        facing page, beside a picture), the same headline said again over the next pages."""
+        bare = lambda a: a.title and not a.items and not a.stand and not a.byline and not a.hero
+        out = []
+        for a in articles:
+            prev = out[-1] if out else None
+            # a headline alone, its article (standfirst, byline, text, no title) later on the same pages
+            orphan = next((o for o in reversed(out[-3:]) if bare(o) and abs(o.first_page - a.first_page) <= 1), None)
+            if orphan is not None and not a.title and (a.stand or a.byline):
+                a.title, a.rubric = orphan.title, a.rubric or orphan.rubric
+                a.category = a.category or orphan.category
+                out.remove(orphan)
+            elif prev is not None and not prev.title and (prev.byline or prev.stand) and a.title and \
+                    not a.byline and not a.stand and abs(prev.first_page - a.first_page) <= 1:
+                # an article whose headline came after its first columns
+                prev.title, prev.rubric = a.title, prev.rubric or a.rubric
+                join_items(prev.items, a.items)
+                prev.hero += a.hero
+                prev.notes += a.notes
+                continue
+            elif prev is not None and a.title and prev.title and _key(" ".join(a.title)) == _key(" ".join(prev.title)) \
+                    and not a.byline and a.first_page - prev.first_page <= 3:
+                join_items(prev.items, a.items)         # the headline said again over the next pages
+                prev.hero += a.hero
+                prev.notes += a.notes
+                continue
+            out.append(a)
+        return out
+
+    @staticmethod
+    def follow_jumps(articles):
+        """An article begun on the front page goes on at the page it names: the piece there that
+        opens with « (Suite de la première page.) » is its end."""
+        jump = re.compile(r"\s*\((?:<[^>]+>)*\s*Lire la suite (?:en )?pages?\s*(\d+)[^)]*\)(?:</[^>]+>)*\s*", re.I)
+        follow = re.compile(r"^\s*(?:<[^>]+>)*\s*\(\s*Suite de la (?:première )?page[^)]*\)\s*(?:</[^>]+>)*\s*", re.I)
+        out = list(articles)
+        for a in articles:
+            target = None
+            for i, (kind, value) in enumerate(a.items):
+                if kind == "p" and jump.search(value):
+                    target = int(jump.search(value).group(1))
+                    a.items[i] = (kind, jump.sub(" ", value).strip())
+            a.items = [it for it in a.items if not (it[0] == "p" and not re.sub(r"<[^>]+>", "", it[1]).strip())]
+            if target is None:
+                continue
+            for b in out:
+                if b is a or getattr(b, "first_page", -1) != target - 1:
+                    continue
+                first = next((k for k, (kind, _v) in enumerate(b.items) if kind == "p"), None)
+                if first is None or not follow.search(b.items[first][1]):
+                    continue
+                b.items[first] = ("p", follow.sub("", b.items[first][1]))
+                # the boxed pieces read after the end go after the whole article now
+                pieces = [o for o in out if getattr(o, "parent", None) is b]
+                for o in pieces:
+                    out.remove(o)
+                    o.parent = a
+                at = out.index(a) + 1
+                while at < len(out) and getattr(out[at], "parent", None) is a:
+                    at += 1
+                out[at:at] = pieces
+                join_items(a.items, b.items, cut_only=True)     # (the jump cuts a sentence: M.|Poutine)
+                a.hero += b.hero
+                a.notes = getattr(a, "notes", []) + getattr(b, "notes", [])
+                out.remove(b)
+                break
+        return out
+
+
+LIGATURES = ("", "fi", "fl", "ffi", "ff", "ffl")
+_FRENCH = None
+
+
+def mend_words(text):
+    """Words a ligature cut (« arti fi cielle », « ine cace » where the « ffi » has no letters) or a
+    standfirst's line end left in two: joined where the whole is a word and one half is not."""
+    global _FRENCH
+    if _FRENCH is None:
+        _FRENCH = _dictionary("fr")
+    if not _FRENCH:
+        return text
+
+    parts = re.split(r"(<[^>]*>|&[#\w]+;|\W+)", text)        # words, and what lies between them, in turn
+    letters = re.compile(r"[^\W\d_]{2,}$")
+    out, i = [], 0
+    while i < len(parts):
+        a = parts[i]
+        if letters.match(a or "") and i + 2 < len(parts) and parts[i + 1] == " " and re.match(r"[^\W\d_]+$", parts[i + 2] or ""):
+            b = parts[i + 2]
+            if not (a.lower() in _FRENCH and b.lower() in _FRENCH):
+                lig = next((x for x in LIGATURES if (a + x + b).lower() in _FRENCH), None)
+                if lig is not None:
+                    parts[i + 2] = a + lig + b
+                    i += 2
+                    continue
+        out.append(a)
+        i += 1
+    return "".join(out)
+
+
+def join_items(items, more, cut_only=False):
+    """An article's items, then more of them: where the last paragraph stops mid-sentence and the
+    next goes on in lower case, one paragraph (a word cut there mended)."""
+    plain = lambda h: re.sub(r"<[^>]+>", "", h).strip()
+    aside = ("picture", "box")      # pictures and boxes between the two halves go after the paragraph
+    t = len(items)
+    while t and items[t - 1][0] in aside:
+        t -= 1
+    h = 0
+    while h < len(more) and more[h][0] in aside:
+        h += 1
+    if t and h < len(more) and items[t - 1][0] == "p" and more[h][0] == "p" and (t < len(items) or h):
+        between = items[t:] + more[:h]
+        del items[t:]
+        more = more[h:]
+        before = len(more)
+        join_items(items, more[:1], cut_only)
+        if len(items) and before:       # (joined or not, the asides follow that paragraph)
+            items.extend(between)
+            items.extend(more[1:])
+        return items
+    if items and more and items[-1][0] == "p" and more[0][0] == "p":
+        left, right = items[-1][1].rstrip(), more[0][1].lstrip()
+        lt, rt = plain(left), plain(right)
+        if (rt[:1].islower() or cut_only and rt[:1].isalnum()) and lt and not ENDS.search(lt):
+            m = re.search(r"([^\W\d_]+)-((?:</[a-z]+>)*)$", left)
+            if m:
+                global _FRENCH
+                if _FRENCH is None:
+                    _FRENCH = _dictionary("fr")
+                first = re.match(r"(?:<[^>]+>)*([^\W\d_]+)", right)
+                whole = (m.group(1) + (first.group(1) if first else "")).lower()
+                joined = (left[:m.end(1)] + m.group(2) + right) if whole in _FRENCH else (left + right)
+            else:
+                joined = left + " " + right
+            items[-1] = ("p", joined)
+            more = more[1:]
+    items.extend(more)
+    return items
+
+
+def clean_byline(text):
+    text = re.sub(r"^\s*(BY|PAR)\s+", "", text, flags=re.I)
+    text = re.sub(r"^(notre|nos)\s+(envoyée?s?\s+spéciale?s?|correspondante?s?)\s+", "", text, flags=re.I)
+    return re.sub(r"\s*\*+\s*$", "", re.sub(r"\s*\*\s*", " ", text)).strip()
+
+
+PROFILES = (Economist(), NewYorker(), Diplo())
 
 
 def which(pdf_path, doc=None):
@@ -511,6 +914,7 @@ class Box:
         self.lines = lines or []
         self.caption = caption
         self.page = None
+        self.shift = 0              # on a spread, how far right its page is put
         self.image = None
 
     @classmethod
@@ -557,6 +961,8 @@ def settle_roles(prof, lines, page_h):
                 best = m
         return best if best is not None and l.top - best.bottom <= gap else None
 
+    if hasattr(prof, "fix_roles"):
+        prof.fix_roles(lines, above)
     # verse: a poem's title in the department face, its lines one size above the text
     for l in lines:
         if l.role == "rubric?" and below(l, ("verse?", "stand?"), 30) is not None:
@@ -584,7 +990,8 @@ def settle_roles(prof, lines, page_h):
                 prev = above(l, 60)
                 l.role = "head" if prev is not None and prev.role == "rubric" else "rubric"
             else:
-                l.role = "skip" if isinstance(prof, Economist) else "rubric"
+                l.role = "skip" if isinstance(prof, Economist) else \
+                    "head" if getattr(prof, "lone_rubric_is_head", False) else "rubric"
     # a New Yorker line in the department face above another one: rubric, then the piece's title
     for l in lines:
         if l.role == "rubric" and isinstance(prof, NewYorker):
@@ -735,6 +1142,7 @@ def find_pictures(prof, lines, images, paths, page_w, page_h, body_size, page=No
     boxes = []
     for x0, top, x1, bottom, kind in kept:
         boxes.append(Box("picture", x0, top, x1, bottom))
+        boxes[-1].chart = kind == "chart"
     # a picture keeps the lines inside it, unless they are the magazine's running text
     for l in lines:
         if l.role in ("body", "head", "stand", "byline", "rubric", "drop", "sub"):
@@ -807,9 +1215,10 @@ def _cut(boxes, axis):
     lo, hi = (lambda b: b.top, lambda b: b.bottom) if axis == "y" else (lambda b: b.x0, lambda b: b.x1)
     floating = []
     if axis == "x":         # a picture may straddle two columns: it goes with the one it most covers
-        solid = [b for b in boxes if b.kind != "picture"]
+        afloat = lambda b: b.kind == "picture" or (CUT_AT_HEADS and b.lines and getattr(b.lines[0], "panel", None) is not None)
+        solid = [b for b in boxes if not afloat(b)]
         if solid:
-            floating = [b for b in boxes if b.kind == "picture"]
+            floating = [b for b in boxes if afloat(b)]
             boxes = solid
     items = sorted(boxes, key=lo)
     groups, cur, reach, widest = [], [items[0]], hi(items[0]), 0
@@ -829,7 +1238,7 @@ def _cut(boxes, axis):
     return groups, widest
 
 
-ENDS = re.compile(r"[.!?:;”\"’)\]■♦…]$")
+ENDS = re.compile(r"[.!?:;”\"’)\]■♦…»]$")
 
 
 def _seam(a, b):
@@ -853,14 +1262,74 @@ def _seam(a, b):
 
 
 def _score(seq):
-    text = [b for b in seq if b.kind != "picture"]
+    text = [b for b in seq if b.kind not in ("picture", "footnote")]
     return sum(_seam(a, b) for a, b in zip(text, text[1:]))
+
+
+CUT_AT_HEADS = False        # set by a profile: bands across the page begin at a headline
+
+
+def _heads_only(group):
+    """(A head over a column of short reviews goes with its column: not a band of its own.)"""
+    return all(b.kind in HEAD_ROLES + ("section", "picture", "sub") and not (b.lines and getattr(b.lines[0], "region", False))
+               for b in group)
+
+
+def _bands(rows):
+    """Bands that begin with a headline (or follow a band of headlines only): an article's
+    standfirst and the column beside it are not cut apart."""
+    out = []
+    for g in rows:
+        first = min(g, key=lambda b: (b.top, b.x0))
+        region = out and any(b.lines and getattr(b.lines[0], "region", False) for b in out[-1]) and \
+            all(b.kind in HEAD_ROLES + ("section", "picture") for b in out[-1])
+        if out and (region or not (first.kind in HEAD_ROLES + ("section", "picture", "sub") or _heads_only(out[-1]) or _heads_only(g))):
+            out[-1] = out[-1] + g
+        else:
+            out.append(g)
+    return out
+
+
+_MEMO = {}
+
+
+def _xy_by_heads(boxes):
+    """XY cut for a newspaper's page, where blocks of columns sit side by side, each with its own
+    intertitles: bands only at a headline; one cut down at a time, each tried, the one whose text
+    runs on best kept (then the widest gap)."""
+    if len(boxes) <= 1:
+        return list(boxes)
+    rows, row_gap = _cut(boxes, "y")
+    cols, _gap = _cut(boxes, "x")
+    if len(rows) > 1:
+        banded = _bands(rows)
+        if len(banded) > 1 or len(cols) > 1:
+            rows = banded           # no band begins at a headline: the columns, then
+    options = []                    # (wrongness, - gap, rows first, order)
+    if len(rows) > 1:
+        seq = [x for g in rows for x in xy_order(g)]
+        options.append((_score(seq), -(row_gap + 2), 0, seq))
+    for i in range(len(cols) - 1):
+        left = [b for g in cols[:i + 1] for b in g]
+        right = [b for g in cols[i + 1:] for b in g]
+        gap = min(b.x0 for b in cols[i + 1] if b.kind != "picture" or len(cols[i + 1]) == 1) - \
+            max(b.x1 for b in cols[i] if b.kind != "picture" or len(cols[i]) == 1)
+        seq = xy_order(left) + xy_order(right)
+        options.append((_score(seq), -gap, 1, seq))
+    if not options:
+        return sorted(boxes, key=lambda b: (b.top, b.x0))
+    return min(options, key=lambda o: o[:3])[3]
 
 
 def xy_order(boxes):
     """Reading order (XY cut): the page cut where nothing crosses — across into bands read top to
     bottom, or down into columns read left to right. Where both cuts exist, the one whose text
     runs on better from block to block; then the widest gap."""
+    if CUT_AT_HEADS:
+        key = frozenset(id(b) for b in boxes)
+        if key not in _MEMO:
+            _MEMO[key] = _xy_by_heads(boxes)
+        return list(_MEMO[key])
     if len(boxes) <= 1:
         return list(boxes)
     rows, row_gap = _cut(boxes, "y")
@@ -877,6 +1346,53 @@ def xy_order(boxes):
     if len(rows) > 1:
         return [x for g in rows for x in xy_order(g)]
     return sorted(boxes, key=lambda b: (b.top, b.x0))
+
+
+def repair_flow(order):
+    """A sentence cut at a column's foot goes on in the next column, whatever the page's order
+    put in between (a promotion, a box without a frame): that goes aside, after the paragraph."""
+    cut = lambda b: b.lines[-1].text.endswith(("\x02", "-")) or not ENDS.search(b.lines[-1].text)
+    lower = lambda b: b.kind == "body" and b.lines[0].text[:1].islower()
+    panel = 1000
+    for _ in range(6):
+        seq = [i for i, b in enumerate(order) if b.kind not in ("picture", "footnote", "caption")]
+        moved = False
+        for k, i in enumerate(seq):
+            b = order[i]
+            if not lower(b) or k == 0:
+                continue
+            p = order[seq[k - 1]]
+            if p.kind == "body" and cut(p):
+                continue                # it goes on from the block before it
+            for kk in range(k - 2, -1, -1):
+                a = order[seq[kk]]
+                if a.kind != "body":
+                    break               # never across a headline or another piece's end
+                if not cut(a):
+                    continue
+                if lower(order[seq[kk + 1]]):
+                    break
+                run = order[seq[kk] + 1:i]
+                if any(r.kind not in ("body", "sub", "picture", "caption") for r in run) or \
+                        sum(1 for r in run if r.kind != "picture") > 4:
+                    break
+                for r in run:
+                    if r.lines:
+                        for l in r.lines:
+                            l.panel = panel
+                panel += 1
+                j = i + 1               # after the column's run of text that goes on from b
+                while j < len(order) and order[j].kind == "body" and _overlap(order[j].x0, order[j].x1, b.x0, b.x1) > 0 \
+                        and cut(order[j - 1]):
+                    j += 1
+                order[:] = order[:seq[kk] + 1] + order[i:j] + run + order[j:]
+                moved = True
+                break
+            if moved:
+                break
+        if not moved:
+            break
+    return order
 
 
 def tail_first(order, open_text):
@@ -911,7 +1427,7 @@ def tail_first(order, open_text):
 # Text: words cut at line ends, small capitals, italics
 # ------------------------------------------------------------------------------------------
 
-WORD = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ’']+")
+WORD = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿŒœ’']+")
 
 
 SUFFIXES = {"ment", "ments", "ness", "tion", "tions", "sion", "ing", "ings", "ed", "ly", "er", "ers", "est", "able",
@@ -919,10 +1435,14 @@ SUFFIXES = {"ment", "ments", "ness", "tion", "tions", "sion", "ing", "ings", "ed
             "ture", "ty", "ry", "cy", "es", "s", "ic", "ical", "ize", "ise", "ised", "ized", "ian", "ians", "ate", "ated"}
 
 
-def _dictionary():
-    """The system's English word list, where there is one: words it knows are joined."""
+WORD_LISTS = {"en": ("/usr/share/dict/words", "/usr/share/dict/american-english", "/usr/share/dict/british-english"),
+              "fr": ("/usr/share/dict/french",)}
+
+
+def _dictionary(lang="en"):
+    """The system's word list for the language, where there is one: words it knows are joined."""
     words = set()
-    for path in ("/usr/share/dict/words", "/usr/share/dict/american-english", "/usr/share/dict/british-english"):
+    for path in WORD_LISTS.get(lang, ()):
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:
                 words.update(w.strip().lower() for w in fh if w.strip().isalpha())
@@ -935,9 +1455,10 @@ DICTIONARY = _dictionary()
 
 
 class Vocabulary:
-    def __init__(self):
+    def __init__(self, lang="en"):
         self.words = Counter()
         self.hyphened = Counter()
+        self.dictionary = DICTIONARY if lang == "en" else _dictionary(lang)
 
     def learn(self, text):
         for token in text.split():
@@ -960,11 +1481,11 @@ class Vocabulary:
             return True             # anti-|AfD, ex-|Soviet
         if (a + "-" + b) in self.hyphened:
             return True
-        if (a + b) in self.words or b in SUFFIXES or (a + b) in DICTIONARY:
+        if (a + b) in self.words or b in SUFFIXES or (a + b) in self.dictionary:
             return False            # comput-|er-system, te-|lecoms
         if re.match(r"[A-Za-z]+-", right):
             return True             # eye-|to-eye
-        known = lambda w: self.words.get(w, 0) or w in DICTIONARY
+        known = lambda w: self.words.get(w, 0) or w in self.dictionary
         if known(a) and known(b) and len(a) >= 2 and len(b) >= 3:
             return True             # long-|awaited, white-|collar
         return False
@@ -1032,6 +1553,8 @@ class Article:
         self.waiting = []
         self.column = 0             # the width of the article's columns
         self.pages = set()
+        self.notes = []             # footnotes, html
+        self.first_page = 0
 
     @property
     def has_head(self):
@@ -1063,6 +1586,7 @@ class Builder:
         self.skipping = False
         self.poems = []             # poems met in the article being read, put after it
         self.poem = None
+        self.page = 0
 
     # --- articles
     def start(self):
@@ -1070,6 +1594,7 @@ class Builder:
             self.close_para()
         self.flush_poems()
         self.cur = Article(self.section)
+        self.cur.first_page = self.page
         self.articles.append(self.cur)
         return self.cur
 
@@ -1103,12 +1628,20 @@ class Builder:
             return
         a = self.cur
         role = box.kind
-        text = " ".join(l.plain for l in box.lines)
-        text = re.sub(r"\s+", " ", text.replace("\x02", "")).strip()
+        text = ""
+        for l in box.lines:         # lines joined again, a word cut at a line end mended
+            if text.endswith("\x02"):
+                text = text[:-1] + ("-" if self.vocab.mend(text[:-1], l.text) else "") + l.text
+            else:
+                text = (text + " " + l.text) if text else l.text
+        text = re.sub(r"\s+", " ", text.replace("\x02", "-")).strip()
         if a is not None and getattr(a, "section_opener", False) and not a.items and not a.open:
             a.section_opener = False
             a.title = []
-        if a is None or a.items or a.open or (role == "rubric" and (a.title or a.stand)) or \
+        apart = role == "head" and a is not None and a.title and getattr(self.prof, "split_heads", False) and \
+            getattr(a, "head_box", None) is not None and not (
+                _overlap(a.head_box.x0, a.head_box.x1, box.x0, box.x1) > 0 and box.top - a.head_box.bottom < 1.5 * box.lines[0].size)
+        if a is None or a.items or a.open or apart or (role == "rubric" and (a.title or a.stand)) or \
                 (role == "head" and (a.title and (a.stand or a.byline))) or \
                 (role in ("stand",) and a.stand and a.title and a.byline):
             a = self.start()
@@ -1116,6 +1649,8 @@ class Builder:
             a.rubric.append(text)
         elif role == "head":
             a.title.append(text)
+            a.head_box = box
+            a.region = getattr(box.lines[0], "region", False)
             if box.lines[0].font.startswith("TNYIrvinPro-Titling") and self.section in ("The Talk of the Town", "Goings On"):
                 self.section = a.category = None        # the features after the Talk
         elif role == "stand":
@@ -1183,6 +1718,11 @@ class Builder:
                     continue
                 self.close_para()
             new = drop is not None or indented
+            if new and drop is None and a.open and a.last_line is not None and a.last_line.text.endswith("\x02"):
+                new = False         # a word cut at the line end goes on: never a new paragraph
+            if new and drop is None and a.open and a.last_line is not None and CUT_AT_HEADS and \
+                    not ENDS.search(a.last_line.text.rstrip()):
+                new = False         # nor a sentence that has not ended (text set round a picture)
             if a.open is not None and not new and a.last_line is not None:
                 prev = a.last_line
                 ended = re.search(r"[.!?:”\"’)■]$", prev.text)
@@ -1256,6 +1796,28 @@ class Builder:
         if stanza:
             poem.items.append(("verse", "<br/>".join(stanza)))
 
+    def add_footnote(self, box):
+        """Notes at the foot of the columns: kept apart, at the end of the article."""
+        if self.skipping:
+            return
+        a = self.ensure()
+        notes = a.notes
+        for l in box.lines:
+            piece = line_html(l)
+            if re.match(r"^\s*(\(\d+\)|\*)", l.text) or not notes:
+                notes.append(piece)
+                continue
+            notes[-1] = self.join_html(notes[-1], piece, l.text)
+
+    def join_html(self, left, piece, right_text):
+        """Two lines of html as one: a word cut at the end of the first (its hyphen inside an
+        <i> or not) mended, else a space between."""
+        m = re.search(r"\x02((?:</[a-z]+>)*)$", left)
+        if m:
+            keep = self.vocab.mend(re.sub(r"<[^>]+>", "", left[:m.start()]), right_text)
+            return left[:m.start()] + ("-" if keep else "") + m.group(1) + piece
+        return left + " " + piece
+
     def add_break(self):
         if self.skipping or self.cur is None:
             return
@@ -1278,6 +1840,27 @@ class Builder:
         a = self.ensure()
         inner = Builder(self.prof, self.vocab, self.body_size)
         inner.cur = Article(None)
+        if getattr(self.prof, "heads_in_boxes", False) and any(bl.kind == "head" for bl in blocks):
+            # a piece of its own, with its title (and its signature): read after the article it sits in
+            piece = inner.cur
+            piece.category, piece.first_page = a.category, self.page
+            piece.parent = a
+            for bl in blocks:
+                if bl.kind in ("head", "rubric", "stand"):
+                    inner.add_head(bl)
+                elif bl.kind == "sig":
+                    inner.add_signed(bl)
+                elif bl.kind == "footnote":
+                    inner.add_footnote(bl)
+                elif bl.kind in ("body", "sub", "note"):
+                    inner.add_text(bl, drops, beside)
+            inner.close_para()
+            if inner.cur is not None and inner.cur is not piece:
+                inner.cur.parent, inner.cur.first_page = a, self.page
+                piece = inner.cur
+            if piece.items:
+                self.poems.append(piece)        # (put after the article, as the poems are)
+            return
         for bl in blocks:
             if bl.kind in ("rubric", "head", "stand"):
                 inner.close_para()
@@ -1314,7 +1897,7 @@ def prev_right(prev, a):
 
 
 def read_issue(pdf_path, prof, doc):
-    vocab = Vocabulary()
+    vocab = Vocabulary(getattr(prof, "lang", "en"))
     pages = []
     n = len(doc)
     for p in range(n):
@@ -1322,8 +1905,8 @@ def read_issue(pdf_path, prof, doc):
         page = doc[p]
         w, h = page.get_width(), page.get_height()
         chars = page_chars(page)
-        lines = lines_of(chars)
-        images, paths, panels = page_objects(page)
+        lines = [l for l in lines_of(chars) if l.x1 > 1 and l.x0 < w - 1]   # what lies beyond the page is the facing one's
+        images, paths, panels = page_objects(page, getattr(prof, "framed_panels", False))
         pages.append((w, h, lines, images, paths, panels))
         cut = False
         for l in lines:
@@ -1356,7 +1939,55 @@ def page_kind(prof, lines):
     return "article"
 
 
+def _seam_pair(left, right, w):
+    """Lines of a headline (or of the line above it) that run on from a page to the facing one."""
+    for r in right:
+        if r.role not in ("head", "rubric", "rubric?", "section") or r.x0 - w > 60 or "SC750" in r.font:
+            continue            # (a label in small capitals heads its own page's article)
+        for l in left:
+            if l.role == r.role and l.x1 > w - 60 and abs(l.top - r.top) < 4 and abs(l.size - r.size) < 0.6:
+                yield l, r
+
+
+def sheets_of(prof, pages):
+    """The pages one by one, or by two where a headline runs across facing pages."""
+    if not getattr(prof, "spreads", False):
+        return [[p] for p in range(len(pages))]
+    out, p = [], 0
+    while p < len(pages):
+        if p + 1 < len(pages):
+            w = pages[p][0]
+            right = pages[p + 1][2]
+            for l in right:                 # where they would lie once side by side
+                l.x0, l.x1 = l.x0 + w, l.x1 + w
+            joined = any(True for _ in _seam_pair(pages[p][2], right, w))
+            for l in right:
+                l.x0, l.x1 = l.x0 - w, l.x1 - w
+            if joined:
+                out.append([p, p + 1])
+                p += 2
+                continue
+        out.append([p])
+        p += 1
+    return out
+
+
+def join_seam(left, right, w):
+    """One line of a headline across the facing pages, read as one."""
+    for l, r in list(_seam_pair(left, right, w)):
+        if l.text.endswith("\x02"):
+            l.spans[-1][0] = l.spans[-1][0].rstrip("\x02") + "-"      # latino-|caribéennes
+        else:
+            l.spans.append([" ", l.spans[-1][1], l.spans[-1][2]])
+        l.spans += [list(s) for s in r.spans]
+        l.text = "".join(s[0] for s in l.spans).strip()
+        l.x1 = r.x1
+        r.role = "skip"
+
+
 def build(pdf_path, prof, doc):
+    global CUT_AT_HEADS
+    CUT_AT_HEADS = getattr(prof, "cut_at_heads", False)
     pages, vocab = read_issue(pdf_path, prof, doc)
     sizes = Counter()
     for w, h, lines, _i, _p, _q in pages:
@@ -1379,12 +2010,49 @@ def build(pdf_path, prof, doc):
             entries += prof.contents(lines)
     unseen = [e for e in entries if not any(_key(e["title"]).startswith(k) or k.startswith(_key(e["title"]))
                                             for k in seen if len(k) > 3)]
-    for p, (w, h, lines, images, paths, panels) in enumerate(pages):
-        page_texts.append(" ".join(l.plain for l in lines))
-        if p == 0:
+    for sheet in sheets_of(prof, pages):
+        p = sheet[0]
+        for pp in sheet:
+            page_texts.append(" ".join(l.plain for l in pages[pp][2]))
+        if p == 0 and not getattr(prof, "cover_is_page", False):
             continue                    # the cover, drawn as the cover
-        bs = settle_roles(prof, lines, h)
-        kind = page_kind(prof, lines)
+        # a sheet is a page, or two facing pages a headline runs across: read as one
+        w0, h = pages[p][0], pages[p][1]
+        lines, pics, panels, bs, kinds, off = [], [], [], None, [], 0
+        for pp in sheet:
+            pw, _h, plines, images, paths, ppanels = pages[pp]
+            pbs = settle_roles(prof, plines, h)
+            bs = bs or pbs
+            kinds.append(page_kind(prof, plines))
+            ppics = find_pictures(prof, plines, images, paths, pw, h, pbs, doc[pp]) if kinds[-1] == "article" else []
+            # the parts of the page an advertisement holds
+            foreign = [l for l in plines if l.role == "foreign"]
+            ppics = [pc for pc in ppics if not any(
+                _overlap(pc.x0, pc.x1, l.x0, l.x1) > 0 and _overlap(pc.top, pc.bottom, l.top, l.bottom) > 0 for l in foreign)]
+            if getattr(prof, "pictures_need_credit", False):
+                ppics = prof.own_pictures(ppics, plines, foreign)
+            # a panel holding an advertisement's text: its pictures are the advertisement's too
+            inside = lambda o, q: o[0] >= q[0] - 2 and o[1] >= q[1] - 2 and o[2] <= q[2] + 2 and o[3] <= q[3] + 2
+            ads = [q for q in ppanels if any(inside((l.x0, l.top, l.x1, l.bottom), q) for l in foreign)]
+            ppics = [pc for pc in ppics if not any(inside((pc.x0, pc.top, pc.x1, pc.bottom), q) for q in ads)]
+            # pictures covered by the running text are backgrounds, not pictures
+            for pc in ppics:
+                area = (pc.x1 - pc.x0) * (pc.bottom - pc.top)
+                text_in = sum((l.x1 - l.x0) * (l.bottom - l.top) for l in plines if l.role == "body"
+                              and _overlap(pc.x0, pc.x1, l.x0, l.x1) > 0 and _overlap(pc.top, pc.bottom, l.top, l.bottom) > 0)
+                if area > 0 and text_in < 0.15 * area:
+                    pc.page, pc.shift = pp, off
+                    pc.x0, pc.x1 = pc.x0 + off, pc.x1 + off
+                    pics.append(pc)
+            if off:
+                for l in plines:
+                    l.x0, l.x1 = l.x0 + off, l.x1 + off
+                join_seam(lines, plines, off)
+            lines += plines
+            panels += [(x0 + off, top, x1 + off, bottom) for x0, top, x1, bottom in ppanels]
+            off += pw
+        w = off
+        kind = "article" if "article" in kinds else kinds[0]
         here = [e for e in unseen if folios.get(p) == e["folio"] or
                 (p not in folios and folios.get(p - 1, -9) + 1 == e["folio"])]
         for e in here:
@@ -1401,25 +2069,16 @@ def build(pdf_path, prof, doc):
         header = prof.section_of_header(lines)
         if header and not any(l.role == "section" for l in lines):
             b.section = header
-        # the parts of the page an advertisement holds
-        foreign = [l for l in lines if l.role == "foreign"]
-        pics = find_pictures(prof, lines, images, paths, w, h, bs, doc[p])
-        pics = [pc for pc in pics if not any(
-            _overlap(pc.x0, pc.x1, l.x0, l.x1) > 0 and _overlap(pc.top, pc.bottom, l.top, l.bottom) > 0 for l in foreign)]
-        # pictures covered by the running text are backgrounds, not pictures
-        kept = []
-        for pc in pics:
-            area = (pc.x1 - pc.x0) * (pc.bottom - pc.top)
-            text_in = sum((l.x1 - l.x0) * (l.bottom - l.top) for l in lines if l.role == "body"
-                          and _overlap(pc.x0, pc.x1, l.x0, l.x1) > 0 and _overlap(pc.top, pc.bottom, l.top, l.bottom) > 0)
-            if area > 0 and text_in < 0.15 * area:
-                kept.append(pc)
-        pics = kept
-        for pc in pics:
-            pc.page = p
+        if hasattr(prof, "page_section"):
+            section = prof.page_section(lines, b.section)
+            if section != b.section and b.cur is not None:
+                b.close_para()          # a new part of the paper: what follows is not the last article's
+                b.flush_poems()
+                b.cur = None
+            b.section = section
         text_lines = [l for l in lines if l.role in ("body", "sub", "head", "rubric", "stand", "byline", "dateline",
                                                      "section", "caption", "note", "drop", "verse", "poemtitle",
-                                                     "versesig", "break", "sig")]
+                                                     "versesig", "break", "sig", "footnote")]
         # drop capitals belong to the line at their top, right of them
         drops, beside = {}, set()
         body_lines = [l for l in text_lines if l.role == "body"]
@@ -1447,25 +2106,44 @@ def build(pdf_path, prof, doc):
                 if d < dist:
                     best, dist = pc, d
             if best is not None and dist < 400:
-                best.caption = ((best.caption + " ") if best.caption else "") + " ".join(line_html(l) for l in cap.lines)
+                text = ""
+                for l in cap.lines:
+                    text = b.join_html(text, line_html(l), l.text) if text else line_html(l)
+                best.caption = ((best.caption + " ") if best.caption else "") + text.replace("\x02", "-")
         for l in text_lines:
             l.panel = None
         panels = list(panels) + bold_panels(text_lines)
+        heads_ok = getattr(prof, "heads_in_boxes", False)
         for k, (x0, top, x1, bottom) in enumerate(panels):
-            inside = [l for l in text_lines if l.x0 >= x0 - 1 and l.x1 <= x1 + 1 and l.top >= top - 1 and l.bottom <= bottom + 1]
-            if inside and not any(l.role in ("head", "section") for l in inside) and \
+            # (a box's title may sit astride its top edge)
+            inside = [l for l in text_lines if l.x0 >= x0 - 1 and l.x1 <= x1 + 1 and l.bottom <= bottom + 1 and
+                      (l.top >= top - 1 or (heads_ok and l.role == "head" and l.bottom > top))]
+            # (a box may have a title of its own, where the magazine says so; never a byline: that is an article)
+            heads = ("section", "byline") if getattr(prof, "heads_in_boxes", False) else ("head", "section")
+            if inside and not any(l.role in heads for l in inside) and \
                     sum(len(l.text) for l in inside if l.role == "body") > 80:
                 for l in inside:
                     if l.panel is None:
                         l.panel = k
         blocks = blocks_of(text_lines, bs)
+        if CUT_AT_HEADS:
+            for pc in pics:         # a picture biting a few points into a headline: not across it
+                for l in text_lines:
+                    if l.role in ("head", "rubric") and _overlap(pc.x0, pc.x1, l.x0, l.x1) > 0 and 0 < l.bottom - pc.top < 20 \
+                            and pc.bottom > l.bottom + 40:
+                        pc.crop = getattr(pc, "crop", None) or (pc.x0, pc.top, pc.x1, pc.bottom)
+                        pc.top = l.bottom + 0.5
+        _MEMO.clear()
         order = xy_order(blocks + pics)
         cur = b.cur
         open_text = cur.last_line.text if cur is not None and cur.open and cur.last_line is not None else ""
         order = tail_first(order, open_text)
+        if CUT_AT_HEADS:
+            order = repair_flow(order)
         pending_hero = []
         boxed = set()
         for i, bl in enumerate(order):
+            b.page = sheet[-1] if bl.x0 >= w0 - 1 else p
             panel = getattr(bl.lines[0], "panel", None) if bl.lines else None
             if panel is not None:
                 if panel not in boxed:
@@ -1491,6 +2169,9 @@ def build(pdf_path, prof, doc):
                 continue
             if bl.kind == "sig":
                 b.add_signed(bl)
+                continue
+            if bl.kind == "footnote":
+                b.add_footnote(bl)
                 continue
             if bl.kind == "section":
                 b.add_section(bl)
@@ -1529,8 +2210,9 @@ def cut_pictures(doc, articles):
         page = doc[p]
         bitmap = page.render(scale=RENDER).to_pil().convert("RGB")
         for box in by_page[p]:
-            x0, top = max(0, box.x0 - 1) * RENDER, max(0, box.top - 1) * RENDER
-            x1, bottom = min(page.get_width(), box.x1 + 1) * RENDER, min(page.get_height(), box.bottom + 1) * RENDER
+            bx0, btop, bx1, bbottom = getattr(box, "crop", None) or (box.x0, box.top, box.x1, box.bottom)
+            x0, top = max(0, bx0 - box.shift - 1) * RENDER, max(0, btop - 1) * RENDER
+            x1, bottom = min(page.get_width(), bx1 - box.shift + 1) * RENDER, min(page.get_height(), bbottom + 1) * RENDER
             if x1 - x0 < 8 or bottom - top < 8:
                 continue
             crop = bitmap.crop((int(x0), int(top), int(x1), int(bottom)))
@@ -1600,6 +2282,9 @@ def chapter_html(a):
                 elif k == "picture" and v.image:
                     inner.append(picture_html(v, "figure"))
             out.append('<div class="box">%s</div>' % "".join(inner))
+    if a.notes:
+        out.append('<div class="notes">%s</div>' % "".join(
+            '<p class="note">%s</p>' % re.sub(r"\s+", " ", n).replace("\x02", "-").strip() for n in a.notes))
     out.append('<p class="article-end">&#9830;</p>')
     return title, out
 
@@ -1634,13 +2319,15 @@ div.hero-img img, div.figure img { max-width: 100%; }
 div.box { border-top: 1px solid #888; border-bottom: 1px solid #888; margin: 1em 0; padding: 0.4em 0; font-size: 0.92em; }
 div.box h3 { margin-top: 0.2em; }
 div.box p { text-indent: 0; margin-bottom: 0.4em; }
+div.notes { margin-top: 1.2em; border-top: 1px solid #888; padding-top: 0.3em; }
+div.notes p.note { font-style: normal; font-size: 0.8em; margin: 0.2em 0; }
 div.title-page { text-align: center; }
 div.title-page img { max-width: 100%; }
 """
 
 XHTML = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="en" lang="en">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="@LANG@" lang="@LANG@">
 <head>
 <meta charset="UTF-8"/>
 <title>%s</title>
@@ -1653,8 +2340,9 @@ XHTML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def write_epub(path, title, publisher, date_iso, cover, chapters, images):
+def write_epub(path, title, publisher, date_iso, cover, chapters, images, lang="en"):
     esc = lambda s: html.escape(s, quote=True)
+    page = lambda t, body: (XHTML % (t, body)).replace("@LANG@", lang)
     book_id = "urn:uuid:%s" % uuid.uuid4()
     files = [("chapter-%02d.xhtml" % (i + 1), c) for i, c in enumerate(chapters)]
     manifest = ['<item id="style" href="style.css" media-type="text/css"/>',
@@ -1671,7 +2359,7 @@ def write_epub(path, title, publisher, date_iso, cover, chapters, images):
 <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">%s</dc:identifier>
     <dc:title>%s</dc:title>
-    <dc:language>en</dc:language>
+    <dc:language>%s</dc:language>
     <dc:publisher>%s</dc:publisher>
     %s
     %s
@@ -1684,16 +2372,16 @@ def write_epub(path, title, publisher, date_iso, cover, chapters, images):
     %s
 </spine>
 </package>
-""" % (book_id, esc(title), esc(publisher), "<dc:date>%s</dc:date>" % date_iso if date_iso else "",
+""" % (book_id, esc(title), lang, esc(publisher), "<dc:date>%s</dc:date>" % date_iso if date_iso else "",
        '<meta name="cover" content="cover-image"/>' if cover else "", "\n    ".join(manifest), "\n    ".join(spine))
     lis = []
     for f, c in files:
         author = ('\n            <span class="toc-author">%s</span>' % esc(c["author"])) if c.get("author") else ""
         lis.append('<li><a href="%s">\n            <span class="toc-cat">%s</span>\n            <span class="toc-title">%s</span>%s\n        </a></li>'
                    % (f, esc(c["category"] or ""), esc(c["title"]), author))
-    nav = XHTML % ("Table of Contents", '<nav epub:type="toc" class="toc">\n    <h2>Table of Contents</h2>\n    <ol>\n        %s\n    </ol>\n</nav>'
+    nav = page("Table of Contents", '<nav epub:type="toc" class="toc">\n    <h2>Table of Contents</h2>\n    <ol>\n        %s\n    </ol>\n</nav>'
                    % "\n".join(lis))
-    title_page = XHTML % (esc(publisher), '<div class="title-page">\n%s    <h1>%s</h1>\n    <p class="edition">%s</p>\n</div>' % (
+    title_page = page(esc(publisher), '<div class="title-page">\n%s    <h1>%s</h1>\n    <p class="edition">%s</p>\n</div>' % (
         '    <img src="cover.jpg" alt=""/>\n' if cover else "", esc(publisher.upper()), esc(title.split(" — ", 1)[-1])))
     container = """<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -1711,7 +2399,7 @@ def write_epub(path, title, publisher, date_iso, cover, chapters, images):
         if cover:
             z.writestr("OEBPS/cover.jpg", cover, zipfile.ZIP_STORED)
         for f, c in files:
-            z.writestr("OEBPS/" + f, XHTML % (esc(c["title"]), "\n".join(c["body"])), zipfile.ZIP_DEFLATED)
+            z.writestr("OEBPS/" + f, page(esc(c["title"]), "\n".join(c["body"])), zipfile.ZIP_DEFLATED)
         for name, data in images:
             z.writestr("OEBPS/" + name, data, zipfile.ZIP_STORED)
     os.replace(tmp, path)
@@ -1743,8 +2431,10 @@ def convert(pdf_path, epub_path, prof=None):
     try:
         prof = prof or which(pdf_path, doc)
         if prof is None:
-            raise ValueError("neither The Economist nor The New Yorker")
+            raise ValueError("neither The Economist, The New Yorker nor Le Monde diplomatique")
         articles, page_texts, _pics = build(pdf_path, prof, doc)
+        if hasattr(prof, "stitch"):
+            articles = prof.stitch(articles)
         for a in articles:
             prof.settle(a)
         articles = [a for a in articles if worth_keeping(a)]
@@ -1759,7 +2449,8 @@ def convert(pdf_path, epub_path, prof=None):
             t, body = chapter_html(a)
             chapters.append({"title": t, "category": a.category, "author": smart_title(" ".join(a.byline)) if a.byline else None,
                              "body": body})
-        write_epub(epub_path, title, prof.name, iso_date(date), cover.getvalue(), chapters, images)
+        iso = prof.iso(date) if hasattr(prof, "iso") else iso_date(date)
+        write_epub(epub_path, title, prof.name, iso, cover.getvalue(), chapters, images, getattr(prof, "lang", "en"))
         return title
     finally:
         doc.close()

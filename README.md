@@ -76,6 +76,18 @@ reader, the same library, the same wording.
   table of contents goes (the reader has its own), and so do a proof's crop marks. Measured on
   Bel-Ami (472 pages, 80 s) and Lessig's Free Culture (352 pages, 64 s).
   On its own: `<that environment>/bin/python paper2epub.py paper.pdf paper.epub`.
+* An issue of **The Economist** or **The New Yorker** in PDF is recognised by its typefaces and
+  made by `magazine2epub.py` instead (pypdfium2 and Pillow only, no Marker, about ten seconds an
+  issue): one chapter per article with its section, rubric, title, standfirst and byline, in the
+  order of the issue, so the shelf shows it as a magazine with its contents. Each page is read
+  the way the eye goes (bands across, then columns), articles run on across columns and pages,
+  words cut at line ends are mended (the hyphen kept only where the word carries one), small
+  capitals, italics and bold kept; photographs, cartoons and charts are cut out of the page with
+  their captions; boxes are set apart; poems printed among a piece's pages become pieces of
+  their own, a title that is only a drawing is found in the table of contents; advertisements,
+  the contents, the masthead and the crossword are left out. On its own:
+  `<that environment>/bin/python magazine2epub.py issue.pdf issue.epub` (`--which issue.pdf`
+  says which magazine it is, if any).
   Papers are for the Linux packages and the source: the Windows and macOS builds have no
   Python of their own to set the converter up with.
 * A magazine issue (an EPUB whose contents page carries a section, a title and an author per

@@ -18,6 +18,9 @@ A scanned PDF (no text on most pages) is read first by Tesseract, if it is insta
 language it reads best among those installed; the rest goes as for any PDF. Without Tesseract,
 its pages are pictures, and --progress says {"notice": "no-ocr"}.
 
+An issue of The Economist or of The New Yorker is recognised by its typefaces and made by
+magazine2epub.py instead: an article per chapter, as the magazine view of the apps wants.
+
 A book is helped by what the PDF knows besides Marker: its bookmarks give the chapters, its text
 layer the lines Marker lost. Its printed table of contents goes: the reader has its own.
 
@@ -1041,7 +1044,30 @@ def write_epub(path, title, authors, chapters, images, language="en"):
     os.replace(tmp, path)
 
 
+def magazine(pdf_path, epub_path):
+    """An issue of The Economist or of The New Yorker goes to magazine2epub.py (next to this file),
+    which knows their pages: articles, sections, pictures, no advertisements. None otherwise."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "magazine2epub.py")
+    if not os.path.isfile(path):
+        return None
+    spec = importlib.util.spec_from_file_location("magazine2epub", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        profile = module.which(pdf_path)
+    except Exception:           # not one of those magazines' PDFs: the usual way
+        profile = None
+    if profile is None:
+        return None
+    module.PROGRESS = PROGRESS
+    return module.convert(pdf_path, epub_path, profile)
+
+
 def convert(pdf_path, epub_path):
+    title = magazine(pdf_path, epub_path)
+    if title:
+        return title
     with tempfile.TemporaryDirectory(prefix="paper2epub-") as work:
         scan = needs_ocr(Pages(pdf_path))
         lang = None

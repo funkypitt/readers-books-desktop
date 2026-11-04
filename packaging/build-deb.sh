@@ -6,6 +6,7 @@ VERSION=$(grep -oE '^VERSION = "[^"]+"' "$SRC/readers_books.py" | cut -d'"' -f2)
 ROOT="$HERE/deb-root"; rm -rf "$ROOT"
 install -Dm755 "$SRC/readers_books.py" "$ROOT/usr/lib/readers-books/readers_books.py"
 install -Dm755 "$SRC/paper2epub.py" "$ROOT/usr/lib/readers-books/paper2epub.py"
+install -Dm755 "$SRC/magazine2epub.py" "$ROOT/usr/lib/readers-books/magazine2epub.py"
 for f in "$HERE"/fonts/*; do install -Dm644 "$f" "$ROOT/usr/lib/readers-books/fonts/$(basename "$f")"; done
 install -Dm755 /dev/stdin "$ROOT/usr/bin/readers-books" <<'SH'
 #!/bin/sh

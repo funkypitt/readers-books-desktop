@@ -29,7 +29,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.15.0"
+VERSION = "1.16.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -6540,7 +6540,9 @@ class Main(QtWidgets.QMainWindow):
         name = os.path.splitext(os.path.basename(path))[0]
         doing = _("the PDF “%s” is being turned into an EPUB…") % name
         words = {"models": _("loading the models"), "pages": _("reading the pages"), "book": _("making the EPUB"),
-                 "ocr": _("reading the scanned pages")}
+                 "ocr": _("reading the scanned pages"),
+                 # an issue of a magazine (magazine2epub.py)
+                 "reading": _("reading the pages"), "pictures": _("making the EPUB")}
         say = self.paper_step.said.emit
         self.paper_said(doing)
         notices = []

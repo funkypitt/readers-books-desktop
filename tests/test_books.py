@@ -642,9 +642,9 @@ class LibraryPage(unittest.TestCase):
         main.library.save_position(entry["id"], 0, 0, 0)        # opened once: it has a place to send
         self.assertTrue(rb.can_send(main.cfg, entry))
         self.assertEqual(rb.send_name(entry), "Un essai.epub")
-        main.push((rb.LIBRARY,))
+        self.assertEqual(main.stack, [(rb.LIBRARY,)])          # a library set up: the app opens on it
         self.synced(main)
-        main.pop()
+        main.push((rb.SHELF,))
         # the shelf's row menu offers it
         row = next(r for r in main.rows if r.title == "Un essai")
         item = next(m for m in row.menu() if m and m[0] == rb._("add to the library"))
@@ -690,12 +690,13 @@ class LibraryPage(unittest.TestCase):
         main = rb.Main()
         main.resize(760, 900)
         main.show()
-        main.push((rb.LIBRARY,))
-        self.assertEqual(main.rows[0].title, rb._("sync now"))
+        self.assertEqual(main.stack, [(rb.LIBRARY,)])          # a library set up: the app opens on it
+        # at its top, the books on this computer (no book read yet: nothing to carry on), then the sync
+        self.assertEqual([r.title for r in main.rows[:2]], [rb._("on this computer"), rb._("sync now")])
         self.synced(main)
         titles = [r.title for r in main.rows]
-        self.assertEqual(titles[0], rb._("sync now"))
-        self.assertEqual(main.rows[0].secondary, rb._("scanned on %s", rb.date_label(main.remote.index["scannedAt"])))
+        self.assertEqual(titles[:2], [rb._("on this computer"), rb._("sync now")])
+        self.assertEqual(main.rows[1].secondary, rb._("scanned on %s", rb.date_label(main.remote.index["scannedAt"])))
         self.assertIn(rb._("keep only some folders?"), titles)
         self.assertEqual([t for t in titles if "/" in t or t in ("Essais", "Romans")], ["Essais", "Romans", "Romans/Maigret", "transcriptions/Une chaîne"])
         self.assertEqual(next(r.secondary for r in main.rows if r.title == rb._("all books")), rb.n_books(4))
@@ -817,6 +818,173 @@ class LibraryPage(unittest.TestCase):
         self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["Milieu", "Abc", "Zèbre"])
         self.assertEqual(main.cfg["shelf_sort"], "ADDED")
         main.close()
+
+
+class ShelfHighlights(unittest.TestCase):
+    """Highlights in a book of the shelf alone: kept here in the contract's form, its note in
+    Reader's Notes, and taken into the library's file when the same book comes from the drive."""
+
+    def test_the_same_book_is_the_same_file_or_the_same_epub_identifier_and_title(self):
+        def epub(name, uid, title, extra=""):
+            p = path(name)
+            with rb.zipfile.ZipFile(p, "w") as z:
+                z.writestr("META-INF/container.xml", '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>')
+                z.writestr("OEBPS/content.opf", '<package unique-identifier="pub-id"><metadata><dc:identifier id="isbn">978-0</dc:identifier>'
+                           '<dc:identifier id="pub-id">%s</dc:identifier><dc:title>%s</dc:title>%s</metadata></package>' % (uid, title, extra))
+            return {"title": title, "fingerprint": rb.book_fingerprint(p), "bookId": rb.epub_id(p, rb.EPUB)}
+        a = epub("id-a.epub", "urn:uuid:1234", "Le Livre")
+        self.assertEqual(a["bookId"], "urn:uuid:1234")
+        self.assertEqual(len(a["fingerprint"]), 64)
+        shutil.copyfile(path("id-a.epub"), path("id-copy.epub"))
+        self.assertTrue(rb.same_book(a, {"title": "Le Livre", "fingerprint": rb.book_fingerprint(path("id-copy.epub"))}))   # same bytes
+        self.assertTrue(rb.same_book(a, epub("id-b.epub", "urn:uuid:1234", "Le Livre", "<dc:subject>x</dc:subject>")))         # rewritten
+        self.assertFalse(rb.same_book(a, epub("id-c.epub", "urn:uuid:1234", "Un autre")))      # one stamp on many books
+        self.assertFalse(rb.same_book(a, epub("id-d.epub", "urn:uuid:9999", "Le Livre")))      # a title alone is not enough
+        self.assertFalse(rb.same_book({"title": "T"}, {"title": "T"}))                          # never learnt: never the same by accident
+        self.assertEqual(rb.package_id("<opf:package unique-identifier='bookid'><dc:identifier id='bookid'> abc </dc:identifier></opf:package>"), "abc")
+        self.assertEqual(rb.epub_id(path("id-a.epub"), rb.FB2), "")
+
+    def test_a_shelf_book_keeps_its_highlights_in_the_contract_s_form_and_hands_them_over(self):
+        lib = rb.Library()
+        shelf = lib.add(make_books.epub(path("hand.epub"), "À passer"), "À passer.epub")
+        mine = rb.new_highlight(0, 1, 5, "mine")
+        both = rb.new_highlight(1, 3, 9, "both")
+        rb.save_highlights(shelf, [mine, dict(both, deleted=True, text="", modified=both["modified"] + 10)], True)
+        with open(os.path.join(rb.HIGHLIGHTS_DIR, rb.highlight_key(shelf) + ".json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertEqual((data["format"], data["version"], data["book"]), ("readers-highlights", 1, "À passer.epub"))
+        self.assertEqual(sorted(data["highlights"][0]), ["chapter", "comment", "created", "deleted", "end", "id", "modified", "start", "text"])
+        # the same file comes from the library: it takes the shelf's copy's place, and its highlights
+        theirs = rb.new_highlight(3, 0, 4, "drive")
+        library_side = {"id": "z", "source": "https://dav.example/Livres/À passer.epub"}
+        rb.save_highlights(library_side, [both, theirs], False)
+        fetched = lib.add(path("hand.epub"), "À passer.epub", source=library_side["source"])
+        self.assertIsNone(lib.get(shelf["id"]))
+        self.assertEqual(lib.moved[-1][0]["id"], shelf["id"])
+        merged, dirty = rb.load_highlights(fetched)
+        self.assertEqual([h["id"] for h in merged], [mine["id"], both["id"], theirs["id"]])
+        self.assertTrue(next(h for h in merged if h["id"] == both["id"])["deleted"])        # the later removal wins
+        self.assertTrue(dirty)                                                                # still to be sent
+        self.assertEqual(rb.load_highlights(shelf), ([], False))
+        # a book of the library never adopts another copy of the drive
+        other = lib.add(path("hand.epub"), "À passer.epub", source="https://dav.example/Ailleurs/À passer.epub")
+        self.assertIsNotNone(lib.get(fetched["id"]))
+        lib.remove(other["id"])
+        lib.remove(fetched["id"])
+
+    def test_the_home_screen_is_the_library_once_there_is_one(self):
+        rb.save_config(dict(rb.DEFAULTS))
+        main = rb.Main()
+        self.assertEqual(main.stack, [(rb.SHELF,)])
+        self.assertEqual(main.title.text(), rb._("books"))
+        self.assertTrue(main.foot_invite.isVisibleTo(main))
+        self.assertIn(rb._("set up a library"), main.foot_invite.text())
+        main.foot_invite.clicked.emit()                       # the invitation opens the library's account page
+        self.assertEqual(main.screen, (rb.LIBRARY,))
+        self.assertEqual(main.rows[0].title, rb.LIBRARY_HINT())
+        # set up: the library becomes the home screen, at once
+        main.cfg.update(url="http://127.0.0.1:9/", username="u", password="p")
+        main.remote.scan = lambda cfg, fresh: None           # no drive to walk here
+        main.show_screen()
+        self.assertEqual(main.stack, [(rb.LIBRARY,)])
+        self.assertFalse(main.back.isVisibleTo(main))
+        e = main.library.add(make_books.epub(path("home.epub"), "Lu hier"), "home.epub")
+        main.library.save_position(e["id"], 0, 0, 42)
+        main.show_screen()
+        self.assertEqual([(r.title, r.secondary) for r in main.rows[:2]],
+                         [("Lu hier", rb._("continue reading") + " · 42%"), (rb._("on this computer"), rb.n_books(len(main.library.books)))])
+        main.rows[1].action()
+        self.assertEqual(main.stack, [(rb.LIBRARY,), (rb.SHELF,)])
+        self.assertEqual(main.title.text(), rb._("on this computer"))
+        self.assertFalse(main.foot_invite.isVisibleTo(main))
+        main.pop()
+        main.rows[0].action()                                  # one click: the book read last, at its page
+        self.assertEqual(main.stack, [(rb.LIBRARY,), (rb.BOOK, e["id"])])
+        self.assertEqual(main.back_label(), rb._("library"))
+        main.pop()
+        # forgotten: the shelf is home again
+        main.push((rb.SETTINGS,))
+        main.forget_library()
+        self.assertEqual(main.stack, [(rb.SHELF,), (rb.SETTINGS,)])
+        main.pop()
+        self.assertTrue(main.foot_invite.isVisibleTo(main))
+        main.library.remove(e["id"])
+        main.close()
+        rb.save_config(dict(rb.DEFAULTS))
+
+
+class ShelfToLibrary(unittest.TestCase):
+    """Against a drive served by rclone: the note of a shelf book written into Reader's Notes,
+    then the same book fetched from the library bringing its highlights to the drive's file."""
+    PORT = 8094
+    BASE = "http://127.0.0.1:%d" % PORT
+
+    @classmethod
+    def setUpClass(cls):
+        if not shutil.which("rclone"):
+            raise unittest.SkipTest("rclone is needed to serve the test drive")
+        cls.drive = path("drive2")
+        os.makedirs(os.path.join(cls.drive, "Livres"), exist_ok=True)
+        os.makedirs(os.path.join(cls.drive, "Notes"), exist_ok=True)
+        make_books.epub(os.path.join(cls.drive, "Livres", "Le même.epub"), "Le même")
+        cls.server = subprocess.Popen(["rclone", "serve", "webdav", cls.drive, "--addr", "127.0.0.1:%d" % cls.PORT, "--user", "u", "--pass", "p"],
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _i in range(100):
+            try:
+                rb.requests.get(cls.BASE, timeout=1)
+                return
+            except Exception:
+                time.sleep(0.1)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.terminate()
+        cls.server.wait()
+
+    def settle(self, until, what):
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            APP.processEvents()
+            if until():
+                APP.processEvents()
+                return
+            time.sleep(0.05)
+        self.fail("still waiting for " + what)
+
+    def test_a_shelf_book_s_note_then_its_highlights_on_the_drive(self):
+        notes = os.path.join(self.drive, "Notes", rb.BOOKS_FOLDER)
+        # no library, a notes folder only
+        rb.save_config(dict(rb.DEFAULTS, notes_url=self.BASE + "/Notes", notes_username="u", notes_password="p"))
+        main = rb.Main()
+        local = os.path.join(self.drive, "Livres", "Le même.epub")
+        entry = main.library.add(local, "copie.epub")          # the very file, opened from this computer
+        self.assertEqual(main.stack, [(rb.SHELF,)])
+        main.push((rb.BOOK, entry["id"]))
+        self.settle(lambda: main.reader.book is not None, "the book")
+        h = rb.new_highlight(0, 0, 8, main.reader.text_of(0).cut(0, 8), "à garder")
+        main.change_highlights([h])
+        self.settle(lambda: os.path.exists(os.path.join(notes, "copie.txt")), "the note")
+        with open(os.path.join(notes, "copie.txt"), encoding="utf-8") as fh:
+            self.assertIn("à garder", fh.read())
+        self.settle(lambda: not rb.load_highlights(entry)[1], "the note marked as written")
+        main.pop()
+        # now a library: the same book fetched from it takes the highlights to the drive's file
+        main.cfg.update(url=self.BASE + "/", username="u", password="p")
+        rb.save_config(main.cfg)
+        main.show_screen(reset=True)
+        self.assertEqual(main.stack, [(rb.LIBRARY,)])
+        self.settle(lambda: not main.remote.scanning and main.remote.index["complete"] and main.remote.index["scannedAt"] > 0, "the sync")
+        found = next(b for b in main.remote.index["books"] if b["name"] == "Le même.epub")
+        main.fetch(found)
+        sidecar = local + rb.HIGHLIGHTS_SUFFIX
+        self.settle(lambda: os.path.exists(sidecar), "the highlights next to the book")
+        with open(sidecar, encoding="utf-8") as fh:
+            self.assertEqual([x["id"] for x in json.load(fh)["highlights"]], [h["id"]])
+        self.assertIsNone(main.library.get(entry["id"]))
+        # its note moved to the book's name on the drive
+        self.settle(lambda: os.path.exists(os.path.join(notes, "Le même.txt")) and not os.path.exists(os.path.join(notes, "copie.txt")), "the note under its new name")
+        main.close()
+        rb.save_config(dict(rb.DEFAULTS))
 
 
 if __name__ == "__main__":

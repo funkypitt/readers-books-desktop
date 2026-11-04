@@ -11,18 +11,23 @@ reader, the same library, the same wording.
 ## Key points
 
 * The shelf lists title, how far you are, when you last opened it. Click to read; right click for
-  chapters or to remove the book.
+  chapters or to remove the book. With a library set up, the app opens on the library instead:
+  at its top, the book read last (one click and it is at its page), then "on this computer", the
+  shelf. Without one, a quiet line under the shelf leads to setting one up.
 * The right third of the window turns forward, the left third back, a click in the middle opens
   the book's menu; the arrow keys, the space bar, Page Up/Down and the wheel turn pages too. The
   menu (also a right click, the ⋯ in the corner or the M key): chapters, larger or smaller text
   (+ and − do it too), book text in sans-serif or serif (Literata), back to the shelf, remove.
   Esc goes back.
-* Highlights and comments, in the books of the library: drag across a passage, then "highlight"
+* Highlights and comments, in every book: drag across a passage, then "highlight"
   or "comment". A highlight is a grey band behind the words, with a line under it when it
-  carries a comment; a click on it shows the comment, changes it or removes the highlight. They
-  are kept in a file next to the book on the drive (`<book file>.highlights.json`), so every
-  device that opens the book has them: each device folds its own into that file, highlight by
-  highlight, the one changed last winning. The book's menu exports them as text. Given the
+  carries a comment; a click on it shows the comment, changes it or removes the highlight. In a
+  book of the library they are kept in a file next to the book on the drive
+  (`<book file>.highlights.json`), so every device that opens the book has them: each device
+  folds its own into that file, highlight by highlight, the one changed last winning. A book
+  opened from this computer keeps them here, in a file of the same form; when the same book
+  comes from the library later (the same file, or an EPUB with the same identifier and title),
+  or is added to it, they are folded into the library's. The book's menu exports them as text. Given the
   WebDAV address of the Reader's Notes folder, the app also keeps a note per book there (folder
   `Reader's Books`): the passages between quotation marks, in the order of the book, each
   followed by its comment — Reader's Notes shows it read-only.
@@ -83,10 +88,10 @@ reader, the same library, the same wording.
   too. Every list has its order: folders by name, latest book or number of books; books by date,
   name, author or last opened (the author is what precedes " - " in the file name, else the
   folder's name); the shelf by last opened, title or last added.
-  Nothing is downloaded until you click a book. The library syncs by itself when opened after
-  ten minutes or more, and at once with the "sync now" row at its top; what is known stays on
-  the screen while the drive is walked, new books appear, books gone from the drive go. A sync
-  that is stopped, or cut short by closing the window, carries on where it was. Once the drive
+  Nothing is downloaded until you click a book. The library syncs with the "sync now" row near
+  its top; what is known stays on the screen while the drive is walked, new books appear, books
+  gone from the drive go. A sync that is stopped, or cut short by closing the window, carries on
+  where it was with "continue the scan". Once the drive
   has been walked, the library offers to keep only some of its folders (with everything inside
   them): fewer folders, faster syncs — the choice is in the library's menu and in the settings.
   A right click on a folder leaves it out instead, with everything inside it, whatever else is

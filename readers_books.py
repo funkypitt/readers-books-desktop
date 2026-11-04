@@ -22,14 +22,14 @@ import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
-from hashlib import sha1
+from hashlib import sha1, sha256
 from urllib.parse import quote, unquote, urljoin, urlparse
 
 import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.12.0"
+VERSION = "1.13.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -57,8 +57,12 @@ HIGHLIGHTS_DIR = os.path.join(DATA_DIR, "highlights")
 
 STRINGS = {
  "fr": {
+  "on this computer": "sur cet ordinateur",
+  "continue reading": "reprendre la lecture",
+  "set up a library": "configurer une bibliothèque",
+  "your books on your drive, on all your devices": "vos livres sur votre drive, sur tous vos appareils",
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Des livres gardés sur un drive, listés par dossier ; un livre n'est téléchargé que lorsqu'on clique dessus. Donnez l'adresse WebDAV du drive avec un nom d'utilisateur et un mot de passe d'application (kDrive, Nextcloud, tout serveur WebDAV). Le drive est alors parcouru à la recherche de fichiers epub, mobi, azw et fb2. Les surlignages et la page où vous êtes sont écrits à côté de chaque livre : le compte doit pouvoir y écrire.",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Surlignages : dans un livre de la bibliothèque, glissez sur un passage pour le surligner, avec un commentaire si vous le voulez ; un clic sur un surlignage montre son commentaire. Ils sont gardés à côté du livre sur le drive, avec la page où vous êtes, et le suivent sur vos autres appareils. Le menu du livre les exporte. Avec l'adresse WebDAV du dossier de Reader's Notes donnée ci-dessous, une note par livre reprend ses surlignages dans Reader's Notes.",
+  "Highlights: in any book, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. In a book from the library they are kept next to the book on the drive, with the page you are at, and follow it to your other devices; in a book opened from this computer they stay on this computer, and go to the library with the book if it is added to it. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Surlignages : dans n'importe quel livre, glissez sur un passage pour le surligner, avec un commentaire si vous le voulez ; un clic sur un surlignage montre son commentaire. Dans un livre de la bibliothèque, ils sont gardés à côté du livre sur le drive, avec la page où vous êtes, et le suivent sur vos autres appareils ; dans un livre ouvert depuis cet ordinateur, ils restent sur cet ordinateur, et vont à la bibliothèque avec le livre s'il y est ajouté. Le menu du livre les exporte. Avec l'adresse WebDAV du dossier de Reader's Notes donnée ci-dessous, une note par livre reprend ses surlignages dans Reader's Notes.",
   "highlight": "surligner",
   "comment": "commenter",
   "add a comment": "ajouter un commentaire",
@@ -191,8 +195,12 @@ STRINGS = {
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "rien sur l'étagère. Ouvrir un fichier epub, mobi, fb2 ou texte, ou un PDF à convertir en EPUB : d'ici, ou en le déposant sur cette fenêtre.",
  },
  "de": {
+  "on this computer": "auf diesem Computer",
+  "continue reading": "weiterlesen",
+  "set up a library": "eine Bibliothek einrichten",
+  "your books on your drive, on all your devices": "Ihre Bücher auf Ihrem Drive, auf all Ihren Geräten",
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Bücher auf einem Drive, nach Ordnern aufgelistet; ein Buch wird erst heruntergeladen, wenn Sie es anklicken. Geben Sie die WebDAV-Adresse des Drives mit Benutzername und Anwendungspasswort an (kDrive, Nextcloud, jeder WebDAV-Server). Das Drive wird dann nach epub-, mobi-, azw- und fb2-Dateien durchsucht. Markierungen und die Seite, auf der Sie sind, werden neben jedes Buch geschrieben: das Konto muss dort schreiben dürfen.",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Markierungen: Ziehen Sie in einem Buch aus der Bibliothek über eine Stelle, um sie zu markieren, auf Wunsch mit Kommentar; ein Klick auf eine Markierung zeigt ihren Kommentar. Sie liegen neben dem Buch auf dem Drive, mit der Seite, auf der Sie sind, und folgen ihm auf Ihre anderen Geräte. Das Menü des Buchs exportiert sie. Mit der unten angegebenen WebDAV-Adresse des Ordners von Reader's Notes führt eine Notiz pro Buch seine Markierungen in Reader's Notes auf.",
+  "Highlights: in any book, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. In a book from the library they are kept next to the book on the drive, with the page you are at, and follow it to your other devices; in a book opened from this computer they stay on this computer, and go to the library with the book if it is added to it. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Markierungen: Ziehen Sie in einem beliebigen Buch über eine Stelle, um sie zu markieren, auf Wunsch mit Kommentar; ein Klick auf eine Markierung zeigt ihren Kommentar. In einem Buch aus der Bibliothek liegen sie neben dem Buch auf dem Drive, mit der Seite, auf der Sie sind, und folgen ihm auf Ihre anderen Geräte; in einem Buch, das von diesem Computer geöffnet wurde, bleiben sie auf diesem Computer und gehen mit dem Buch in die Bibliothek, wenn es ihr hinzugefügt wird. Das Menü des Buchs exportiert sie. Mit der unten angegebenen WebDAV-Adresse des Ordners von Reader's Notes führt eine Notiz pro Buch seine Markierungen in Reader's Notes auf.",
   "highlight": "markieren",
   "comment": "kommentieren",
   "add a comment": "Kommentar hinzufügen",
@@ -326,8 +334,12 @@ STRINGS = {
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nichts im Regal. Eine epub-, mobi-, fb2- oder Textdatei öffnen, oder ein PDF zum Umwandeln in EPUB: von hier oder durch Ablegen auf diesem Fenster.",
  },
  "es": {
+  "on this computer": "en este ordenador",
+  "continue reading": "seguir leyendo",
+  "set up a library": "configurar una biblioteca",
+  "your books on your drive, on all your devices": "tus libros en tu drive, en todos tus dispositivos",
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Libros guardados en un drive, listados por carpeta; un libro solo se descarga cuando haces clic en él. Indica la dirección WebDAV del drive con un nombre de usuario y una contraseña de aplicación (kDrive, Nextcloud, cualquier servidor WebDAV). Entonces se recorre el drive buscando archivos epub, mobi, azw y fb2. Los resaltados y la página en la que estás se escriben junto a cada libro: la cuenta debe poder escribir allí.",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Resaltados: en un libro de la biblioteca, arrastra sobre un pasaje para resaltarlo, con un comentario si quieres; un clic en un resaltado muestra su comentario. Se guardan junto al libro en el drive, con la página en la que estás, y lo siguen en tus otros dispositivos. El menú del libro los exporta. Con la dirección WebDAV de la carpeta de Reader's Notes indicada abajo, una nota por libro recoge sus resaltados en Reader's Notes.",
+  "Highlights: in any book, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. In a book from the library they are kept next to the book on the drive, with the page you are at, and follow it to your other devices; in a book opened from this computer they stay on this computer, and go to the library with the book if it is added to it. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Resaltados: en cualquier libro, arrastra sobre un pasaje para resaltarlo, con un comentario si quieres; un clic en un resaltado muestra su comentario. En un libro de la biblioteca se guardan junto al libro en el drive, con la página en la que estás, y lo siguen en tus otros dispositivos; en un libro abierto desde este ordenador se quedan en este ordenador, y van a la biblioteca con el libro si se añade a ella. El menú del libro los exporta. Con la dirección WebDAV de la carpeta de Reader's Notes indicada abajo, una nota por libro recoge sus resaltados en Reader's Notes.",
   "highlight": "resaltar",
   "comment": "comentar",
   "add a comment": "añadir un comentario",
@@ -461,8 +473,12 @@ STRINGS = {
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada en la estantería. Abre un archivo epub, mobi, fb2 o de texto, o un PDF para convertir en EPUB: desde aquí, o soltándolo sobre esta ventana.",
  },
  "pt": {
+  "on this computer": "neste computador",
+  "continue reading": "continuar a ler",
+  "set up a library": "configurar uma biblioteca",
+  "your books on your drive, on all your devices": "os seus livros na sua drive, em todos os seus aparelhos",
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Livros guardados numa drive, listados por pasta; um livro só é descarregado quando clica nele. Indique o endereço WebDAV da drive com um nome de utilizador e uma palavra-passe de aplicação (kDrive, Nextcloud, qualquer servidor WebDAV). A drive é então percorrida à procura de ficheiros epub, mobi, azw e fb2. Os destaques e a página em que está são escritos ao lado de cada livro: a conta tem de poder escrever aí.",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Destaques: num livro da biblioteca, arraste sobre uma passagem para a destacar, com um comentário se quiser; um clique num destaque mostra o seu comentário. Ficam ao lado do livro na drive, com a página em que está, e acompanham-no nos seus outros aparelhos. O menu do livro exporta-os. Com o endereço WebDAV da pasta do Reader's Notes indicado abaixo, uma nota por livro reúne os seus destaques no Reader's Notes.",
+  "Highlights: in any book, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. In a book from the library they are kept next to the book on the drive, with the page you are at, and follow it to your other devices; in a book opened from this computer they stay on this computer, and go to the library with the book if it is added to it. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Destaques: em qualquer livro, arraste sobre uma passagem para a destacar, com um comentário se quiser; um clique num destaque mostra o seu comentário. Num livro da biblioteca ficam ao lado do livro na drive, com a página em que está, e acompanham-no nos seus outros aparelhos; num livro aberto a partir deste computador ficam neste computador, e vão para a biblioteca com o livro se ele lhe for adicionado. O menu do livro exporta-os. Com o endereço WebDAV da pasta do Reader's Notes indicado abaixo, uma nota por livro reúne os seus destaques no Reader's Notes.",
   "highlight": "destacar",
   "comment": "comentar",
   "add a comment": "adicionar um comentário",
@@ -596,8 +612,12 @@ STRINGS = {
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada na estante. Abra um ficheiro epub, mobi, fb2 ou de texto, ou um PDF para converter em EPUB: daqui, ou largando-o sobre esta janela.",
  },
  "ru": {
+  "on this computer": "на этом компьютере",
+  "continue reading": "продолжить чтение",
+  "set up a library": "подключить библиотеку",
+  "your books on your drive, on all your devices": "ваши книги на вашем диске, на всех ваших устройствах",
   "Books kept on a drive, listed by folder; a book is downloaded only when you click it. Give the WebDAV address of the drive with a username and an application password (kDrive, Nextcloud, any WebDAV server). The drive is then scanned for epub, mobi, azw and fb2 files. Highlights and the page you are at are written next to each book, so the login must be allowed to write there.": "Книги на диске, перечисленные по папкам; книга загружается только когда вы щёлкаете по ней. Укажите адрес WebDAV диска с именем пользователя и паролем приложения (kDrive, Nextcloud, любой сервер WebDAV). Затем диск просматривается в поисках файлов epub, mobi, azw и fb2. Выделения и страница, на которой вы остановились, записываются рядом с каждой книгой: учётной записи должна быть разрешена запись.",
-  "Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Выделения: в книге из библиотеки проведите мышью по отрывку, чтобы выделить его, при желании с комментарием; щелчок по выделению показывает комментарий. Они хранятся рядом с книгой на диске вместе со страницей, на которой вы остановились, и следуют за ней на другие ваши устройства. Меню книги их экспортирует. Если ниже указан адрес WebDAV папки Reader's Notes, заметка для каждой книги перечисляет её выделения в Reader's Notes.",
+  "Highlights: in any book, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. In a book from the library they are kept next to the book on the drive, with the page you are at, and follow it to your other devices; in a book opened from this computer they stay on this computer, and go to the library with the book if it is added to it. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.": "Выделения: в любой книге проведите мышью по отрывку, чтобы выделить его, при желании с комментарием; щелчок по выделению показывает комментарий. В книге из библиотеки они хранятся рядом с книгой на диске вместе со страницей, на которой вы остановились, и следуют за ней на другие ваши устройства; в книге, открытой с этого компьютера, они остаются на этом компьютере и переходят в библиотеку вместе с книгой, если её туда добавить. Меню книги их экспортирует. Если ниже указан адрес WebDAV папки Reader's Notes, заметка для каждой книги перечисляет её выделения в Reader's Notes.",
   "highlight": "выделить",
   "comment": "комментировать",
   "add a comment": "добавить комментарий",
@@ -1408,6 +1428,7 @@ class Library:
                 self.books = [b for b in json.load(fh).get("books", []) if b.get("id") and b.get("fileName")]
         except Exception:
             self.books = []
+        self.moved = []         # (old entry, new entry): the same book under another entry or address, for the window to finish
         self._sort()
 
     def _sort(self):
@@ -1443,8 +1464,38 @@ class Library:
         with self.lock:
             e = self.get(book_id)
             if e:
+                before = dict(e)
                 e.update(source=source, sourceName=source_name)
                 self._save()
+                self._moved(before, e)
+
+    def _moved(self, old, new):
+        """The same book goes on under another entry or address: its highlights follow it now,
+        what else is to be done (the note under its old name) is left to the window."""
+        if move_highlights(old, new):
+            self.moved.append((dict(old), dict(new)))
+
+    def same_as(self, new, source):
+        """The copy on the shelf that a book just opened replaces, keeping its place and its
+        highlights: from the same place on the drive; else the same book (`same_book`) — for a
+        book of the library, only a copy that is not on the drive itself; for a file opened
+        here, also one with the same title and format, which is how a new copy of a book opened
+        again has always found its page. Copies that never had their fingerprint learn it here."""
+        if source:
+            found = self.by_source(source)
+            if found:
+                return found
+        changed = False
+        for b in self.books:
+            if not b.get("fingerprint") and b["format"] == new["format"]:
+                b["fingerprint"], b["bookId"] = book_fingerprint(self.path(b)), epub_id(self.path(b), b["format"])
+                changed = True
+        if changed:
+            self._save()
+        if source:
+            return next((b for b in self.books if not from_library(b) and same_book(b, new)), None)
+        return (next((b for b in self.books if same_book(b, new)), None)
+                or next((b for b in self.books if b["title"] == new["title"] and b["format"] == new["format"]), None))
 
     def remove(self, book_id):
         with self.lock:
@@ -1482,15 +1533,18 @@ class Library:
             while self.get(book_id):
                 book_id = _base36(int(book_id, 36) + 1)
             file_name = "%s.%s" % (book_id, fmt.lower())
-            os.replace(tmp, os.path.join(BOOKS_DIR, file_name))
+            target = os.path.join(BOOKS_DIR, file_name)
+            os.replace(tmp, target)
             self.cache[file_name] = book
-            same = next((b for b in self.books if b["title"] == book.title and b["format"] == fmt), None)
+            fingerprint, book_uid = book_fingerprint(target), epub_id(target, fmt)
+            same = self.same_as({"title": book.title, "format": fmt, "fingerprint": fingerprint, "bookId": book_uid}, source)
             entry = {"id": book_id, "fileName": file_name, "title": book.title, "format": fmt, "added": _now(),
                      "opened": same["opened"] if same else 0, "chapter": same["chapter"] if same else 0,
                      "charOffset": same["charOffset"] if same else 0, "progress": same["progress"] if same else 0,
                      "magazine": book.magazine is not None, "source": source or (same.get("source") if same else None),
                      # the file's name: the drive's for a book of the library, else as it was opened, for the day it is sent to the library
-                     "sourceName": display_name if source or not (same and same.get("source")) else same.get("sourceName")}
+                     "sourceName": display_name if source or not (same and same.get("source")) else same.get("sourceName"),
+                     "fingerprint": fingerprint, "bookId": book_uid}
             if same:
                 try:
                     os.remove(self.path(same))
@@ -1500,6 +1554,8 @@ class Library:
                 self.books = [b for b in self.books if b["id"] != same["id"]]
             self.books.append(entry)
             self._save()
+            if same:
+                self._moved(same, entry)
             return entry
 
     def book(self, entry):
@@ -2006,7 +2062,6 @@ def merge_folder(books, folder, subfolders, found):
 
 
 EMPTY_INDEX = {"scannedAt": 0, "source": "", "books": [], "complete": True, "frontier": [], "failed": [], "folders": 0}
-STALE_AFTER_MS = 10 * 60 * 1000        # opened later than this after the last sync, the library syncs again by itself
 
 
 class RemoteLibrary:
@@ -2061,12 +2116,8 @@ class RemoteLibrary:
         """True when a folder holds books in folders inside it."""
         return any(b["folder"] != folder and folder_under(folder, b["folder"]) for b in self.shown(cfg))
 
-    def stale(self, now=None):
-        """True when the last sync is old enough for the library to sync again by itself at its opening."""
-        return (now if now is not None else _now()) - self.index["scannedAt"] > STALE_AFTER_MS
-
     def sync_quietly(self, cfg):
-        """The sync at the opening of the library, or after the folders were chosen: the same walk, by itself."""
+        """The sync after the folders of the library were chosen again: the same walk, by itself."""
         if not self.scanning and self.matches(cfg):
             self.scan(cfg, False)
 
@@ -2336,6 +2387,55 @@ class Text16:
         return start, end
 
 
+# ------------------------------------------------------------------------------------------
+# The same book in two copies — a book opened from a file and the same book fetched from the
+# library later — so that the highlights made in the one go to the other. Either rule is
+# enough: the same bytes (SHA-256 of the file: the very file is on the drive); or, for EPUBs,
+# the same package identifier (the dc:identifier the OPF names as its unique-identifier) AND
+# the same title — the drive's copy was rewritten by a library tool, the book is still that
+# one; the title too, because some tools stamp one identifier on every book they make. A title
+# alone is never enough. The same rules as the phone's (BookIdentity).
+# ------------------------------------------------------------------------------------------
+
+def book_fingerprint(path):
+    try:
+        digest = sha256()
+        with open(path, "rb") as fh:
+            for block in iter(lambda: fh.read(65536), b""):
+                digest.update(block)
+        return digest.hexdigest()
+    except OSError:
+        return ""
+
+
+def package_id(opf):
+    """The identifier the package names as its own, read from the OPF's text."""
+    pkg = re.search(r"<(?:\w+:)?package\b[^>]*>", opf, re.I)
+    ref = pkg and re.search(r"""unique-identifier\s*=\s*["']([^"']+)["']""", pkg.group(0))
+    if not ref:
+        return ""
+    tag = re.search(r"""<dc:identifier\b[^>]*\bid\s*=\s*["']""" + re.escape(ref.group(1)) + r"""["'][^>]*>([^<]*)</dc:identifier>""", opf, re.I)
+    return tag.group(1).strip() if tag else ""
+
+
+def epub_id(path, fmt):
+    """The EPUB's own identifier, or "" (another format, or none given)."""
+    if fmt != EPUB:
+        return ""
+    try:
+        with zipfile.ZipFile(path) as z:
+            container = z.read("META-INF/container.xml").decode("utf-8", "replace")
+            found = re.search(r'full-path="([^"]+)"', container)
+            return package_id(z.read(found.group(1)).decode("utf-8", "replace")) if found else ""
+    except Exception:
+        return ""
+
+
+def same_book(a, b):
+    return bool((a.get("fingerprint") and a.get("fingerprint") == b.get("fingerprint"))
+                or (a.get("bookId") and a.get("bookId") == b.get("bookId") and a.get("title") == b.get("title")))
+
+
 def highlight_key(entry):
     return sha1((entry.get("source") or entry["id"]).encode("utf-8")).hexdigest()
 
@@ -2360,13 +2460,34 @@ def load_highlights(entry):
         return [], False
 
 
-def save_highlights(entry, highlights, dirty):
+def save_highlights(entry, highlights, dirty, name=None):
+    """The highlights kept on this computer, in the form of the file next to a book of the
+    library (for a book of the shelf alone, the only copy), plus `dirty`: not yet where they go —
+    the drive's file, or the note in Reader's Notes."""
     try:
         _write_private(os.path.join(HIGHLIGHTS_DIR, highlight_key(entry) + ".json"),
-                       json.dumps({"format": HIGHLIGHTS_FORMAT, "version": 1, "highlights": highlights, "dirty": dirty},
-                                  ensure_ascii=False, indent=1))
+                       json.dumps({"format": HIGHLIGHTS_FORMAT, "version": 1, "book": name or book_file_name(entry),
+                                   "highlights": highlights, "dirty": dirty}, ensure_ascii=False, indent=1))
     except OSError:
         pass
+
+
+def move_highlights(old, new):
+    """The same book under another entry or address: its highlights go with it, folded into what
+    the new one already has by the drive's rule, marked as still to be sent. True when there
+    were some."""
+    a, b = highlight_key(old), highlight_key(new)
+    if a == b:
+        return False
+    mine, _dirty = load_highlights(old)
+    try:
+        os.remove(os.path.join(HIGHLIGHTS_DIR, a + ".json"))
+    except OSError:
+        pass
+    if not mine:
+        return False
+    save_highlights(new, merge_highlights(mine, load_highlights(new)[0]), True)
+    return True
 
 
 def new_highlight(chapter, start, end, text, comment=""):
@@ -2502,7 +2623,13 @@ def sync_book(cfg, entry, name, position=None):
     place it was left at. Returns (highlights, the drive's place when it is the newer one, else
     None), or None when nothing here was to be kept (changed meanwhile). Blocking."""
     before, dirty = load_highlights(entry)
-    if not sidecar_address(cfg, entry):         # not a book of the library: nothing of it leaves this computer
+    if not sidecar_address(cfg, entry):
+        # a book of the shelf alone: its highlights stay here, only its note goes to Reader's Notes
+        if note_only(cfg, entry):
+            write_note(cfg, name, before)
+            if load_highlights(entry)[0] != before:
+                return None
+            save_highlights(entry, before, False, name)
         return before, None
     merged, marks, best, theirs_newer = sync_sidecar(cfg, entry, before, name, position or position_of(entry))
     # The note is written again whenever the drive's highlights were: two devices that met there
@@ -2512,8 +2639,13 @@ def sync_book(cfg, entry, name, position=None):
     if load_highlights(entry)[0] != before:         # changed here meanwhile: the next turn takes it
         return None
     if dirty or merged != before:
-        save_highlights(entry, merged, False)
+        save_highlights(entry, merged, False, name)
     return merged, (best if theirs_newer else None)
+
+
+def note_only(cfg, entry):
+    """A book of the shelf alone whose highlights changed since its note was last written, with a notes folder to write it to."""
+    return not from_library(entry) and notes_account(cfg) is not None and load_highlights(entry)[1]
 
 
 def notes_account(cfg):
@@ -2719,6 +2851,12 @@ def rgba(hex_colour, alpha):
     """A style-sheet rgba() of a #rrggbb colour."""
     h = hex_colour.lstrip("#")
     return "rgba(%d,%d,%d,%s)" % (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), alpha)
+
+
+def blend(front, back, alpha):
+    """#rrggbb of `front` laid at `alpha` over `back`."""
+    f, b = front.lstrip("#"), back.lstrip("#")
+    return "#" + "".join("%02x" % round(int(f[i:i + 2], 16) * alpha + int(b[i:i + 2], 16) * (1 - alpha)) for i in (0, 2, 4))
 
 
 def is_dark(hex_colour):
@@ -3293,9 +3431,8 @@ class Reader(QtWidgets.QWidget):
             self.book, self.failed = book, error is not None
             if book:
                 self.chapter = min(max(0, self.chapter), len(book.chapters) - 1)
-                if from_library(entry):
-                    self.set_highlights(load_highlights(entry)[0])
-                    self.main.sync_highlights(entry, left_at, opening=True)
+                self.set_highlights(load_highlights(entry)[0])
+                self.main.sync_highlights(entry, left_at, opening=True)
             self.update()
 
         self.main.run(lambda: self.main.library.book(entry), done)
@@ -3491,8 +3628,8 @@ class Reader(QtWidgets.QWidget):
             self.pressed, self.selecting = e.pos(), None
 
     def mouseMoveEvent(self, e):
-        """Dragging across the text of a book from the library selects a passage."""
-        if self.pressed is None or not (self.entry and from_library(self.entry) and self.book):
+        """Dragging across the text of a book selects a passage."""
+        if self.pressed is None or not (self.entry and self.book):
             return
         if self.selecting is None and (e.pos() - self.pressed).manhattanLength() < QtWidgets.QApplication.startDragDistance():
             return
@@ -3740,7 +3877,7 @@ class Main(QtWidgets.QMainWindow):
         self.library = Library()
         self.remote = RemoteLibrary()
         self.awake = Awake()
-        self.stack = [(SHELF,)]
+        self.stack = [self.home_screen()]
         self.rows = []
         self.threads = []
         self.importing = False
@@ -3768,7 +3905,7 @@ class Main(QtWidgets.QMainWindow):
             self.move(geometry[0], geometry[1])
         else:
             self.resize(760, 900)
-        self.show_screen()
+        self.show_screen(reset=True)         # the library, when it is the home screen, looks for new transcripts
         self.poll = QtCore.QTimer(self)
         self.poll.timeout.connect(self.watch_scan)
         self.poll.start(400)
@@ -3829,10 +3966,12 @@ class Main(QtWidgets.QMainWindow):
         box.addWidget(self.foot_rule)
         self.foot_open = Clickable("", "foot")
         self.foot_open.clicked.connect(self.pick_book)
-        self.foot_library = Clickable("", "foot")
-        self.foot_library.clicked.connect(lambda: self.push((LIBRARY,)))
+        # no library yet: one quiet line under the shelf says what it would bring, and leads to setting it up
+        self.foot_invite = Clickable("", "invite")
+        self.foot_invite.setWordWrap(True)
+        self.foot_invite.clicked.connect(lambda: self.push((LIBRARY,)))
         box.addWidget(self.foot_open)
-        box.addWidget(self.foot_library)
+        box.addWidget(self.foot_invite)
         self.pages.addWidget(page)
 
         self.reader = Reader(self)
@@ -3871,12 +4010,14 @@ class Main(QtWidgets.QMainWindow):
         self.colors = palette(self.theme)
         bg, fg, accent, on_accent = self.colors["bg"], self.colors["fg"], self.colors["accent"], self.colors["on_accent"]
         dim, rule = rgba(fg, 0.55), rgba(fg, 0.25)
+        self.colors = dict(self.colors, dim=blend(fg, bg, 0.55))      # for rich text, which knows no rgba()
         s = UI_SIZES.get(self.cfg.get("text_size"), 13)
         weight = 300 if self.cfg.get("font", "sans") == "sans" else 400
         common = f"""
             QMainWindow, QWidget {{ background: {bg}; color: {fg}; font-family: "{self.ui_family()}";
                                     font-size: {s}pt; font-weight: {weight}; }}
             QLabel#title {{ font-size: {s + 5}pt; }}
+            QLabel#invite {{ font-size: {s}pt; padding: 6px 24px 14px 24px; }}
             QLabel#sign {{ font-size: {s + 7}pt; padding: 0 8px; }}
             QListWidget {{ background: {bg}; border: none; outline: none; }}
             QScrollBar:vertical {{ background: {bg}; width: 6px; }}
@@ -3988,12 +4129,59 @@ class Main(QtWidgets.QMainWindow):
     def home(self):
         del self.stack[1:]
 
+    def after_moves(self):
+        """Books that went on under another entry or address (see Library._moved): their note,
+        when the book's name changed with it, goes from under the old name, and the highlights
+        they brought go to the drive."""
+        while self.library.moved:
+            old, new = self.library.moved.pop(0)
+            index = self.remote.index["books"]
+            old_name, new_name = book_file_name(old, index), book_file_name(new, index)
+            if note_file_name(old_name) != note_file_name(new_name) and notes_account(self.cfg):
+                cfg = dict(self.cfg)
+                self.run(lambda cfg=cfg, n=old_name: write_note(cfg, n, []), lambda _r, _e: None)
+            now = self.library.get(new["id"])
+            if now:
+                self.sync_highlights(now)
+
+    def home_screen(self):
+        """The first screen: the library when one is set up (the shelf is then a row of it), else the shelf."""
+        return (LIBRARY,) if library_configured(self.cfg) else (SHELF,)
+
+    def rehome(self):
+        """The home screen follows the library being set up or forgotten: the screens above it
+        stay, the same screen just above it is folded into it."""
+        home = self.home_screen()
+        if self.stack[0] != home:
+            self.stack[0] = home
+            while len(self.stack) > 1 and self.stack[1] == home:
+                del self.stack[1]
+
+    def to_library(self):
+        """To the library: back down to it when it is the home screen, else on top."""
+        if self.stack[0] == (LIBRARY,):
+            self.home()
+            self.show_screen(reset=True)
+        else:
+            self.push((LIBRARY,))
+
+    def back_label(self):
+        """What a back leads to, named as the screen below calls itself."""
+        below = self.stack[-2][0] if len(self.stack) > 1 else None
+        if below in (LIBRARY, FOLDER, ALL_BOOKS, SEARCH):
+            return _("library")
+        if below == SHELF and self.stack[0][0] != SHELF:
+            return _("on this computer")
+        return _("books")
+
     def open_entry(self, entry, from_home=False):
         if from_home:
             self.home()
         self.push((CHAPTERS, entry["id"]) if entry.get("magazine") else (BOOK, entry["id"]))
 
     def show_screen(self, reset=False):
+        self.rehome()
+        self.after_moves()
         kind = self.screen[0]
         if kind in (BOOK, CHAPTERS) and not self.library.get(self.screen[1]):
             self.stack.pop()
@@ -4019,8 +4207,8 @@ class Main(QtWidgets.QMainWindow):
         self.foot_rule.setVisible(shelf)
         self.foot_open.setVisible(shelf)
         self.foot_open.setText(_("+ open a book"))
-        self.foot_library.setVisible(shelf and library_configured(self.cfg))
-        self.foot_library.setText(_("library"))
+        self.foot_invite.setVisible(shelf and not library_configured(self.cfg))
+        self.foot_invite.setText(_("set up a library") + "<br><span style='color:%s'>%s</span>" % (self.colors["dim"], _("your books on your drive, on all your devices")))
         scroll = 0 if reset else self.listing.verticalScrollBar().value()
         self.listing.clear()
         current = None
@@ -4114,10 +4302,11 @@ class Main(QtWidgets.QMainWindow):
                 (_("contents") if b.get("magazine") else _("chapters"), lambda: self.push((CHAPTERS, b["id"]))),
                 (_("remove from the shelf"), lambda: self.remove(b["id"]))]
                 + ([(_("add to the library"), lambda: self.push((ADD_TO_LIBRARY, b["id"])))] if can_send(self.cfg, b) else [])))
-        menu = [(_("+ open a book"), self.pick_book), (_("library"), lambda: self.push((LIBRARY,))),
+        menu = [(_("+ open a book"), self.pick_book), (_("library"), self.to_library),
                 (_("order") + " · " + order_name(order), self.order_menu(SHELF_ORDERS, order, "shelf_sort")), None,
                 self.theme_item(), (_("settings"), lambda: self.push((SETTINGS,)))]
-        return _("books"), rows, menu
+        # the home screen without a library; with one, a page of it
+        return (_("books") if len(self.stack) == 1 else _("on this computer")), rows, menu
 
     def order_menu(self, orders, order, setting):
         """The orders a list can take, the current one ticked, as a submenu."""
@@ -4286,7 +4475,7 @@ class Main(QtWidgets.QMainWindow):
         ] + ([(_("add to the library"), lambda: self.push((ADD_TO_LIBRARY, book_id)))] if can_send(self.cfg, entry) else [])
           + ([(_("export the highlights"), self.export_highlights)] if live_highlights(self.reader.highlights) else []) + [
             None,
-            (_("books"), self.pop),
+            (self.back_label(), self.pop),
             self.theme_item(),
         ], where, entry["title"])
 
@@ -4378,7 +4567,7 @@ class Main(QtWidgets.QMainWindow):
         entry = self.reader.entry
         if not entry:
             return
-        save_highlights(entry, highlights, True)
+        save_highlights(entry, highlights, True, book_file_name(entry, self.remote.index["books"]))
         self.reader.set_highlights(highlights)
         self.sync_highlights(entry)
 
@@ -4388,7 +4577,7 @@ class Main(QtWidgets.QMainWindow):
         the book had before it was opened, when it is being opened); what could not be sent is
         sent the next time."""
         key = highlight_key(entry)
-        if not sidecar_address(self.cfg, entry):
+        if not sidecar_address(self.cfg, entry) and not note_only(self.cfg, entry):
             return
         if key in self.syncing:
             self.sync_again.add(key)
@@ -4431,7 +4620,7 @@ class Main(QtWidgets.QMainWindow):
         """At the start: every book of the shelf that came from the library, one after the
         other, so that the shelf says how far each one is wherever it was last read."""
         cfg = dict(self.cfg)
-        books = [dict(b) for b in self.library.books if sidecar_address(cfg, b)]
+        books = [dict(b) for b in self.library.books if sidecar_address(cfg, b) or note_only(cfg, b)]
         if not books:
             return
         index = self.remote.index["books"]
@@ -4636,17 +4825,13 @@ class Main(QtWidgets.QMainWindow):
     # ---- the library ----
 
     def enter_library(self):
-        """A drive just set up, or set up differently, is walked at once; a walk cut short
-        carries on; a library not synced for a while is synced again quietly; a fresh one
-        only looks for new transcripts."""
+        """A drive just set up, or set up differently, is walked at once; otherwise the drive is
+        only synced by hand (« sync now », « continue the scan »), and only new transcripts are
+        looked for."""
         if not library_configured(self.cfg) or self.remote.scanning:
             return
         if not self.remote.matches(self.cfg):
             self.remote.scan(self.cfg, True)
-        elif not self.remote.index["complete"] and self.remote.error is None:
-            self.remote.scan(self.cfg, False)
-        elif self.remote.stale() and self.remote.error is None:
-            self.remote.sync_quietly(self.cfg)
         else:
             self.remote.refresh_folder(self.cfg)
 
@@ -4688,10 +4873,11 @@ class Main(QtWidgets.QMainWindow):
         if not library_configured(cfg):
             return _("library"), [Row(LIBRARY_HINT(), kind=HINT)] + self.account_rows() + [Row(kind=RULE)] + self.credentials_rows(), None
         index, progress, error = remote.index, remote.progress if remote.scanning else None, remote.error
+        rows = self.home_rows()
         # the sync, by hand, with where it is or when it last ran
         state = (_("scanning… %d folders, %d books", progress[0], progress[1]) if progress
                  else _("scanned on %s", date_label(index["scannedAt"])) if index["scannedAt"] > 0 else "")
-        rows = [Row(_("sync now"), state, lambda: None if remote.scanning else self.scan(False))]
+        rows.append(Row(_("sync now"), state, lambda: None if remote.scanning else self.scan(False)))
         if error is not None and not progress:
             rows.append(Row(_("the drive refused the login") if isinstance(error, WrongLogin)
                             else _("the drive could not be read: %s", str(error)[:160] or type(error).__name__), kind=HINT))
@@ -4731,6 +4917,18 @@ class Main(QtWidgets.QMainWindow):
         menu.append((_("folders of the library"), lambda: self.push((LIBRARY_FOLDERS,))))
         menu.append((_("settings"), lambda: self.push((SETTINGS,))))
         return _("library"), rows, menu
+
+    def home_rows(self):
+        """The top of the library: the book read last, one click from its page, and the books
+        on this computer (the shelf)."""
+        rows = []
+        read = [b for b in self.library.books if b.get("opened")]
+        if read:
+            last = max(read, key=lambda b: b["opened"])
+            rows.append(Row(last["title"], "%s · %d%%" % (_("continue reading"), last.get("progress", 0)),
+                            lambda: self.push((BOOK, last["id"])), lines=1))
+        rows.append(Row(_("on this computer"), n_books(len(self.library.books)), lambda: self.push((SHELF,))))
+        return rows
 
     def screen_library_folders(self):
         """The folders of the drive that make the library: every folder seen to hold books, the
@@ -4963,7 +5161,7 @@ def _after(values, current):
 
 
 def HIGHLIGHTS_HINT():
-    return _("Highlights: in a book from the library, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. They are kept next to the book on the drive, with the page you are at, and follow it to your other devices. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.")
+    return _("Highlights: in any book, drag across a passage to highlight it, with a comment if you like; a click on a highlight shows its comment. In a book from the library they are kept next to the book on the drive, with the page you are at, and follow it to your other devices; in a book opened from this computer they stay on this computer, and go to the library with the book if it is added to it. The book's menu exports them. With the WebDAV address of the Reader's Notes folder given below, a note per book lists its highlights in Reader's Notes.")
 
 
 def LIBRARY_HINT():

@@ -373,12 +373,15 @@ def three_devices():
 
 
 def a_book_not_from_the_library():
-    """a book opened from a file, or fetched by an older version through a share link: it stays out of all this"""
+    """a book opened from a file, or fetched by an older version through a share link: nothing goes next to it on the drive, its note goes to Reader's Notes and leaves with its last highlight"""
     for source in (None, "4242"):
         d = Device("A")
         d.entry["source"] = source
-        d.add(10, "local")
-        check("no file next to it", (d.sync()[1], sidecar(), note()), (None, None, None))
+        hid = d.add(10, "local")
+        check("no file next to it, the note written", (d.sync()[1], sidecar(), note()), (None, None, rb.note_text(BOOK, d.highlights())))
+        check("written: no longer to be sent", rb.load_highlights(d.entry)[1], False)
+        tick(); d.remove(hid); d.sync()
+        check("no highlight left, no note", (sidecar(), note()), (None, None))
 
 
 def readers_notes_shows_it_read_only():

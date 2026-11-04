@@ -1015,14 +1015,19 @@ class Look:
     The fields are the phone's (Model.kt, Look); lengths in ems of the reader's size, NaN or AUTO
     when the book said nothing."""
     __slots__ = ("align", "indent", "left", "right", "above", "page_break", "rule", "size", "flags", "level",
-                 "marker", "number", "drop_cap", "soft", "cells", "table", "width", "pixels")
+                 "marker", "number", "drop_cap", "soft", "cells", "table", "width", "pixels",
+                 "list_marker", "list_from", "list_to", "list_left")
 
     def __init__(self, align=AUTO, indent=NAN, left=0.0, right=0.0, above=0.0, page_break=False, rule=False, size=1.0,
-                 flags=0, level=0, marker=0, number=0, drop_cap=0, soft=None, cells=None, table=0, width=NAN, pixels=0):
+                 flags=0, level=0, marker=0, number=0, drop_cap=0, soft=None, cells=None, table=0, width=NAN, pixels=0,
+                 list_marker=0, list_from=0, list_to=0, list_left=0.0):
         self.align, self.indent, self.left, self.right, self.above = align, indent, left, right, above
         self.page_break, self.rule, self.size, self.flags, self.level = page_break, rule, size, flags, level
         self.marker, self.number, self.drop_cap, self.soft, self.cells = marker, number, drop_cap, soft, cells
         self.table, self.width, self.pixels = table, width, pixels
+        # for every paragraph of a list item: its list's kind of marker, the numbers its items run
+        # through and the margin it stands in, for a column of markers as wide as the widest
+        self.list_marker, self.list_from, self.list_to, self.list_left = list_marker, list_from, list_to, list_left
 
     def slice(self, start, end):
         first = start == 0
@@ -1038,7 +1043,7 @@ class Look:
         return Look(self.align, self.indent if first else 0.0, self.left, self.right, self.above if first else 0.0,
                     first and self.page_break, first and self.rule, self.size, self.flags, self.level,
                     self.marker if first else 0, self.number, self.drop_cap if first else 0, soft, cells, self.table,
-                    self.width, self.pixels)
+                    self.width, self.pixels, self.list_marker, self.list_from, self.list_to, self.list_left)
 
 
 class _Compound:
@@ -1454,7 +1459,8 @@ class Tree:
                 self.current = self.nodes[k].parent
         n = self._node(name, attrs, self.current)
         if name in ("ol", "ul"):
-            n.counter = self._int(attrs.get("start"), 1) - 1
+            n.ordinal = self._int(attrs.get("start"), 1)
+            n.counter = n.ordinal - 1
         elif name == "li":
             k = self._nearest(self.current, {"ul", "ol"})
             if k > 0:
@@ -1795,11 +1801,23 @@ class _Presenter:
         bs = tree.style(block)
         left, right = self._margins(block)
         marker = number = level = 0
+        list_marker = list_from = list_to = 0
+        list_left = 0.0
         n = block
         while n > 0:
             tag = tree.nodes[n].tag
             if tag == "li" and marker == 0 and n in opened:
                 marker, number = max(0, tree.style(n).list_type), tree.nodes[n].ordinal
+            if tag == "li" and list_marker == 0:
+                # the list this item is in: its kind of marker, its numbers, the margin it stands in
+                lst = tree.nodes[n].parent
+                list_marker = max(0, tree.style(n).list_type)
+                if lst > 0 and tree.nodes[lst].tag in ("ul", "ol") and list_marker > 0:
+                    list_from = tree.nodes[lst].ordinal
+                    list_to = max(tree.nodes[lst].counter, list_from)
+                    list_left = self._margins(tree.nodes[lst].parent)[0]
+                else:
+                    list_marker = 0
             if level == 0 and len(tag) == 2 and tag[0] == "h" and tag[1] in "123456":
                 level = int(tag[1])
             n = tree.nodes[n].parent
@@ -1826,7 +1844,8 @@ class _Presenter:
         look = Look(align=bs.align, indent=indent, left=left, right=right, above=above, page_break=page_break,
                     rule=rule, size=size, flags=block_flags, level=level, marker=marker, number=number,
                     drop_cap=self._drop_cap(t, node, block, bs), soft=soft, cells=self._cells(t, node),
-                    table=max(0, table))
+                    table=max(0, table), list_marker=list_marker, list_from=list_from, list_to=list_to,
+                    list_left=list_left)
         return styles, look
 
     def _drop_cap(self, t, node, block, bs):
@@ -4555,6 +4574,26 @@ def _marker_text(look):
     return None
 
 
+MARKER_GAP = 0.4           # between a marker and its item's text, in ems
+
+
+def _marker_gutter(look, f):
+    """The width of a list's column of markers: its widest marker in the reader's font, and the
+    gap after it. 0 for what is not a list item."""
+    if not look.list_marker:
+        return 0
+    fm = QtGui.QFontMetricsF(f.font)
+    widest = 0.0
+    for n in range(look.list_from, max(look.list_from, min(look.list_to, look.list_from + 400)) + 1):
+        text = _marker_text(Look(marker=look.list_marker, number=n))
+        if not text:
+            return 0
+        widest = max(widest, fm.horizontalAdvance(text))
+        if look.list_marker < DECIMAL:          # a bullet is the same for every item
+            break
+    return int(round(widest + f.em * MARKER_GAP))
+
+
 def _hard_breaks(p):
     soft = set(p.look.soft or ()) if p.look else set()
     return {k for k, c in enumerate(p.text) if c == "\n" and k not in soft}
@@ -4683,10 +4722,11 @@ class LaidBlock:
                         k = e
                     else:
                         k += 1
-            # a list's marker sits in the margin: the margin is never narrower than it
+            # a list's markers sit in a column of the margin as wide as the widest of them (IV., 28.),
+            # never past the margin the list stands in; the item's text begins after it
             marker = _marker_text(look)
-            left = max(min(f.px(look.left), f.width * 35 // 100),
-                       int(round(QtGui.QFontMetricsF(font).horizontalAdvance(marker) + f.em * 0.6)) if marker else 0)
+            gutter = _marker_gutter(look, f)
+            left = min(max(min(f.px(look.left), f.width * 35 // 100), f.px(look.list_left) + gutter if gutter else 0), f.width // 2)
             first = 0 if _isnan(look.indent) or dropped else f.px(look.indent)
             drop_px = 0
             if dropped:
@@ -4774,7 +4814,7 @@ class LaidBlock:
                 p.setFont(self.layout.font())
                 p.setPen(fg)
                 fmx = QtGui.QFontMetricsF(self.layout.font())
-                gap = self.layout.font().pixelSize() * 0.4
+                gap = self.layout.font().pixelSize() * MARKER_GAP
                 p.drawText(QtCore.QPointF(offset.x() + left - gap - fmx.horizontalAdvance(text), offset.y() + line.y() + line.ascent()), text)
         for (_i, at, _end, letters, big, left), i in zip(self.drops, self.drop_lines):
             if first <= i <= last:

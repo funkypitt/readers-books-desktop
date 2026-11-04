@@ -2,6 +2,7 @@
 for the purpose. The library page is driven against a small drive served by `rclone serve webdav`
 (skipped without rclone); its screenshots go to $READERS_BOOKS_SHOTS when that is set."""
 import importlib.util
+import zipfile
 import json
 import os
 import shutil
@@ -1288,6 +1289,95 @@ class Emphasis(unittest.TestCase):
                         self.same(z.read(n).decode("utf-8", "replace"))
                 print("==", name, len(pages), "pages read the same")
 
+
+
+def file_reader(name):
+    """WebDav.read_range on a file here."""
+    def read(start, length):
+        size = os.path.getsize(name)
+        with open(name, "rb") as fh:
+            if start is None:
+                start = max(0, size - length)
+            fh.seek(start)
+            return fh.read(length), size
+    return read
+
+
+class News(unittest.TestCase):
+    """The library's newspapers and magazines: told from the books by a few bytes of their
+    contents page read on the drive, then one row of the library, the newest issue first."""
+    PORT = 8097
+    BASE = "http://127.0.0.1:%d" % PORT
+
+    def test_an_issue_is_told_from_a_book_by_its_contents(self):
+        self.assertTrue(rb.epub_is_news(file_reader(make_books.epub(path("n-issue.epub"), "Le Journal", magazine=True))))
+        self.assertFalse(rb.epub_is_news(file_reader(make_books.epub(path("n-book.epub"), "Un roman"))))
+        # articles that start with their section and a headline, without a nav that says so
+        signed = path("n-signed.epub")
+        with zipfile.ZipFile(signed, "w") as z:
+            z.writestr("mimetype", "application/epub+zip")
+            z.writestr("META-INF/container.xml", '<container><rootfiles><rootfile full-path="c.opf"/></rootfiles></container>')
+            items = "".join('<item id="a%d" href="a%d.xhtml" media-type="application/xhtml+xml"/>' % (i, i) for i in range(8))
+            spine = "".join('<itemref idref="a%d"/>' % i for i in range(8))
+            z.writestr("c.opf", '<package><manifest>%s</manifest><spine>%s</spine></package>' % (items, spine))
+            for i in range(8):
+                z.writestr("a%d.xhtml" % i, '<html><body><p class="category">Monde</p><h1>Titre %d</h1><p>Texte.</p></body></html>' % i)
+        self.assertTrue(rb.epub_is_news(file_reader(signed)))
+        # a server without byte ranges says nothing
+        self.assertIsNone(rb.epub_is_news(lambda start, length: None))
+
+    def test_the_news_row_lists_the_issues_the_newest_first(self):
+        if not shutil.which("rclone"):
+            raise unittest.SkipTest("rclone is needed to serve the test drive")
+        drive = path("news-drive")
+        os.makedirs(os.path.join(drive, "journaux"), exist_ok=True)
+        os.makedirs(os.path.join(drive, "Romans"), exist_ok=True)
+        make_books.epub(os.path.join(drive, "journaux", "2026-11-03-letemps.epub"), "Le Temps — 3 novembre 2026", magazine=True)
+        make_books.epub(os.path.join(drive, "journaux", "2026-11-04-letemps.epub"), "Le Temps — 4 novembre 2026", magazine=True)
+        make_books.epub(os.path.join(drive, "Romans", "Un roman.epub"), "Un roman")
+        os.utime(os.path.join(drive, "journaux", "2026-11-03-letemps.epub"), (1793700000, 1793700000))
+        os.utime(os.path.join(drive, "journaux", "2026-11-04-letemps.epub"), (1793790000, 1793790000))
+        server = subprocess.Popen(["rclone", "serve", "webdav", drive, "--addr", "127.0.0.1:%d" % self.PORT, "--user", "u", "--pass", "p"],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for _i in range(100):
+                try:
+                    rb.requests.get(self.BASE, timeout=1)
+                    break
+                except Exception:
+                    time.sleep(0.1)
+            rb.save_config(dict(rb.DEFAULTS, url=self.BASE, username="u", password="p"))
+            for f in (rb.INDEX_FILE, rb.KINDS_FILE):
+                if os.path.exists(f):
+                    os.remove(f)
+            main = rb.Main()
+            main.resize(760, 900)
+            main.show()
+            LibraryPage.settle(self, main, lambda: not main.remote.scanning, "no sync running")
+            main.scan(True)
+            try:
+                LibraryPage.settle(self, main, lambda: not main.remote.scanning and main.remote.index["complete"] and main.remote.index["scannedAt"] > 0, "the sync")
+            except AssertionError:
+                raise AssertionError((main.remote.error, main.remote.progress, main.remote.index["scannedAt"], main.remote.index["complete"]))
+            main.home()
+            main.show_screen()
+            LibraryPage.settle(self, main, lambda: main.remote.sorting is None and not main.remote.unsorted(main.cfg), "the books told apart")
+            main.show_screen()
+            row = next((r for r in main.rows if r.title == rb._("news")), None)
+            self.assertIsNotNone(row, [r.title for r in main.rows])
+            self.assertTrue(row.secondary.startswith(rb.n_issues(2)), row.secondary)
+            LibraryPage.shot(self, main, "news_row")
+            row.action()
+            self.assertEqual(main.screen, (rb.NEWS,))
+            titles = [r.title for r in main.rows if r.kind == rb.ROW]
+            self.assertEqual(titles, ["2026-11-04-letemps", "2026-11-03-letemps"])
+            LibraryPage.shot(self, main, "news_list")
+            # nothing read twice: the next sync finds every book told
+            self.assertEqual(main.remote.unsorted(main.cfg), [])
+            main.close()
+        finally:
+            server.terminate()
+            server.wait()
 
 if __name__ == "__main__":
     unittest.main()

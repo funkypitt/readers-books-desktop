@@ -9,6 +9,7 @@ paper2epub.py next to it, which turns a paper in PDF into an EPUB.
 import json
 import locale
 import os
+import posixpath
 import re
 import shutil
 import struct
@@ -29,7 +30,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.16.1"
+VERSION = "1.17.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -49,6 +50,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 LIBRARY_FILE = os.path.join(DATA_DIR, "library.json")
 BOOKS_DIR = os.path.join(DATA_DIR, "books")
 INDEX_FILE = os.path.join(DATA_DIR, "library-index.json")
+KINDS_FILE = os.path.join(DATA_DIR, "library-kinds.json")     # which books of the library are newspapers or magazines
 FOLLOW_FILE = os.path.join(DATA_DIR, "follow.json")
 HIGHLIGHTS_DIR = os.path.join(DATA_DIR, "highlights")
 
@@ -149,6 +151,10 @@ STRINGS = {
   "%d folders could not be read": "%d dossiers n'ont pas pu être lus",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "aucun livre numérique trouvé sur le drive (epub, mobi, azw, fb2)",
   "all books": "tous les livres",
+  "news": "actualités",
+  "latest %s": "dernier : %s",
+  "looking for more… %d/%d": "recherche en cours… %d/%d",
+  "the newest first": "les plus récents d'abord",
   "search": "rechercher",
   "title, author or folder": "titre, auteur ou dossier",
   "no book matches": "aucun livre ne correspond",
@@ -298,6 +304,10 @@ STRINGS = {
   "%d folders could not be read": "%d Ordner konnten nicht gelesen werden",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "kein E-Book auf dem Drive gefunden (epub, mobi, azw, fb2)",
   "all books": "alle Bücher",
+  "news": "Nachrichten",
+  "latest %s": "neueste: %s",
+  "looking for more… %d/%d": "Suche läuft… %d/%d",
+  "the newest first": "die neuesten zuerst",
   "search": "suchen",
   "title, author or folder": "Titel, Autor oder Ordner",
   "no book matches": "kein Buch passt dazu",
@@ -447,6 +457,10 @@ STRINGS = {
   "%d folders could not be read": "%d carpetas no se pudieron leer",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "no se encontró ningún libro electrónico en el drive (epub, mobi, azw, fb2)",
   "all books": "todos los libros",
+  "news": "noticias",
+  "latest %s": "último: %s",
+  "looking for more… %d/%d": "buscando más… %d/%d",
+  "the newest first": "los más recientes primero",
   "search": "buscar",
   "title, author or folder": "título, autor o carpeta",
   "no book matches": "ningún libro coincide",
@@ -596,6 +610,10 @@ STRINGS = {
   "%d folders could not be read": "%d pastas não puderam ser lidas",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "nenhum livro eletrónico encontrado na drive (epub, mobi, azw, fb2)",
   "all books": "todos os livros",
+  "news": "notícias",
+  "latest %s": "último: %s",
+  "looking for more… %d/%d": "procurando mais… %d/%d",
+  "the newest first": "os mais recentes primeiro",
   "search": "pesquisar",
   "title, author or folder": "título, autor ou pasta",
   "no book matches": "nenhum livro corresponde",
@@ -746,6 +764,10 @@ STRINGS = {
   "%d folders could not be read": "не удалось прочитать папок: %d",
   "no e-book found on the drive (epub, mobi, azw, fb2)": "на диске не найдено электронных книг (epub, mobi, azw, fb2)",
   "all books": "все книги",
+  "news": "новости",
+  "latest %s": "последний: %s",
+  "looking for more… %d/%d": "идёт поиск… %d/%d",
+  "the newest first": "сначала новые",
   "search": "поиск",
   "title, author or folder": "название, автор или папка",
   "no book matches": "ни одна книга не подходит",
@@ -2984,7 +3006,7 @@ def search_books(books, query):
 
 
 _PROPFIND = ('<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/>'
-             '<d:getcontentlength/><d:getlastmodified/></d:prop></d:propfind>')
+             '<d:getcontentlength/><d:getlastmodified/><d:creationdate/></d:prop></d:propfind>')
 
 
 class WebDav:
@@ -3031,7 +3053,11 @@ class WebDav:
         parts = [unquote(p) for p in rel.split("/")[:-1] if p]
         if any(skip_folder(p) for p in parts):
             return None
-        return {"name": name, "folder": "/".join(parts), "ref": href, "size": size, "modified": modified}
+        book = {"name": name, "folder": "/".join(parts), "ref": href, "size": size, "modified": modified}
+        created = getattr(self, "created", {}).get(href)
+        if created:
+            book["created"] = created
+        return book
 
     def _relative(self, href):
         """The path of an address below the base, still percent-encoded."""
@@ -3053,11 +3079,13 @@ class WebDav:
         """The multistatus answer is read as it comes: a whole drive may be tens of megabytes."""
         out = []
         href, is_dir, size, modified = None, False, 0, 0
+        self.created = getattr(self, "created", {})
+        created = 0
         for event, node in ET.iterparse(stream, events=("start", "end")):
             tag = node.tag.rsplit("}", 1)[-1]
             if event == "start":
                 if tag == "response":
-                    href, is_dir, size, modified = None, False, 0, 0
+                    href, is_dir, size, modified, created = None, False, 0, 0, 0
                 continue
             if tag == "href" and href is None:
                 href = (node.text or "").strip()
@@ -3073,11 +3101,15 @@ class WebDav:
                     modified = int(parsedate_to_datetime((node.text or "").strip()).timestamp() * 1000)
                 except Exception:
                     modified = 0
+            elif tag == "creationdate":
+                created = iso_ms((node.text or "").strip())
             elif tag == "response":
                 if href:
                     full = urljoin(requested, href)
                     if full.rstrip("/") != requested.rstrip("/"):
                         out.append((full, is_dir, size, modified))
+                        if created:
+                            self.created[full] = created
                 node.clear()
         return out
 
@@ -3103,6 +3135,32 @@ class WebDav:
         large and the line slow: ten minutes."""
         with open(path, "rb") as fh:
             _check(self.session.put(ref, data=fh, timeout=(30, 600)))
+
+    def read_range(self, ref, start, length, size=0):
+        """Some bytes of a file: `length` from `start`, or the last `length` when `start` is None.
+        (bytes, whole size); None when the server sends the whole file instead (no ranges).
+        With the file's size known, the end is asked for from where it starts: kDrive drops the
+        connection on a range from the end longer than the file."""
+        if start is None and size:
+            start = max(0, size - length)
+        if start is not None and size:
+            length = min(length, max(1, size - start))
+        spec = "bytes=-%d" % length if start is None else "bytes=%d-%d" % (start, start + length - 1)
+        for attempt in range(3):
+            try:
+                with self.session.get(ref, headers={"Range": spec, "Accept-Encoding": "identity"}, stream=True, timeout=(30, 60)) as r:
+                    if r.status_code == 416:
+                        return b"", 0
+                    _check(r)
+                    if r.status_code != 206:
+                        return None
+                    total = r.headers.get("Content-Range", "").rsplit("/", 1)[-1]
+                    return r.content, int(total) if total.isdigit() else 0
+            except requests.ConnectionError:
+                # the server closed a connection kept for the next request: once more on a new one
+                if attempt == 2:
+                    raise
+                time.sleep(0.5 * (attempt + 1))
 
 
 def _save_stream(response, dest, progress):
@@ -3133,6 +3191,134 @@ def remote_for(cfg):
     except Exception:
         pass
     return None
+
+
+def iso_ms(text):
+    """An ISO 8601 date (WebDAV's creationdate) in milliseconds, 0 when unreadable."""
+    try:
+        return int(datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp() * 1000)
+    except Exception:
+        try:
+            return int(parsedate_to_datetime(text).timestamp() * 1000)
+        except Exception:
+            return 0
+
+
+# ------------------------------------------------------------------------------------------
+# News: the newspapers' and magazines' issues among the library's books, told by their contents
+# page as the reader tells a magazine (a section, a title per article in the nav; or articles
+# that start with a section and a headline), read on the drive without fetching the book: the
+# end of the EPUB (its zip directory), then its package and its nav, a few kilobytes each.
+# ------------------------------------------------------------------------------------------
+
+def _zip_directory(read, tail_size=65536):
+    """The zip's entries, name → (method, compressed size, offset of its local header)."""
+    got = read(None, tail_size)
+    if got is None:
+        return None
+    tail, total = got
+    at = tail.rfind(b"PK\x05\x06")
+    if at < 0 or len(tail) < at + 22:
+        return None
+    cd_size, cd_offset = struct.unpack_from("<II", tail, at + 12)
+    tail_start = (total or len(tail)) - len(tail)
+    if cd_offset >= tail_start:
+        cd = tail[cd_offset - tail_start:cd_offset - tail_start + cd_size]
+    else:
+        got = read(cd_offset, cd_size)
+        if got is None:
+            return None
+        cd = got[0]
+    entries, i = {}, 0
+    while i + 46 <= len(cd) and cd[i:i + 4] == b"PK\x01\x02":
+        method, = struct.unpack_from("<H", cd, i + 10)
+        comp, = struct.unpack_from("<I", cd, i + 20)
+        n, x, c = struct.unpack_from("<HHH", cd, i + 28)
+        offset, = struct.unpack_from("<I", cd, i + 42)
+        name = cd[i + 46:i + 46 + n].decode("utf-8", "replace")
+        entries[name] = (method, comp, offset)
+        i += 46 + n + x + c
+    return entries
+
+
+def _zip_member(read, entries, name, limit=400000):
+    import zlib
+    if name not in entries:
+        name = next((n for n in entries if n.lower() == name.lower()), None)
+        if name is None:
+            return None
+    method, comp, offset = entries[name]
+    if comp > limit:
+        return None
+    got = read(offset, 30 + 1024 + comp)
+    if got is None:
+        return None
+    head = got[0]
+    if head[:4] != b"PK\x03\x04":
+        return None
+    n, x = struct.unpack_from("<HH", head, 26)
+    data = head[30 + n + x:30 + n + x + comp]
+    if method == 0:
+        return data
+    if method == 8:
+        try:
+            return zlib.decompressobj(-15).decompress(data)
+        except zlib.error:
+            return None
+    return None
+
+
+def epub_is_news(read):
+    """True for an issue of a newspaper or a magazine, False for a book, None when the drive
+    would not say (no byte ranges, a broken file). `read(start, length)` as WebDav.read_range."""
+    entries = _zip_directory(read)
+    if entries is None:
+        return None
+    opf_name = next((n for n in entries if n.lower().endswith(".opf")), None)
+    if opf_name is None:
+        return None
+    opf = _zip_member(read, entries, opf_name)
+    if opf is None:
+        return None
+    opf = opf.decode("utf-8", "replace")
+    base = opf_name.rsplit("/", 1)[0] + "/" if "/" in opf_name else ""
+    items = {}
+    nav = None
+    for tag in re.findall(r"<item\b[^>]*>", opf, re.I):
+        m_id = re.search(r'\bid="([^"]+)"', tag)
+        m_href = re.search(r'\bhref="([^"]+)"', tag)
+        if not m_href:
+            continue
+        href = posixpath.normpath(base + unquote(m_href.group(1).split("#")[0]))
+        if m_id:
+            items[m_id.group(1)] = href
+        if re.search(r'properties="[^"]*\bnav\b', tag):
+            nav = href
+    if nav:
+        text = _zip_member(read, entries, nav)
+        if text is not None:
+            text = text.decode("utf-8", "replace")
+            if "toc-cat" in text and "toc-title" in text:
+                return True
+    # signature B: the articles themselves start with their section and a headline
+    spine = [items[i] for i in re.findall(r'<itemref\b[^>]*idref="([^"]+)"', opf) if i in items]
+    if len(spine) < 3:
+        return False
+    picks = [spine[len(spine) * k // 4] for k in (1, 2, 3)]
+    structured = 0
+    for name in picks:
+        text = _zip_member(read, entries, name)
+        if text is None:
+            continue
+        text = text.decode("utf-8", "replace")
+        if re.search(r'<p\b[^>]*class="[^"]*\bcategory\b', text, re.I) and re.search(r"<h1\b", text, re.I):
+            structured += 1
+    return structured >= 2
+
+
+def news_date(book):
+    """When an issue came out, as the drive knows it: the file's creation, else its last change."""
+    return book.get("created") or book.get("modified") or 0
 
 
 def source_key(cfg):
@@ -3476,6 +3662,13 @@ class RemoteLibrary:
         self.changed = 0            # bumped at every step, for the window to notice
         self.refreshing = False
         self.relisting = threading.Lock()
+        try:
+            with open(KINDS_FILE, encoding="utf-8") as fh:
+                self.kinds = json.load(fh)
+        except Exception:
+            self.kinds = {}         # book address → {"s": size, "m": modified, "news": True/False/None, "t": tries}
+        self.sorting = None         # (done, of) while the books are being told apart
+        self.sort_thread = None
 
     @property
     def scanning(self):
@@ -3595,8 +3788,98 @@ class RemoteLibrary:
     def forget(self):
         self.cancel()
         self.index = dict(EMPTY_INDEX)
+        self.kinds = {}
+        for f in (INDEX_FILE, KINDS_FILE):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+
+    # ---- news: which books are issues of a newspaper or a magazine ----
+
+    def kind_of(self, book):
+        k = self.kinds.get(book["ref"])
+        if k and k.get("s") == book.get("size") and k.get("m") == book.get("modified"):
+            return k
+        return None
+
+    def news(self, cfg):
+        """The library's newspapers and magazines, the newest issue first."""
+        return sorted((b for b in self.shown(cfg) if (self.kind_of(b) or {}).get("news")), key=news_date, reverse=True)
+
+    def unsorted(self, cfg):
+        """The EPUBs not yet looked at (or changed since), and those the drive would not answer for, three times at most."""
+        out = []
+        for b in self.shown(cfg):
+            if _ext(b["name"]) != "epub":
+                continue
+            k = self.kind_of(b)
+            if k is None or (k.get("news") is None and k.get("t", 0) < ATTEMPTS):
+                out.append(b)
+        return out
+
+    def sort_books(self, cfg, known=None):
+        """Tells the news from the books, in the background, a few kilobytes read per book. Books
+        on this computer are told by what the reader already found (`known`: address → magazine)."""
+        if self.sort_thread is not None and self.sort_thread.is_alive():
+            return
+        todo = self.unsorted(cfg)
+        known = known or {}
+        told = [b for b in todo if b["ref"] in known]
+        for b in told:
+            self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": bool(known[b["ref"]])}
+        todo = [b for b in todo if b["ref"] not in known]
+        if not todo:
+            if told:
+                self._save_kinds()
+            return
+        remote = remote_for(cfg)
+        if remote is None:
+            return
+        self.sorting = (0, len(todo))
+        lock = threading.Lock()
+        queue = sorted(todo, key=news_date, reverse=True)       # the latest first: that is where the news is
+
+        def worker():
+            while True:
+                with lock:
+                    if not queue or self.stop.is_set():
+                        return
+                    b = queue.pop(0)
+                try:
+                    news = epub_is_news(lambda start, length: remote.read_range(b["ref"], start, length, b.get("size") or 0))
+                except WrongLogin:
+                    with lock:
+                        queue.clear()
+                    return
+                except Exception:
+                    news = None
+                with lock:
+                    old = self.kinds.get(b["ref"]) or {}
+                    tries = (old.get("t", 0) + 1) if news is None and old.get("m") == b.get("modified") else (1 if news is None else 0)
+                    self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": news, "t": tries}
+                    done = self.sorting[0] + 1 if self.sorting else 1
+                    self.sorting = (done, len(todo))
+                    if done % 25 == 0:
+                        self._save_kinds()
+                self.changed += 1
+
+        def run():
+            workers = [threading.Thread(target=worker, daemon=True) for _i in range(PARALLEL)]
+            for w in workers:
+                w.start()
+            for w in workers:
+                w.join()
+            self.sorting = None
+            self._save_kinds()
+            self.changed += 1
+
+        self.sort_thread = threading.Thread(target=run, daemon=True)
+        self.sort_thread.start()
+
+    def _save_kinds(self):
         try:
-            os.remove(INDEX_FILE)
+            _write_private(KINDS_FILE, json.dumps(self.kinds, ensure_ascii=False))
         except OSError:
             pass
 
@@ -5920,6 +6203,7 @@ class PictureView(QtWidgets.QWidget):
 # ------------------------------------------------------------------------------------------
 
 SHELF, BOOK, CHAPTERS, SETTINGS, LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS, SEARCH = "shelf", "book", "chapters", "settings", "library", "folder", "all", "library_folders", "search"
+NEWS = "news"
 ISSUES = "issues"       # the issues on this computer of one magazine ("magazine", key) or of one followed folder ("folder", path)
 ADD_TO_LIBRARY = "add_to_library"       # choosing the folder of the library a book of the shelf is sent to
 UI_SIZES = {"S": 11, "M": 13, "L": 15}
@@ -6229,7 +6513,7 @@ class Main(QtWidgets.QMainWindow):
     def back_label(self):
         """What a back leads to, named as the screen below calls itself."""
         below = self.stack[-2][0] if len(self.stack) > 1 else None
-        if below in (LIBRARY, FOLDER, ALL_BOOKS, SEARCH):
+        if below in (LIBRARY, FOLDER, ALL_BOOKS, SEARCH, NEWS):
             return _("library")
         if below == SHELF and self.stack[0][0] != SHELF:
             return _("on this computer")
@@ -6965,7 +7249,7 @@ class Main(QtWidgets.QMainWindow):
     def watch_scan(self):
         if self.remote.changed != self.seen_change or self.follow_changed != self.follow_seen:
             self.seen_change, self.follow_seen = self.remote.changed, self.follow_changed
-            if self.screen[0] in (LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS):
+            if self.screen[0] in (LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS, NEWS):
                 self.show_screen()
 
     def scan(self, fresh):
@@ -7005,6 +7289,16 @@ class Main(QtWidgets.QMainWindow):
             rows.append(Row(_("no e-book found on the drive (epub, mobi, azw, fb2)"), kind=HINT))
         if shown:
             rows.append(Row(_("search"), _("title, author or folder"), self.ask_search))
+            # the newspapers and magazines, together, the newest first: there only when the library has some
+            if not progress and index["scannedAt"] > 0:
+                remote.sort_books(cfg, {e["source"]: e.get("magazine") for e in self.library.books if e.get("source")})
+            news = remote.news(cfg)
+            if news:
+                sorting = remote.sorting
+                rows.append(Row(_("news"), " · ".join(x for x in (
+                    n_issues(len(news)), _("latest %s", date_label(news_date(news[0]))),
+                    _("looking for more… %d/%d", sorting[0], sorting[1]) if sorting else "") if x),
+                    lambda: self.push((NEWS,))))
             rows.append(Row(_("all books"), n_books(len(shown)), lambda: self.push((ALL_BOOKS,))))
         top = bool(cfg.get("library_top_folders"))
         for path, count, modified, spanned in folders:
@@ -7270,6 +7564,13 @@ class Main(QtWidgets.QMainWindow):
         books = sort_books(self.remote.shown(self.cfg), order, opened)
         return self.book_list(_("all books"), books, order, "all_books_sort", folder=True, opened=opened if order == "OPENED" else None)
 
+    def screen_news(self):
+        """The library's newspapers and magazines, whatever their folder: the newest issue first."""
+        books = self.remote.news(self.cfg)
+        title, rows, menu = self.book_list(_("news"), books, "NEWEST", None, folder=True, dated=news_date,
+                                           heading=" · ".join((n_issues(len(books)), _("the newest first"))))
+        return title, rows, [(_("search"), self.ask_search)]
+
     def screen_search(self):
         """The books of the library found by the words asked: every word must be in the name, the
         author or the folder, accents and case aside; in the order of « all books »."""
@@ -7307,7 +7608,7 @@ class Main(QtWidgets.QMainWindow):
         else:
             self.push((SEARCH, query))
 
-    def book_list(self, title, books, order, setting, heading=None, folder=False, base="", opened=None, extra=(), searching=False):
+    def book_list(self, title, books, order, setting, heading=None, folder=False, base="", opened=None, extra=(), searching=False, dated=None):
         """The drive's books under a title, the order named above them and the orders offered
         under ⋯ (`extra` = what else the menu offers). A click fetches the book (once) and opens
         it. `folder` names each book's folder on its line, as seen from `base`."""
@@ -7319,7 +7620,7 @@ class Main(QtWidgets.QMainWindow):
             state = _("downloading…") if self.fetching == b["ref"] else _("on the shelf") if b["ref"] in on_shelf else ""
             seen = _("opened %s", when_label(opened[b["ref"]])) if opened and opened.get(b["ref"]) else ""
             where = (relative_folder(base, b["folder"]) or (_("top of the drive") if not base else "")) if folder else ""
-            line = " · ".join(x for x in (state, seen, where, date_label(b["modified"]), _ext(b["name"]), size_label(b["size"])) if x)
+            line = " · ".join(x for x in (state, seen, where, date_label((dated or (lambda b: b["modified"]))(b)), _ext(b["name"]), size_label(b["size"])) if x)
             rows.append(Row(remote_title(b), line, lambda b=b: self.fetch(b)))
         menu = self.order_menu(BOOK_ORDERS, order, setting) + list(extra)
         menu += [None, (_("search again"), self.ask_search)] if searching else [None, (_("search"), self.ask_search)]

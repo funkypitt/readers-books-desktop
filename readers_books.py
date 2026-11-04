@@ -30,7 +30,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.18.0"
+VERSION = "1.18.1"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -51,6 +51,7 @@ LIBRARY_FILE = os.path.join(DATA_DIR, "library.json")
 BOOKS_DIR = os.path.join(DATA_DIR, "books")
 INDEX_FILE = os.path.join(DATA_DIR, "library-index.json")
 KINDS_FILE = os.path.join(DATA_DIR, "library-kinds.json")     # which books of the library are newspapers or magazines
+KINDS_VERSION = 2       # 2: gatherings of articles count too, and issues carry their own date
 FOLLOW_FILE = os.path.join(DATA_DIR, "follow.json")
 HIGHLIGHTS_DIR = os.path.join(DATA_DIR, "highlights")
 
@@ -3274,18 +3275,33 @@ def _zip_member(read, entries, name, limit=400000):
 
 
 def epub_is_news(read):
-    """True for an issue of a newspaper or a magazine, False for a book, None when the drive
-    would not say (no byte ranges, a broken file). `read(start, length)` as WebDav.read_range."""
+    return epub_kind(read)[0]
+
+
+_DC_DATE = re.compile(r"<dc:date[^>]*>\s*(\d{4})-(\d{2})-(\d{2})")
+
+
+def epub_kind(read):
+    """(news, issue date): news = True for an issue of a newspaper or a magazine, or a gathering
+    of articles (a newsletter's, a channel's summaries: a contents page of titles, with or without
+    their authors); False for a book; None when the drive would not say (no byte ranges, a broken
+    file). The issue's date is its own (dc:date), in milliseconds, 0 when it has none.
+    `read(start, length)` as WebDav.read_range."""
     entries = _zip_directory(read)
     if entries is None:
-        return None
+        return None, 0
     opf_name = next((n for n in entries if n.lower().endswith(".opf")), None)
     if opf_name is None:
-        return None
+        return None, 0
     opf = _zip_member(read, entries, opf_name)
     if opf is None:
-        return None
+        return None, 0
     opf = opf.decode("utf-8", "replace")
+    m = _DC_DATE.search(opf)
+    try:
+        date = int(datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).timestamp() * 1000) if m else 0
+    except ValueError:
+        date = 0
     base = opf_name.rsplit("/", 1)[0] + "/" if "/" in opf_name else ""
     items = {}
     nav = None
@@ -3303,12 +3319,13 @@ def epub_is_news(read):
         text = _zip_member(read, entries, nav)
         if text is not None:
             text = text.decode("utf-8", "replace")
-            if "toc-cat" in text and "toc-title" in text:
-                return True
+            # one title per article (a publisher may call its contents' own heading "toc-title")
+            if re.search(r'<span\b[^>]*class="[^"]*\btoc-title\b', text):
+                return True, date
     # signature B: the articles themselves start with their section and a headline
     spine = [items[i] for i in re.findall(r'<itemref\b[^>]*idref="([^"]+)"', opf) if i in items]
     if len(spine) < 3:
-        return False
+        return False, date
     picks = [spine[len(spine) * k // 4] for k in (1, 2, 3)]
     structured = 0
     for name in picks:
@@ -3318,12 +3335,14 @@ def epub_is_news(read):
         text = text.decode("utf-8", "replace")
         if re.search(r'<p\b[^>]*class="[^"]*\bcategory\b', text, re.I) and re.search(r"<h1\b", text, re.I):
             structured += 1
-    return structured >= 2
+    return structured >= 2, date
 
 
-def news_date(book):
-    """When an issue came out, as the drive knows it: the file's creation, else its last change."""
-    return book.get("created") or book.get("modified") or 0
+def news_date(book, kind=None):
+    """When an issue came out: its own date (dc:date) when it says, else what the drive knows —
+    the file's creation, else its last change. A file the drive made again (repaired, copied)
+    keeps its issue's date."""
+    return (kind or {}).get("d") or book.get("created") or book.get("modified") or 0
 
 
 def source_key(cfg):
@@ -3711,6 +3730,9 @@ class RemoteLibrary:
             self.kinds = {}         # book address → {"s": size, "m": modified, "news": True/False/None, "t": tries}
         self.sorting = None         # (done, of) while the books are being told apart
         self.sort_thread = None
+        self.sort_lock = threading.Lock()
+        self.sort_queue = []        # what is still to look at, the newest first
+        self.sort_busy = set()
 
     @property
     def scanning(self):
@@ -3841,13 +3863,17 @@ class RemoteLibrary:
 
     def kind_of(self, book):
         k = self.kinds.get(book["ref"])
-        if k and k.get("s") == book.get("size") and k.get("m") == book.get("modified"):
+        if k and k.get("v") == KINDS_VERSION and k.get("s") == book.get("size") and k.get("m") == book.get("modified"):
             return k
         return None
 
+    def issue_date(self, book):
+        return news_date(book, self.kind_of(book))
+
     def news(self, cfg):
-        """The library's newspapers and magazines, the newest issue first."""
-        return sorted((b for b in self.shown(cfg) if (self.kind_of(b) or {}).get("news")), key=news_date, reverse=True)
+        """The library's newspapers, magazines and gatherings of articles, the newest issue first."""
+        found = [b for b in self.shown(cfg) if (self.kind_of(b) or {}).get("news")]
+        return sorted(found, key=lambda b: (self.issue_date(b), b.get("created") or b.get("modified") or 0), reverse=True)
 
     def unsorted(self, cfg):
         """The EPUBs not yet looked at (or changed since), and those the drive would not answer for, three times at most."""
@@ -3863,13 +3889,21 @@ class RemoteLibrary:
     def sort_books(self, cfg, known=None):
         """Tells the news from the books, in the background, a few kilobytes read per book. Books
         on this computer are told by what the reader already found (`known`: address → magazine)."""
-        if self.sort_thread is not None and self.sort_thread.is_alive():
-            return
+        running = self.sort_thread is not None and self.sort_thread.is_alive()
         todo = self.unsorted(cfg)
+        if running:
+            # books new to the library go before what the first pass has still to look at
+            with self.sort_lock:
+                queued = {b["ref"] for b in self.sort_queue}
+                new = [b for b in todo if b["ref"] not in queued and b["ref"] not in self.sort_busy]
+                if new:
+                    self.sort_queue[:0] = sorted(new, key=news_date, reverse=True)
+                    self.sorting = (self.sorting[0], self.sorting[1] + len(new)) if self.sorting else (0, len(new))
+            return
         known = known or {}
         told = [b for b in todo if b["ref"] in known]
         for b in told:
-            self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": bool(known[b["ref"]])}
+            self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": bool(known[b["ref"]]), "v": KINDS_VERSION}
         todo = [b for b in todo if b["ref"] not in known]
         if not todo:
             if told:
@@ -3879,8 +3913,9 @@ class RemoteLibrary:
         if remote is None:
             return
         self.sorting = (0, len(todo))
-        lock = threading.Lock()
-        queue = sorted(todo, key=news_date, reverse=True)       # the latest first: that is where the news is
+        lock = self.sort_lock
+        queue = self.sort_queue
+        queue[:] = sorted(todo, key=news_date, reverse=True)       # the latest first: that is where the news is
 
         def worker():
             while True:
@@ -3888,18 +3923,20 @@ class RemoteLibrary:
                     if not queue or self.stop.is_set():
                         return
                     b = queue.pop(0)
+                    self.sort_busy.add(b["ref"])
                 try:
-                    news = epub_is_news(lambda start, length: remote.read_range(b["ref"], start, length, b.get("size") or 0))
+                    news, date = epub_kind(lambda start, length: remote.read_range(b["ref"], start, length, b.get("size") or 0))
                 except WrongLogin:
                     with lock:
                         queue.clear()
                     return
                 except Exception:
-                    news = None
+                    news, date = None, 0
                 with lock:
+                    self.sort_busy.discard(b["ref"])
                     old = self.kinds.get(b["ref"]) or {}
                     tries = (old.get("t", 0) + 1) if news is None and old.get("m") == b.get("modified") else (1 if news is None else 0)
-                    self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": news, "t": tries}
+                    self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": news, "t": tries, "d": date, "v": KINDS_VERSION}
                     done = self.sorting[0] + 1 if self.sorting else 1
                     self.sorting = (done, len(todo))
                     if done % 25 == 0:
@@ -7417,7 +7454,7 @@ class Main(QtWidgets.QMainWindow):
             if news:
                 sorting = remote.sorting
                 rows.append(Row(_("news"), " · ".join(x for x in (
-                    n_issues(len(news)), _("latest %s", date_label(news_date(news[0]))),
+                    n_issues(len(news)), _("latest %s", date_label(remote.issue_date(news[0]))),
                     _("looking for more… %d/%d", sorting[0], sorting[1]) if sorting else "") if x),
                     lambda: self.push((NEWS,))))
             rows.append(Row(_("all books"), n_books(len(shown)), lambda: self.push((ALL_BOOKS,))))
@@ -7688,7 +7725,7 @@ class Main(QtWidgets.QMainWindow):
     def screen_news(self):
         """The library's newspapers and magazines, whatever their folder: the newest issue first."""
         books = self.remote.news(self.cfg)
-        title, rows, menu = self.book_list(_("news"), books, "NEWEST", None, folder=True, dated=news_date,
+        title, rows, menu = self.book_list(_("news"), books, "NEWEST", None, folder=True, dated=self.remote.issue_date,
                                            heading=" · ".join((n_issues(len(books)), _("the newest first"))))
         return title, rows, [(_("search"), self.ask_search)]
 

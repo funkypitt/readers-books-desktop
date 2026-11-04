@@ -1360,6 +1360,20 @@ class News(unittest.TestCase):
         self.assertTrue(rb.epub_is_news(file_reader(signed)))
         # a server without byte ranges says nothing
         self.assertIsNone(rb.epub_is_news(lambda start, length: None))
+        # a newsletter's articles (titles and authors, no sections) are news, with the issue's own date
+        letter = path("n-letter.epub")
+        with zipfile.ZipFile(letter, "w") as z:
+            z.writestr("OEBPS/content.opf", '<package><metadata><dc:date>2026-04-16</dc:date></metadata><manifest>'
+                       '<item id="nav" href="toc.xhtml" properties="nav"/><item id="a" href="a.xhtml"/></manifest><spine><itemref idref="a"/></spine></package>')
+            z.writestr("OEBPS/toc.xhtml", '<nav><ol><li><a href="a.xhtml"><span class="toc-title">Selling the EU</span><span class="toc-author">Thomas Fazi</span></a></li></ol></nav>')
+            z.writestr("OEBPS/a.xhtml", "<html><body><h1>Selling the EU</h1></body></html>")
+        self.assertEqual(rb.epub_kind(file_reader(letter)), (True, int(rb.datetime(2026, 4, 16).timestamp() * 1000)))
+        # a publisher calling its contents' heading "toc-title" is no newspaper
+        book = path("n-publisher.epub")
+        with zipfile.ZipFile(book, "w") as z:
+            z.writestr("OEBPS/content.opf", '<package><manifest><item id="nav" href="toc.xhtml" properties="nav"/></manifest><spine/></package>')
+            z.writestr("OEBPS/toc.xhtml", '<nav><h1 class="toc-title">Contents</h1><ol><li><a href="c1.xhtml">Chapter 1</a></li></ol></nav>')
+        self.assertFalse(rb.epub_is_news(file_reader(book)))
 
     def test_the_news_row_lists_the_issues_the_newest_first(self):
         if not shutil.which("rclone"):

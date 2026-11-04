@@ -79,8 +79,23 @@ reader, the same library, the same wording.
   Papers are for the Linux packages and the source: the Windows and macOS builds have no
   Python of their own to set the converter up with.
 * A magazine issue (an EPUB whose contents page carries a section, a title and an author per
-  article, as the newspapers pipeline writes them) opens on its contents: sections, titles,
-  authors and cover pictures. An article is a chapter; back returns to the contents.
+  article, as the newspapers pipeline writes them) opens on its contents the first time:
+  sections, titles, authors and larger pictures, as whole pages turned like the book's (the side
+  thirds, the wheel, the arrow keys; a click in the middle opens the article), the page number at
+  the foot. An article is a chapter; above it, a slim bar leads to the previous article, the
+  contents and the next one, and each article reopens where it was left. Opened again, an issue
+  goes back to the article it was left at. Several issues of one magazine make one row of the
+  shelf, « 24 heures · 3 issues »: a click opens the latest, a right click lists them all. Issues
+  belong to the same magazine when their titles agree once the date is taken off (what comes
+  before « — Edition du … »).
+* Italic and bold show in every book; the text itself, where highlights are counted, is the same
+  as without them.
+* A folder of the library can be followed (right click on it): it then sits near the top of the
+  library with the number of its new books, counted from the last listing of the drive. Nothing
+  is downloaded by itself: a click lists that folder again, fetches its new books one after the
+  other (the row says how far it is) and opens the new one, or the folder's issues when several
+  came or none. When a folder is first followed, its latest day's books are the new ones; a book
+  fetched, or removed from the shelf, is not new again.
 * Optional library: the e-books kept on a drive, at a WebDAV address with a username and an
   application password (kDrive, Nextcloud, any WebDAV server) that the app may read and write,
   listed by folder — every folder, or the top folders only, each standing for everything inside

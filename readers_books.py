@@ -29,7 +29,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.13.0"
+VERSION = "1.14.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -49,6 +49,7 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 LIBRARY_FILE = os.path.join(DATA_DIR, "library.json")
 BOOKS_DIR = os.path.join(DATA_DIR, "books")
 INDEX_FILE = os.path.join(DATA_DIR, "library-index.json")
+FOLLOW_FILE = os.path.join(DATA_DIR, "follow.json")
 HIGHLIGHTS_DIR = os.path.join(DATA_DIR, "highlights")
 
 # ------------------------------------------------------------------------------------------
@@ -57,6 +58,16 @@ HIGHLIGHTS_DIR = os.path.join(DATA_DIR, "highlights")
 
 STRINGS = {
  "fr": {
+  "follow this folder": "suivre ce dossier",
+  "stop following this folder": "ne plus suivre ce dossier",
+  "its new books one click away, at the top of the library": "ses nouveaux livres à un clic, en haut de la bibliothèque",
+  "looking for new books…": "recherche des nouveautés…",
+  "fetching %d of %d…": "téléchargement %d sur %d…",
+  "nothing new · %s": "rien de nouveau · %s",
+  "followed folder · click to fetch what is new": "dossier suivi · cliquez pour chercher les nouveautés",
+  "issues on this computer": "numéros sur cet ordinateur",
+  "the whole folder on the drive": "tout le dossier sur le drive",
+  "no issue of this folder is on this computer yet": "aucun numéro de ce dossier n'est encore sur cet ordinateur",
   "on this computer": "sur cet ordinateur",
   "continue reading": "reprendre la lecture",
   "set up a library": "configurer une bibliothèque",
@@ -195,6 +206,16 @@ STRINGS = {
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "rien sur l'étagère. Ouvrir un fichier epub, mobi, fb2 ou texte, ou un PDF à convertir en EPUB : d'ici, ou en le déposant sur cette fenêtre.",
  },
  "de": {
+  "follow this folder": "diesem Ordner folgen",
+  "stop following this folder": "diesem Ordner nicht mehr folgen",
+  "its new books one click away, at the top of the library": "seine neuen Bücher mit einem Klick, oben in der Bibliothek",
+  "looking for new books…": "suche nach neuen Büchern…",
+  "fetching %d of %d…": "lade %d von %d…",
+  "nothing new · %s": "nichts Neues · %s",
+  "followed folder · click to fetch what is new": "gefolgter Ordner · klicken, um Neues zu holen",
+  "issues on this computer": "Ausgaben auf diesem Computer",
+  "the whole folder on the drive": "der ganze Ordner auf dem Drive",
+  "no issue of this folder is on this computer yet": "noch keine Ausgabe dieses Ordners auf diesem Computer",
   "on this computer": "auf diesem Computer",
   "continue reading": "weiterlesen",
   "set up a library": "eine Bibliothek einrichten",
@@ -334,6 +355,16 @@ STRINGS = {
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nichts im Regal. Eine epub-, mobi-, fb2- oder Textdatei öffnen, oder ein PDF zum Umwandeln in EPUB: von hier oder durch Ablegen auf diesem Fenster.",
  },
  "es": {
+  "follow this folder": "seguir esta carpeta",
+  "stop following this folder": "dejar de seguir esta carpeta",
+  "its new books one click away, at the top of the library": "sus libros nuevos a un clic, arriba en la biblioteca",
+  "looking for new books…": "buscando libros nuevos…",
+  "fetching %d of %d…": "descargando %d de %d…",
+  "nothing new · %s": "nada nuevo · %s",
+  "followed folder · click to fetch what is new": "carpeta seguida · haga clic para traer lo nuevo",
+  "issues on this computer": "números en este ordenador",
+  "the whole folder on the drive": "toda la carpeta en el drive",
+  "no issue of this folder is on this computer yet": "todavía no hay ningún número de esta carpeta en este ordenador",
   "on this computer": "en este ordenador",
   "continue reading": "seguir leyendo",
   "set up a library": "configurar una biblioteca",
@@ -473,6 +504,16 @@ STRINGS = {
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada en la estantería. Abre un archivo epub, mobi, fb2 o de texto, o un PDF para convertir en EPUB: desde aquí, o soltándolo sobre esta ventana.",
  },
  "pt": {
+  "follow this folder": "seguir esta pasta",
+  "stop following this folder": "deixar de seguir esta pasta",
+  "its new books one click away, at the top of the library": "os seus livros novos a um clique, no topo da biblioteca",
+  "looking for new books…": "procurando livros novos…",
+  "fetching %d of %d…": "baixando %d de %d…",
+  "nothing new · %s": "nada de novo · %s",
+  "followed folder · click to fetch what is new": "pasta seguida · clique para trazer o que é novo",
+  "issues on this computer": "edições neste computador",
+  "the whole folder on the drive": "a pasta inteira no drive",
+  "no issue of this folder is on this computer yet": "ainda não há nenhuma edição desta pasta neste computador",
   "on this computer": "neste computador",
   "continue reading": "continuar a ler",
   "set up a library": "configurar uma biblioteca",
@@ -612,6 +653,16 @@ STRINGS = {
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada na estante. Abra um ficheiro epub, mobi, fb2 ou de texto, ou um PDF para converter em EPUB: daqui, ou largando-o sobre esta janela.",
  },
  "ru": {
+  "follow this folder": "следить за этой папкой",
+  "stop following this folder": "больше не следить за этой папкой",
+  "its new books one click away, at the top of the library": "её новые книги в один щелчок, вверху библиотеки",
+  "looking for new books…": "поиск новых книг…",
+  "fetching %d of %d…": "загрузка %d из %d…",
+  "nothing new · %s": "ничего нового · %s",
+  "followed folder · click to fetch what is new": "папка под наблюдением · щёлкните, чтобы получить новое",
+  "issues on this computer": "выпуски на этом компьютере",
+  "the whole folder on the drive": "вся папка на диске",
+  "no issue of this folder is on this computer yet": "на этом компьютере пока нет ни одного выпуска из этой папки",
   "on this computer": "на этом компьютере",
   "continue reading": "продолжить чтение",
   "set up a library": "подключить библиотеку",
@@ -808,6 +859,26 @@ def _(key, *args):
     return text % args if args else text
 
 
+NEW = {
+ "en": ("%d new", "%d new"), "fr": ("%d nouveau", "%d nouveaux"), "de": ("%d neu", "%d neu"),
+ "es": ("%d nuevo", "%d nuevos"), "pt": ("%d novo", "%d novos"),
+ "ru": ("%d новый", "%d новых", "%d новых"),
+}
+ISSUES_COUNT = {
+ "en": ("%d issue", "%d issues"), "fr": ("%d numéro", "%d numéros"), "de": ("%d Ausgabe", "%d Ausgaben"),
+ "es": ("%d número", "%d números"), "pt": ("%d edição", "%d edições"),
+ "ru": ("%d выпуск", "%d выпуска", "%d выпусков"),
+}
+
+
+def n_new(n):
+    return _plural(NEW, n)
+
+
+def n_issues(n):
+    return _plural(ISSUES_COUNT, n)
+
+
 def n_books(n):
     """« 1 book », « 3 books » — with the three Russian forms."""
     return _plural(PLURALS, n)
@@ -859,11 +930,21 @@ def u16(text):
     return len(text.encode("utf-16-le")) // 2
 
 
-class Para:
-    __slots__ = ("text", "kind")
+ITALIC, BOLD = 1, 2
 
-    def __init__(self, text, kind=NORMAL):
-        self.text, self.kind = text, kind
+
+class Para:
+    """A paragraph: its text, as it is counted (highlights are places in it), and its kind.
+    `styles` marks the words in italic or bold: runs (start, end, ITALIC | BOLD) of the text, in
+    characters of the string; they change nothing in the text itself."""
+    __slots__ = ("text", "kind", "styles")
+
+    def __init__(self, text, kind=NORMAL, styles=None):
+        self.text, self.kind, self.styles = text, kind, styles or None
+
+    def slice(self, start, end):
+        runs = [(max(a, start) - start, min(b, end) - start, f) for a, b, f in (self.styles or ()) if min(b, end) > max(a, start)]
+        return Para(self.text[start:end], self.kind, runs)
 
 
 class TextBlock:
@@ -970,10 +1051,105 @@ def heading_of(text):
     return t if t and len(t) < 120 else None
 
 
+_EMPHASIS = re.compile(r"<(/?)(i|em|b|strong)(\s[^>]*)?>", re.I)
+ITALIC_ON, ITALIC_OFF, BOLD_ON, BOLD_OFF = "\u0003", "\u0004", "\u0005", "\u0006"
+_EMPHASIS_MARKS = re.compile("[\u0003-\u0006]")
+
+
+def _emphasis(m):
+    if (m.group(3) or "").rstrip().endswith("/"):
+        return ""                                    # <b/>: nothing to set
+    italic = m.group(2).lower() in ("i", "em")
+    if m.group(1):
+        return ITALIC_OFF if italic else BOLD_OFF
+    return ITALIC_ON if italic else BOLD_ON
+
+
+class _Traced:
+    """A piece of text with, for each character, its place in the text it was cut from (-1 for a
+    line break put in between): the steps that make paragraphs, done so that each character keeps
+    track of whether it was in italic or bold."""
+    __slots__ = ("chars", "at")
+
+    def __init__(self, chars, at):
+        self.chars, self.at = chars, at
+
+    def cut(self, start, end):
+        return _Traced(self.chars[start:end], self.at[start:end])
+
+    def lstrip(self):
+        t = self.chars.lstrip()
+        return self.cut(len(self.chars) - len(t), len(self.chars))
+
+    def strip(self):
+        i = len(self.chars) - len(self.chars.lstrip())
+        j = len(self.chars.rstrip())
+        return self.cut(i, max(i, j))
+
+    def lines(self):
+        """Its lines stripped, the empty ones dropped, joined again by line breaks."""
+        parts, start = [], 0
+        for i in range(len(self.chars) + 1):
+            if i == len(self.chars) or self.chars[i] == "\n":
+                piece = self.cut(start, i)
+                if piece.chars.strip():
+                    parts.append(piece.strip())
+                start = i + 1
+        if len(parts) == 1:
+            return parts[0]
+        chars, at = [], []
+        for k, p in enumerate(parts):
+            if k:
+                chars.append("\n")
+                at.append(-1)
+            chars.append(p.chars)
+            at.extend(p.at)
+        return _Traced("".join(chars), at)
+
+    def without(self, pattern):
+        if not pattern.search(self.chars):
+            return self
+        chars, at, start = [], [], 0
+        for m in pattern.finditer(self.chars):
+            chars.append(self.chars[start:m.start()])
+            at.extend(self.at[start:m.start()])
+            start = m.end()
+        chars.append(self.chars[start:])
+        at.extend(self.at[start:])
+        return _Traced("".join(chars), at)
+
+    def styles(self, set_in):
+        runs, i, n = [], 0, len(self.chars)
+        while i < n:
+            f = set_in[self.at[i]] if self.at[i] >= 0 else 0
+            j = i + 1
+            while j < n and (set_in[self.at[j]] if self.at[j] >= 0 else f) == f:
+                j += 1
+            if f:
+                runs.append((i, j, f))
+            i = j
+        return runs
+
+    @staticmethod
+    def collapse(text):
+        """Every run of these spaces made one plain space, as the text always was."""
+        chars, at, start = [], [], 0
+        for m in _SPACES.finditer(text):
+            chars.append(text[start:m.start()])
+            at.extend(range(start, m.start()))
+            chars.append(" ")
+            at.append(m.start())
+            start = m.end()
+        chars.append(text[start:])
+        at.extend(range(start, len(text)))
+        return _Traced("".join(chars), at)
+
+
 def to_blocks(text, image):
     """Paragraphs with their kind, and the pictures between them. `image` maps an `src` to what
     the reader can load, or None to drop it. Kinds are marked with control characters before the
-    tags are stripped."""
+    tags are stripped. Words in italic or bold keep it as runs beside the text (Para.styles): the
+    text itself is exactly what it is without them, so a place in it is the same either way."""
     s = _COMMENTS.sub("", text)
     s = _SVG_IMAGE.sub(lambda m: '<img src="%s"/>' % m.group(1), s)
 
@@ -992,31 +1168,55 @@ def to_blocks(text, image):
             return m.group(0) + MARK + "S"
         return m.group(0)
     s = _CLASSED.sub(classed, s)
+    # a text that carries these control characters itself is left without emphasis, as it is
+    marked = not _EMPHASIS_MARKS.search(s)
+    if marked:
+        s = _EMPHASIS.sub(_emphasis, s)
     s = _BR.sub("\n", s)
     s = _PARA_BREAK.sub("\n\n", s)
     s = _ANY_TAG.sub("", s)
     s = decode_entities(s)
-    s = _SPACES.sub(" ", s)
-    blocks, paras = [], []
-    for raw in _BLANK_LINE.split(s):
-        para = "\n".join(line.strip() for line in raw.split("\n") if line.strip())
-        if not para:
+    # the marks out: the text without them, and what each character is set in
+    plain, set_in, italic, bold = [], [], 0, 0
+    for c in s:
+        if marked and c in ITALIC_ON + ITALIC_OFF + BOLD_ON + BOLD_OFF:
+            if c == ITALIC_ON:
+                italic += 1
+            elif c == ITALIC_OFF:
+                italic = max(0, italic - 1)
+            elif c == BOLD_ON:
+                bold += 1
+            else:
+                bold = max(0, bold - 1)
             continue
-        if para.startswith(IMG):
+        plain.append(c)
+        set_in.append((ITALIC if italic else 0) | (BOLD if bold else 0))
+    whole = _Traced.collapse("".join(plain))
+    blocks, paras, start = [], [], 0
+    raws = []
+    for m in _BLANK_LINE.finditer(whole.chars):
+        raws.append(whole.cut(start, m.start()))
+        start = m.end()
+    raws.append(whole.cut(start, len(whole.chars)))
+    for raw in raws:
+        para = raw.lines()
+        if not para.chars:
+            continue
+        if para.chars.startswith(IMG):
             if paras:
                 blocks.append(TextBlock(paras))
                 paras = []
-            blocks.append(ImageBlock(para[1:].split("\n")[0].strip()))
+            blocks.append(ImageBlock(para.chars[1:].split("\n")[0].strip()))
             continue
         kind, t = NORMAL, para
-        while len(t) > 1 and t[0] == MARK:
-            kind = {"H": HEADING, "L": LEAD, "S": SMALL}.get(t[1], kind)
-            t = t[2:].lstrip()
-        t = _MARKS.sub("", t)
-        if t in ("---", "♦"):       # the pipeline's separators
+        while len(t.chars) > 1 and t.chars[0] == MARK:
+            kind = {"H": HEADING, "L": LEAD, "S": SMALL}.get(t.chars[1], kind)
+            t = t.cut(2, len(t.chars)).lstrip()
+        t = t.without(_MARKS)
+        if t.chars in ("---", "♦"):       # the pipeline's separators
             continue
-        if t:
-            paras.append(Para(t, kind))
+        if t.chars:
+            paras.append(Para(t.chars, kind, t.styles(set_in)))
     if paras:
         blocks.append(TextBlock(paras))
     return blocks
@@ -1380,17 +1580,18 @@ def _split_long(chapters, limit=12000):
                 if state["size"] + length > limit and (state["part"] or state["blocks"]):
                     flush_part()
                 if length > limit:          # a single monstrous paragraph is cut hard
-                    t = p.text
-                    while len(t) > limit:
-                        cut = t.rfind(" ", 0, limit + 1)
+                    o = 0
+                    while len(p.text) - o > limit:
+                        cut = p.text.rfind(" ", o, o + limit + 1) - o
                         if cut < limit // 2:
                             cut = limit
-                        state["part"].append(Para(t[:cut], p.kind))
-                        t = t[cut:].lstrip()
+                        state["part"].append(p.slice(o, o + cut))
+                        o += cut
+                        o += len(p.text[o:]) - len(p.text[o:].lstrip())
                         flush_part()
-                    if t:
-                        state["part"].append(Para(t, p.kind))
-                        state["size"] += u16(t)
+                    if o < len(p.text):
+                        state["part"].append(p.slice(o, len(p.text)))
+                        state["size"] += u16(p.text[o:])
                 else:
                     state["part"].append(p)
                     state["size"] += length + 1
@@ -1451,12 +1652,16 @@ class Library:
     def path(self, entry):
         return os.path.join(BOOKS_DIR, entry["fileName"])
 
-    def save_position(self, book_id, chapter, char_offset, progress, when=None):
-        """`when` is given for a place read on another device: it keeps the date it was read."""
+    def save_position(self, book_id, chapter, char_offset, progress, when=None, article=None):
+        """`when` is given for a place read on another device: it keeps the date it was read.
+        `article` = the chapter the article being read begins with, in a magazine: its own place
+        is kept too, so that it reopens there."""
         with self.lock:
             e = self.get(book_id)
             if e:
                 e.update(chapter=chapter, charOffset=char_offset, progress=progress, opened=when or _now())
+                if article is not None:
+                    e.setdefault("places", {})[str(article)] = [chapter, char_offset]
                 self._save()
 
     def link(self, book_id, source, source_name):
@@ -1510,7 +1715,7 @@ class Library:
             self.books = [b for b in self.books if b["id"] != book_id]
             self._save()
 
-    def add(self, source_path, display_name, source=None, move=False):
+    def add(self, source_path, display_name, source=None, move=False, modified=0):
         """Copy a file onto the shelf (or move it, for a download), parsing it once to make sure
         it can be read. The same book again replaces the old copy but keeps its place. Blocking."""
         tmp = os.path.join(BOOKS_DIR, "import.tmp")
@@ -1544,7 +1749,9 @@ class Library:
                      "magazine": book.magazine is not None, "source": source or (same.get("source") if same else None),
                      # the file's name: the drive's for a book of the library, else as it was opened, for the day it is sent to the library
                      "sourceName": display_name if source or not (same and same.get("source")) else same.get("sourceName"),
-                     "fingerprint": fingerprint, "bookId": book_uid}
+                     "fingerprint": fingerprint, "bookId": book_uid,
+                     # the drive's last change of the file: when an issue came out, as far as we know
+                     "sourceModified": modified if source else (same.get("sourceModified", 0) if same else 0)}
             if same:
                 try:
                     os.remove(self.path(same))
@@ -2061,6 +2268,179 @@ def merge_folder(books, folder, subfolders, found):
     return kept + [b for b in found if b["folder"] == folder]
 
 
+# ------------------------------------------------------------------------------------------
+# Magazines: the issues of one magazine are told apart from those of another by the title of the
+# issue (dc:title), the date taken off — « 24 heures — Edition du mardi 3 novembre 2026 » is an
+# issue of « 24 heures ». The title, not the publisher: one publisher prints several papers, and
+# the pipeline names its podcasts « Huberman Lab — <episode> — Édition du … ». The name is what
+# comes before the first dash between spaces when what follows has a figure in it; otherwise the
+# title up to its date, if it has one; otherwise the whole title. Only magazines are grouped.
+# Rule for rule the phone's Magazines.
+# ------------------------------------------------------------------------------------------
+
+_DASHES = (" — ", " – ", " - ")
+_MONTH = r"[^\W\d_]{3,}\.?"
+_ISSUE_DATE = re.compile(
+    r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./]\d{1,2}[./]\d{2,4}|\b\d{1,2}(er|\.)?\s+" + _MONTH + r"\s+\d{4}|\b" + _MONTH + r"\s+\d{1,2}(st|nd|rd|th)?,?\s+\d{4}"
+    r"|\b" + _MONTH + r"\s+\d{4}(?![-./]?\d)|\b(n[°ºo]\.?|nr\.?|no\.?|#)\s*\d+", re.I)
+_TRAILING = re.compile(r"[\s,;:·|(\-–—]+$|\s+(du|de|des|del|de la|do|da|of|the|vom|von|am|le|la|el|edition|édition|edición|edição|ausgabe|issue|выпуск|от)$", re.I)
+_WEEKDAY = re.compile(r"\s+(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|monday|tuesday|wednesday|thursday|friday|saturday|sunday|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)$", re.I)
+_LEADING = re.compile(r"^(du|de|des|del|do|da|of|vom|von|от)\s+", re.I)
+
+
+def magazine_name(title):
+    """The magazine's name in the title of one of its issues."""
+    t = title.strip()
+    for dash in _DASHES:
+        i = t.find(dash)
+        if i > 0 and any(c.isdigit() for c in t[i:]):
+            return t[:i].strip()
+    m = _ISSUE_DATE.search(t)
+    if not m or m.start() == 0:
+        return t
+    head = t[:m.start()]
+    while True:
+        nxt = _WEEKDAY.sub("", _TRAILING.sub("", head))
+        if nxt == head:
+            break
+        head = nxt
+    return head.strip() or t
+
+
+def magazine_key(title):
+    """What issues of the same magazine share: the name in lower case, accents and spacing aside."""
+    bare = unicodedata.normalize("NFD", magazine_name(title).lower())
+    return re.sub(r"\s+", " ", "".join(c for c in bare if not unicodedata.combining(c))).strip()
+
+
+def magazine_issue(title):
+    """The title of the issue without the magazine's name: « Edition du mercredi 4 novembre 2026 »."""
+    name, t = magazine_name(title), title.strip()
+    if name == t:
+        return t
+    rest = _LEADING.sub("", t[len(name):].lstrip(" —–-,:|·")) if t.startswith(name) else t
+    return rest or t
+
+
+def issue_time(entry):
+    """When an issue came out, as far as this computer knows: the drive's date, else when it came here."""
+    return entry.get("sourceModified") or entry.get("added", 0)
+
+
+def magazine_issues(entries, key):
+    """The issues of one magazine on the shelf, newest first."""
+    return sorted((e for e in entries if e.get("magazine") and magazine_key(e["title"]) == key),
+                  key=lambda e: (-issue_time(e), [-ord(c) for c in e["title"]]))
+
+
+def magazine_groups(entries):
+    """The issues of each magazine with two or more on the shelf, by key, newest first."""
+    keys = {}
+    for e in entries:
+        if e.get("magazine"):
+            keys.setdefault(magazine_key(e["title"]), []).append(e)
+    return {k: magazine_issues(v, k) for k, v in keys.items() if k and len(v) >= 2}
+
+
+# ------------------------------------------------------------------------------------------
+# Followed folders: a folder of the drive followed for its new books (the day's paper). `seen` =
+# its books that are no longer new: there when it was first followed (all but the latest day's),
+# fetched since, or removed from the shelf. Nothing is fetched by itself: a click on a followed
+# folder lists that folder again and fetches its new books. Rule for rule the phone's Follow.
+# ------------------------------------------------------------------------------------------
+
+def first_seen(books, folder, tz=None):
+    """What counts as seen when a folder is first followed: everything in it but the books of its
+    latest day, which are new at once — following a folder of daily papers gives today's."""
+    inside = [b for b in books if folder_under(folder, b["folder"])]
+    newest = max((b.get("modified", 0) for b in inside), default=0)
+    if newest <= 0:
+        return []
+
+    def day(ms):
+        return datetime.fromtimestamp(ms / 1000.0, tz).date()
+    latest = day(newest)
+    return sorted(b["ref"] for b in inside if b.get("modified", 0) <= 0 or day(b["modified"]) != latest)
+
+
+def fresh_books(books, followed, on_shelf):
+    """The new books of a followed folder (and of the folders inside it), newest first."""
+    seen = set(followed.get("seen", ()))
+    found = [b for b in books if folder_under(followed["folder"], b["folder"]) and b["ref"] not in seen and b["ref"] not in on_shelf]
+    found.sort(key=lambda b: b["name"].lower(), reverse=True)
+    found.sort(key=lambda b: -b.get("modified", 0))
+    return found
+
+
+def prune_seen(followed, books):
+    """What is still worth remembering as seen: the books the folder holds now."""
+    there = {b["ref"] for b in books if folder_under(followed["folder"], b["folder"])}
+    return dict(followed, seen=[r for r in followed.get("seen", ()) if r in there])
+
+
+class Following:
+    """The followed folders, kept in follow.json next to the library's index."""
+
+    def __init__(self):
+        try:
+            with open(FOLLOW_FILE, encoding="utf-8") as fh:
+                self.folders = [f for f in json.load(fh).get("folders", []) if f.get("folder")]
+        except Exception:
+            self.folders = []
+        self.lock = threading.RLock()
+
+    def _save(self):
+        try:
+            _write_private(FOLLOW_FILE, json.dumps({"folders": self.folders}, ensure_ascii=False, indent=1))
+        except OSError:
+            pass
+
+    def get(self, folder):
+        return next((f for f in self.folders if f["folder"] == folder), None)
+
+    def follow(self, folder, books):
+        with self.lock:
+            if folder and not self.get(folder):
+                self.folders.append({"folder": folder, "seen": first_seen(books, folder), "checkedAt": 0})
+                self._save()
+
+    def unfollow(self, folder):
+        with self.lock:
+            self.folders = [f for f in self.folders if f["folder"] != folder]
+            self._save()
+
+    def seen(self, folder, ref):
+        with self.lock:
+            f = self.get(folder)
+            if f and ref not in f["seen"]:
+                f["seen"].append(ref)
+                self._save()
+
+    def removed(self, entry):
+        """A book of the library left the shelf: it does not come back as new."""
+        ref = entry.get("source")
+        if not ref:
+            return
+        with self.lock:
+            changed = False
+            for f in self.folders:
+                if ref not in f["seen"]:
+                    f["seen"].append(ref)
+                    changed = True
+            if changed:
+                self._save()
+
+    def checked(self, folder, books):
+        with self.lock:
+            self.folders = [dict(prune_seen(f, books), checkedAt=_now()) if f["folder"] == folder else f for f in self.folders]
+            self._save()
+
+    def forget(self):
+        with self.lock:
+            self.folders = []
+            self._save()
+
+
 EMPTY_INDEX = {"scannedAt": 0, "source": "", "books": [], "complete": True, "frontier": [], "failed": [], "folders": 0}
 
 
@@ -2086,6 +2466,7 @@ class RemoteLibrary:
         self.stop = threading.Event()
         self.changed = 0            # bumped at every step, for the window to notice
         self.refreshing = False
+        self.relisting = threading.Lock()
 
     @property
     def scanning(self):
@@ -2150,14 +2531,36 @@ class RemoteLibrary:
         """One folder of the drive looked at again, without walking the rest: the one Reader's
         Podcasts sends its transcripts to, so that a transcript made this morning is in the
         library when it is opened, with no scan to ask for. In the background."""
-        remote = remote_for(cfg)
-        if remote is None or self.scanning or not self.matches(cfg) or not self.index["complete"] or self.refreshing or left_out(excluded_folders(cfg), name):
+        if remote_for(cfg) is None or self.scanning or not self.matches(cfg) or not self.index["complete"] or self.refreshing or left_out(excluded_folders(cfg), name):
             return
+
         self.refreshing = True
-        source = self.index["source"]
 
         def run():
             try:
+                self.relist(cfg, name)
+            except Exception:
+                pass                                # could not be read: what was known stays
+            finally:
+                self.refreshing = False
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def relist(self, cfg, name):
+        """One folder listed again with the folders inside it, and merged into the library: its
+        books replaced by what the drive has now. While a sync runs, the sync brings them; for
+        another account than the index's, nothing is done. Blocking; raises when the drive could
+        not be read, leaving the index as it was."""
+        remote = remote_for(cfg)
+        if remote is None:
+            raise IOError("no library")
+        if self.scanning or not self.matches(cfg):
+            return
+        excluded = excluded_folders(cfg)
+        with self.relisting:
+            self.refreshing = True
+            try:
+                source = self.index["source"]
                 top = remote.folder_ref(name)
                 found, queue = [], [top]
                 while queue and len(found) < 20000:
@@ -2167,21 +2570,18 @@ class RemoteLibrary:
                     except IOError as exc:
                         if folder == top and "404" in str(exc):
                             break                   # no such folder (yet, or any more): nothing in it
-                        return                      # could not be read: what was known stays
-                    queue.extend(dirs)
+                        raise
+                    queue.extend(d for d in dirs if not (excluded and left_out(excluded, remote.folder_path(d))))     # a folder left out stays out
                     found.extend(books)
                 if self.scanning or self.index["source"] != source:
                     return
-                kept = [b for b in self.index["books"] if b["folder"] != name and not b["folder"].startswith(name + "/")]
+                kept = [b for b in self.index["books"] if not folder_under(name, b["folder"]) or left_out(excluded, b["folder"])]
                 merged = kept + found
-                if sorted(b["ref"] for b in merged) != sorted(b["ref"] for b in self.index["books"]):
+                key = lambda b: (b["ref"], b.get("modified", 0), b.get("size", 0))
+                if sorted(map(key, merged)) != sorted(map(key, self.index["books"])):
                     self._save(dict(self.index, books=merged))
-            except Exception:
-                pass
             finally:
                 self.refreshing = False
-
-        threading.Thread(target=run, daemon=True).start()
 
     def forget(self):
         self.cancel()
@@ -3049,6 +3449,20 @@ class LaidBlock:
                 r = QtGui.QTextLayout.FormatRange()
                 r.start, r.length, r.format = pos, length, fmt
                 formats.append(r)
+            # italic and bold: formats on the laid-out string, where every line of an indented
+            # paragraph is two em spaces further on (the indents are not text)
+            for a, b, flags in p.styles or ():
+                def laid(k, p=p, pos=pos, indent=indent):
+                    head = p.text[:k]
+                    return pos + (2 + 2 * head.count("\n") if indent else 0) + u16(head)
+                fmt = QtGui.QTextCharFormat()
+                if flags & ITALIC:
+                    fmt.setFontItalic(True)
+                if flags & BOLD:
+                    fmt.setFontWeight(QtGui.QFont.Bold)
+                r = QtGui.QTextLayout.FormatRange()
+                r.start, r.length, r.format = laid(a), laid(b) - laid(a), fmt
+                formats.append(r)
             parts.append(text)
             pos += length
         self.layout = QtGui.QTextLayout("".join(parts), font)
@@ -3233,9 +3647,10 @@ THUMB = 64
 class Row:
     """`current` = the row one stands on (the list opens on it); `inverted` = drawn the same way
     without being it (a folder chosen for the library)."""
-    def __init__(self, title="", secondary="", action=None, menu=None, kind=ROW, current=False, lines=2, thumb=None, inverted=False):
+    def __init__(self, title="", secondary="", action=None, menu=None, kind=ROW, current=False, lines=2, thumb=None, inverted=False, thumb_size=None):
         self.title, self.secondary, self.action, self.menu = title, secondary, action, menu
         self.kind, self.current, self.lines, self.thumb, self.inverted = kind, current, lines, thumb, inverted
+        self.thumb_size = thumb_size or THUMB
 
 
 def wrap(text, font, width, max_lines):
@@ -3278,11 +3693,12 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
         return self.main.rows[i] if i is not None and i < len(self.main.rows) else Row(kind=RULE)
 
     def _width(self, row, total):
-        return total - 2 * self.PAD_H - (THUMB + 16 if row.thumb else 0)
+        return total - 2 * self.PAD_H - (row.thumb_size + 16 if row.thumb else 0)
 
     def sizeHint(self, option, index):
-        row = self._row(index)
-        width = self.main.listing.viewport().width()
+        return self.size_of(self._row(index), self.main.listing.viewport().width())
+
+    def size_of(self, row, width):
         fb, fs = QtGui.QFontMetrics(self.big), QtGui.QFontMetrics(self.small)
         if row.kind == RULE:
             return QtCore.QSize(width, 17)
@@ -3294,7 +3710,7 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
         if row.secondary:
             height += fs.height() + 2
         if row.thumb:
-            height = max(height, THUMB)
+            height = max(height, row.thumb_size)
         return QtCore.QSize(width, height + 2 * self.PAD_V)
 
     def paint(self, p, option, index):
@@ -3341,9 +3757,10 @@ class RowDelegate(QtWidgets.QStyledItemDelegate):
             if row.thumb:
                 store, source = row.thumb
                 ratio = self.main.devicePixelRatioF()
-                pixmap = store.pixmap(source, int(THUMB * ratio), int(THUMB * ratio), crop=True)
+                size = row.thumb_size
+                pixmap = store.pixmap(source, int(size * ratio), int(size * ratio), crop=True)
                 if pixmap:
-                    p.drawPixmap(QtCore.QRect(r.right() - THUMB + 1, r.top() + (r.height() - THUMB) // 2, THUMB, THUMB), pixmap)
+                    p.drawPixmap(QtCore.QRect(r.right() - size + 1, r.top() + (r.height() - size) // 2, size, size), pixmap)
             lines = wrap(row.title, self.big, width, row.lines)
             height = len(lines) * fb.height() + (fs.height() + 2 if row.secondary else 0)
             y = r.top() + max(0, (r.height() - height) // 2)
@@ -3586,7 +4003,39 @@ class Reader(QtWidgets.QWidget):
 
     def remember(self):
         if self.book and self.pages:
-            self.main.library.save_position(self.entry["id"], self.chapter, page_start(self.pages[self.page]), self.progress())
+            self.main.library.save_position(self.entry["id"], self.chapter, page_start(self.pages[self.page]), self.progress(), article=self.article())
+
+    # ---- a magazine's articles ----
+
+    def starts(self):
+        """The chapters the articles of a magazine begin with (a long article goes on in the next ones)."""
+        return sorted({a.chapter for a in self.book.magazine}) if self.book and self.book.magazine else []
+
+    def article(self):
+        before = [c for c in self.starts() if c <= self.chapter]
+        return before[-1] if before else None
+
+    def previous_article(self):
+        a = self.article()
+        before = [c for c in self.starts() if a is not None and c < a]
+        return before[-1] if before else None
+
+    def next_article(self):
+        return next((c for c in self.starts() if c > self.chapter), None)
+
+    def to_article(self, start):
+        """Another article, where it was left (at its top the first time)."""
+        if start is None:
+            return
+        self.turns += 1
+        self.main.turned()
+        at = (self.main.library.get(self.entry["id"]) or self.entry).get("places", {}).get(str(start))
+        self.go_to(*(at if at else (start, 0)))
+
+    def bar_zone(self):
+        """The article bar of a magazine, above the text: ‹ previous article · contents · next ›."""
+        _font, area = self.frame()
+        return QtCore.QRect(area.left(), 0, area.width() - 40, area.top() - 2)
 
     # ---- turning ----
 
@@ -3643,6 +4092,15 @@ class Reader(QtWidgets.QWidget):
         if e.button() != QtCore.Qt.LeftButton or self.pressed is None:
             return
         self.pressed = None
+        if self.selecting is None and self.book and self.book.magazine and self.bar_zone().contains(e.pos()):
+            zone = self.bar_zone()
+            if e.x() < zone.left() + zone.width() / 3.0:
+                self.to_article(self.previous_article())
+            elif e.x() > zone.left() + zone.width() * 2 / 3.0:
+                self.to_article(self.next_article())
+            else:
+                self.main.to_contents(self.entry["id"])
+            return
         chosen = self.selection()
         if self.selecting is not None:
             if chosen:
@@ -3725,8 +4183,21 @@ class Reader(QtWidgets.QWidget):
         page = pages[self.page]
         p.setFont(small)
         p.setPen(dim)
-        p.drawText(QtCore.QRect(area.left(), 20, area.width() - 40, fs.height()), QtCore.Qt.AlignLeft,
-                   fs.elidedText(self.book.title, QtCore.Qt.ElideRight, area.width() - 40))
+        if self.book.magazine:
+            # the article bar: ‹ previous article · contents · next article ›, text only
+            zone = QtCore.QRect(area.left(), 20, area.width() - 40, fs.height())
+            off = QtGui.QColor(fg)
+            off.setAlphaF(0.2)
+            p.drawText(zone, QtCore.Qt.AlignHCenter, _("contents"))
+            p.setFont(self.main.big_font())
+            p.setPen(dim if self.previous_article() is not None else off)
+            p.drawText(zone, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, "‹")
+            p.setPen(dim if self.next_article() is not None else off)
+            p.drawText(zone, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter, "›")
+            p.setPen(dim)
+        else:
+            p.drawText(QtCore.QRect(area.left(), 20, area.width() - 40, fs.height()), QtCore.Qt.AlignLeft,
+                       fs.elidedText(self.book.title, QtCore.Qt.ElideRight, area.width() - 40))
         p.setFont(self.main.big_font())
         p.drawText(QtCore.QRect(area.right() - 39, 20, 40, fs.height()), QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter, "⋯")
         self.paint_marks(p, area, fg, QtGui.QColor(self.main.colors["accent"]))
@@ -3865,6 +4336,7 @@ class PictureView(QtWidgets.QWidget):
 # ------------------------------------------------------------------------------------------
 
 SHELF, BOOK, CHAPTERS, SETTINGS, LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS, SEARCH = "shelf", "book", "chapters", "settings", "library", "folder", "all", "library_folders", "search"
+ISSUES = "issues"       # the issues on this computer of one magazine ("magazine", key) or of one followed folder ("folder", path)
 ADD_TO_LIBRARY = "add_to_library"       # choosing the folder of the library a book of the shelf is sent to
 UI_SIZES = {"S": 11, "M": 13, "L": 15}
 
@@ -3876,6 +4348,11 @@ class Main(QtWidgets.QMainWindow):
         self.theme = self.cfg.get("theme", "DARK")
         self.library = Library()
         self.remote = RemoteLibrary()
+        self.following = Following()
+        self.follow_progress = {}       # folder -> (done, total) while its new books are fetched; total 0 while it is listed
+        self.follow_errors = {}         # folder -> why the last click did not bring everything
+        self.follow_changed, self.follow_seen = 0, 0
+        self.contents_page = {}         # book id -> the page of its contents shown
         self.awake = Awake()
         self.stack = [self.home_screen()]
         self.rows = []
@@ -3972,6 +4449,14 @@ class Main(QtWidgets.QMainWindow):
         self.foot_invite.clicked.connect(lambda: self.push((LIBRARY,)))
         box.addWidget(self.foot_open)
         box.addWidget(self.foot_invite)
+        self.foot_page = QtWidgets.QLabel("")
+        self.foot_page.setObjectName("page")
+        self.foot_page.setAlignment(QtCore.Qt.AlignRight)
+        self.foot_page.setVisible(False)
+        box.addWidget(self.foot_page)
+        self.paged = None
+        self.listing.viewport().installEventFilter(self)
+        self.listing.installEventFilter(self)
         self.pages.addWidget(page)
 
         self.reader = Reader(self)
@@ -3981,6 +4466,32 @@ class Main(QtWidgets.QMainWindow):
                              ("Ctrl+O", self.pick_book), ("Ctrl+Q", self.close)):
             shortcut = QtWidgets.QShortcut(QtGui.QKeySequence(keys), self)
             shortcut.activated.connect(action)
+
+    def eventFilter(self, obj, e):
+        """On a magazine's contents: the side thirds turn the page, as in the reader; the wheel
+        and the arrow keys too. The middle third is the list's own: a click opens the article."""
+        if self.paged and obj is self.listing.viewport():
+            t = e.type()
+            if t in (QtCore.QEvent.MouseButtonPress, QtCore.QEvent.MouseButtonRelease, QtCore.QEvent.MouseButtonDblClick) and e.button() == QtCore.Qt.LeftButton:
+                third = obj.width() / 3.0
+                if e.x() < third or e.x() > 2 * third:
+                    if t == QtCore.QEvent.MouseButtonRelease:
+                        self.turn_contents(e.x() > 2 * third)
+                    return True
+            elif t == QtCore.QEvent.Wheel:
+                if e.angleDelta().y():
+                    self.turn_contents(e.angleDelta().y() < 0)
+                return True
+            elif t == QtCore.QEvent.Resize:
+                QtCore.QTimer.singleShot(0, self.show_screen)
+        if self.paged and obj is self.listing and e.type() == QtCore.QEvent.KeyPress:
+            if e.key() in (QtCore.Qt.Key_Right, QtCore.Qt.Key_PageDown, QtCore.Qt.Key_Space):
+                self.turn_contents(True)
+                return True
+            if e.key() in (QtCore.Qt.Key_Left, QtCore.Qt.Key_PageUp):
+                self.turn_contents(False)
+                return True
+        return super().eventFilter(obj, e)
 
     def _rule(self):
         line = QtWidgets.QFrame()
@@ -4019,6 +4530,7 @@ class Main(QtWidgets.QMainWindow):
             QLabel#title {{ font-size: {s + 5}pt; }}
             QLabel#invite {{ font-size: {s}pt; padding: 6px 24px 14px 24px; }}
             QLabel#sign {{ font-size: {s + 7}pt; padding: 0 8px; }}
+            QLabel#page {{ font-size: {s - 1}pt; color: {dim}; padding: 6px 24px 14px 24px; }}
             QListWidget {{ background: {bg}; border: none; outline: none; }}
             QScrollBar:vertical {{ background: {bg}; width: 6px; }}
             QScrollBar:horizontal {{ background: {bg}; height: 0; }}
@@ -4175,9 +4687,19 @@ class Main(QtWidgets.QMainWindow):
         return _("books")
 
     def open_entry(self, entry, from_home=False):
+        """A book of the shelf opened at its page. A magazine never opened shows its contents
+        first; opened before, it goes back to the article it was left at, the contents one click above."""
         if from_home:
             self.home()
-        self.push((CHAPTERS, entry["id"]) if entry.get("magazine") else (BOOK, entry["id"]))
+        self.push((CHAPTERS, entry["id"]) if entry.get("magazine") and not entry.get("opened") else (BOOK, entry["id"]))
+
+    def to_contents(self, book_id):
+        """From an article of a magazine to its contents: back down to them, or in place of the article."""
+        if len(self.stack) > 1 and self.stack[-2] == (CHAPTERS, book_id):
+            self.pop()
+        else:
+            self.stack.pop()
+            self.push((CHAPTERS, book_id))
 
     def show_screen(self, reset=False):
         self.rehome()
@@ -4198,8 +4720,16 @@ class Main(QtWidgets.QMainWindow):
         self.awake.set(False)
         if kind == LIBRARY and reset:
             self.enter_library()
+        self.paged = None
+        if kind == CHAPTERS and reset:
+            self.contents_page.pop(self.screen[1], None)       # the page of the article read last
         title, rows, menu = getattr(self, "screen_" + kind)()
         self.rows, self.menu_items = rows, menu
+        # a magazine's contents are pages: no scrolling, the page number at the foot as in the reader
+        self.listing.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff if self.paged else QtCore.Qt.ScrollBarAsNeeded)
+        self.foot_page.setVisible(bool(self.paged and self.paged[2] > 1))
+        if self.paged:
+            self.foot_page.setText("%d/%d" % (self.paged[1] + 1, self.paged[2]))
         self.title.setText(title)
         self.back.setVisible(len(self.stack) > 1)
         self.more.setVisible(bool(menu))
@@ -4294,26 +4824,48 @@ class Main(QtWidgets.QMainWindow):
             books.sort(key=lambda b: b["title"].lower())
         elif order == "ADDED":
             books.sort(key=lambda b: -b.get("added", 0))
+        # the issues of one magazine make one row, where its latest issue would stand: a click
+        # opens the latest issue where it was left, a right click lists them all
+        groups, done = magazine_groups(books), set()
         for b in books:
-            line = " · ".join(x for x in ("%d%%" % b.get("progress", 0) if b.get("opened") else _("not started"),
-                                          when_label(b.get("opened", 0)), b["format"].lower()) if x)
-            rows.append(Row(b["title"], line, lambda b=b: self.open_entry(b), lambda b=b: [
-                (_("read"), lambda: self.push((BOOK, b["id"]))),
-                (_("contents") if b.get("magazine") else _("chapters"), lambda: self.push((CHAPTERS, b["id"]))),
-                (_("remove from the shelf"), lambda: self.remove(b["id"]))]
-                + ([(_("add to the library"), lambda: self.push((ADD_TO_LIBRARY, b["id"])))] if can_send(self.cfg, b) else [])))
+            key = magazine_key(b["title"]) if b.get("magazine") else ""
+            issues = groups.get(key)
+            if issues:
+                if key in done:
+                    continue
+                done.add(key)
+                latest = issues[0]
+                rows.append(Row(magazine_name(latest["title"]) + " · " + n_issues(len(issues)),
+                                " · ".join((magazine_issue(latest["title"]), "%d%%" % latest.get("progress", 0) if latest.get("opened") else _("not started"))),
+                                lambda latest=latest: self.open_entry(latest),
+                                lambda key=key: [(_("issues on this computer"), lambda: self.push((ISSUES, "magazine", key)))]))
+                continue
+            rows.append(Row(b["title"], self.shelf_line(b), lambda b=b: self.open_entry(b), lambda b=b: self.shelf_menu(b)))
         menu = [(_("+ open a book"), self.pick_book), (_("library"), self.to_library),
                 (_("order") + " · " + order_name(order), self.order_menu(SHELF_ORDERS, order, "shelf_sort")), None,
                 self.theme_item(), (_("settings"), lambda: self.push((SETTINGS,)))]
         # the home screen without a library; with one, a page of it
         return (_("books") if len(self.stack) == 1 else _("on this computer")), rows, menu
 
+    def shelf_line(self, b):
+        return " · ".join(x for x in ("%d%%" % b.get("progress", 0) if b.get("opened") else _("not started"),
+                                      when_label(b.get("opened", 0)), b["format"].lower()) if x)
+
+    def shelf_menu(self, b):
+        return ([(_("read"), lambda: self.push((BOOK, b["id"]))),
+                 (_("contents") if b.get("magazine") else _("chapters"), lambda: self.push((CHAPTERS, b["id"]))),
+                 (_("remove from the shelf"), lambda: self.remove(b["id"]))]
+                + ([(_("add to the library"), lambda: self.push((ADD_TO_LIBRARY, b["id"])))] if can_send(self.cfg, b) else []))
+
     def order_menu(self, orders, order, setting):
         """The orders a list can take, the current one ticked, as a submenu."""
         return [(order_name(o) + ("  ✓" if o == order else ""), lambda o=o: self.set(setting, o)) for o in orders]
 
     def remove(self, book_id):
+        entry = self.library.get(book_id)
         self.library.remove(book_id)
+        if entry:
+            self.following.removed(entry)
         if self.screen[0] in (BOOK, CHAPTERS):
             self.home()
         self.show_screen(reset=self.screen[0] != SHELF)
@@ -4462,8 +5014,7 @@ class Main(QtWidgets.QMainWindow):
         book_id = entry["id"]
 
         def contents():
-            self.home()
-            self.push((CHAPTERS, book_id))
+            self.to_contents(book_id)
 
         self.popup([
             (_("contents"), contents) if entry.get("magazine") else (_("chapters"), lambda: self.push((CHAPTERS, book_id))),
@@ -4675,17 +5226,15 @@ class Main(QtWidgets.QMainWindow):
                 self.home()
             self.push((BOOK, book_id))
 
+        def article(start):
+            # the article where it was left, else at its top
+            at = (entry.get("places") or {}).get(str(start))
+            self.library.save_position(book_id, at[0] if at else start, at[1] if at else 0, entry.get("progress", 0), article=start)
+            self.push((BOOK, book_id))
+
         rows = []
         if book.magazine:
-            store = self.images_of(entry)
-            reading = [a for a in book.magazine if a.chapter <= entry.get("chapter", 0) and entry.get("opened")]
-            current = reading[-1] if reading else None
-            for i, a in enumerate(book.magazine):
-                if a.category and (i == 0 or a.category != book.magazine[i - 1].category):
-                    rows.append(Row(a.category.upper(), kind=SECTION))
-                rows.append(Row(a.title, a.author or "", lambda a=a: go(a.chapter, True), current=a is current, lines=3,
-                                thumb=(store, a.image) if a.image else None))
-            return entry["title"], rows, None
+            return entry["title"], self.contents_rows(entry, book, article), None
         # The parts a long chapter was cut into are one line: the chapter.
         listed = [(i, ch) for i, ch in enumerate(book.chapters)
                   if i == 0 or not ch.title.startswith(book.chapters[i - 1].title.split(" · ")[0] + " · ")]
@@ -4694,6 +5243,51 @@ class Main(QtWidgets.QMainWindow):
         for i, ch in listed:
             rows.append(Row(ch.title, "", lambda i=i: go(i, False), current=i == current, lines=1))
         return entry["title"], rows, None
+
+    def contents_rows(self, entry, book, article):
+        """A magazine's contents as whole pages (e-ink: nothing scrolls), turned like the book's
+        pages: a click on the left third goes back a page, on the right third forward, in the
+        middle it opens the article. Sections by name, repeated at the top of a page that begins
+        in the middle of one; larger pictures. The page of the article read last comes first."""
+        store = self.images_of(entry)
+        reading = [a for a in book.magazine if a.chapter <= entry.get("chapter", 0) and entry.get("opened")]
+        current = reading[-1] if reading else None
+        width, height = self.listing.viewport().width(), max(200, self.listing.viewport().height() - 4)
+        size = lambda row: self.delegate.size_of(row, width).height()
+        pages, page, y = [], [], 0
+        for i, a in enumerate(book.magazine):
+            row = Row(a.title, a.author or "", lambda a=a: article(a.chapter), current=a is current, lines=3,
+                      thumb=(store, a.image) if a.image else None, thumb_size=104)
+            opens = a.category and (i == 0 or a.category != book.magazine[i - 1].category)
+            section = Row(a.category.upper(), kind=SECTION) if a.category else None
+            need = size(row) + (size(section) if opens else 0)
+            if page and y + need > height:
+                pages.append(page)
+                page, y = [], 0
+            if not page and section and not opens:
+                need += size(section)                   # the section named again at the top of the page
+            if section and (opens or not page):
+                page.append(section)
+            page.append(row)
+            y += need
+        if page:
+            pages.append(page)
+        shown = self.contents_page.get(entry["id"])
+        if shown is None:
+            shown = next((n for n, rows in enumerate(pages) if any(r.current for r in rows)), 0)
+        shown = max(0, min(shown, len(pages) - 1))
+        self.contents_page[entry["id"]] = shown
+        self.paged = (entry["id"], shown, len(pages))
+        return pages[shown] if pages else []
+
+    def turn_contents(self, forward):
+        if not self.paged:
+            return
+        book_id, shown, count = self.paged
+        nxt = shown + (1 if forward else -1)
+        if 0 <= nxt < count:
+            self.contents_page[book_id] = nxt
+            self.show_screen()
 
     # ---- settings ----
 
@@ -4817,6 +5411,7 @@ class Main(QtWidgets.QMainWindow):
 
     def forget_library(self):
         self.remote.forget()
+        self.following.forget()
         set_library_url(self.cfg, "")
         self.cfg.update(username="", password="")
         save_config(self.cfg)
@@ -4855,8 +5450,8 @@ class Main(QtWidgets.QMainWindow):
         self.push((LIBRARY_FOLDERS,))
 
     def watch_scan(self):
-        if self.remote.changed != self.seen_change:
-            self.seen_change = self.remote.changed
+        if self.remote.changed != self.seen_change or self.follow_changed != self.follow_seen:
+            self.seen_change, self.follow_seen = self.remote.changed, self.follow_changed
             if self.screen[0] in (LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS):
                 self.show_screen()
 
@@ -4904,7 +5499,11 @@ class Main(QtWidgets.QMainWindow):
             line = " · ".join(x for x in (n_books(count), n_folders(spanned) if spanned > 1 else "",
                                           date_label(modified) if cfg.get("folder_sort") == "NEWEST" and modified > 0 else "") if x)
             rows.append(Row(path or _("top of the drive"), line, lambda path=path: self.push((FOLDER, path, top and bool(path))), lines=1,
-                            menu=(lambda path=path: [(_("leave this folder out"), lambda: self.set_library_excluded(excluded_folders(self.cfg) + [path]))]) if path else None))
+                            menu=(lambda path=path: [
+                                # followed: its new books are one click away, at the top of the library
+                                (_("stop following this folder"), lambda: self.unfollow(path)) if self.following.get(path)
+                                else (_("follow this folder") + "  ·  " + _("its new books one click away, at the top of the library"), lambda: self.follow(path)),
+                                (_("leave this folder out"), lambda: self.set_library_excluded(excluded_folders(self.cfg) + [path]))]) if path else None))
         menu = []
         if not progress and (not index["complete"] or index["failed"]):
             menu.append((_("continue the scan"), lambda: self.scan(False)))
@@ -4927,8 +5526,118 @@ class Main(QtWidgets.QMainWindow):
             last = max(read, key=lambda b: b["opened"])
             rows.append(Row(last["title"], "%s · %d%%" % (_("continue reading"), last.get("progress", 0)),
                             lambda: self.push((BOOK, last["id"])), lines=1))
+        rows.extend(self.followed_rows())
         rows.append(Row(_("on this computer"), n_books(len(self.library.books)), lambda: self.push((SHELF,))))
         return rows
+
+    # ---- followed folders ----
+
+    def followed_rows(self):
+        """A row per followed folder: its name and how many new books it has, counted from the
+        last listing of the drive (no network here). Nothing comes by itself: a click lists that
+        folder again and fetches its new books, then opens the new one — or, when several came or
+        none, the folder's issues on this computer. Right click: the issues, the whole folder, stop."""
+        rows = []
+        on_shelf = {b.get("source") for b in self.library.books if b.get("source")}
+        for f in self.following.folders:
+            folder = f["folder"]
+            fresh = fresh_books(self.remote.index["books"], f, on_shelf)
+            now, error = self.follow_progress.get(folder), self.follow_errors.get(folder)
+            if now and not now[1]:
+                line = _("looking for new books…")
+            elif now:
+                line = _("fetching %d of %d…", min(now[0] + 1, now[1]), now[1])
+            elif error:
+                line = error
+            elif not fresh and f.get("checkedAt"):
+                line = _("nothing new · %s", when_label(f["checkedAt"]))
+            else:
+                line = _("followed folder · click to fetch what is new")
+            name = folder.rsplit("/", 1)[-1]
+            rows.append(Row(name + (" · " + n_new(len(fresh)) if fresh else ""), line, lambda folder=folder: self.fetch_new(folder), lines=1,
+                            menu=lambda folder=folder: [
+                                (_("issues on this computer"), lambda: self.push((ISSUES, "folder", folder))),
+                                (_("the whole folder on the drive"), lambda: self.push((FOLDER, folder, bool(self.cfg.get("library_top_folders")) and "/" not in folder))),
+                                (_("stop following this folder"), lambda: self.unfollow(folder))]))
+        return rows
+
+    def follow(self, folder):
+        self.following.follow(folder, self.remote.index["books"])
+        self.show_screen()
+
+    def unfollow(self, folder):
+        self.following.unfollow(folder)
+        self.show_screen()
+
+    def fetch_new(self, folder):
+        """One click: the folder listed again, then its new books fetched, oldest first, on a
+        thread; the row says how far it is. A failure part way keeps those already fetched."""
+        if folder in self.follow_progress:
+            return
+        cfg = dict(self.cfg)
+        self.follow_progress[folder], self.follow_errors[folder] = (0, 0), ""
+        self.follow_changed += 1
+        self.show_screen()
+        screen = self.screen
+
+        def job():
+            got, error = [], None
+            try:
+                self.remote.relist(cfg, folder)
+                f = self.following.get(folder)
+                if f is None:
+                    return got, None
+                on_shelf = {b.get("source") for b in self.library.books if b.get("source")}
+                todo = list(reversed(fresh_books(self.remote.index["books"], f, on_shelf)))
+                self.follow_progress[folder] = (0, len(todo))
+                self.follow_changed += 1
+                remote = remote_for(cfg)
+                for book in todo:
+                    tmp = os.path.join(DATA_DIR, "download.tmp")
+                    remote.download(book, tmp)
+                    got.append(self.library.add(tmp, book["name"], source=book["ref"], move=True, modified=book.get("modified", 0)))
+                    self.following.seen(folder, book["ref"])
+                    self.follow_progress[folder] = (len(got), len(todo))
+                    self.follow_changed += 1
+                self.following.checked(folder, self.remote.index["books"])
+            except Exception as exc:
+                error = exc
+            return got, error
+
+        def done(result, crash):
+            got, error = result if result else ([], crash)
+            self.follow_progress.pop(folder, None)
+            self.follow_changed += 1
+            if error is not None:
+                self.follow_errors[folder] = (_("the drive refused the login") if isinstance(error, WrongLogin)
+                                              else _("the book could not be fetched: %s", str(error)[:160] or type(error).__name__))
+            if self.screen != screen or (error is not None and not got):
+                return self.show_screen()
+            if len(got) == 1:
+                self.open_entry(got[0])
+            else:
+                self.push((ISSUES, "folder", folder))
+
+        self.run(job, done)
+
+    def screen_issues(self):
+        """The issues on this computer of one magazine, or of one followed folder of the drive,
+        the newest first. A click opens one (its contents the first time, else where it was left)."""
+        kind, key = self.screen[1], self.screen[2]
+        if kind == "magazine":
+            issues = magazine_issues(self.library.books, key)
+            title = magazine_name(issues[0]["title"]) if issues else ""
+        else:
+            refs = {b["ref"] for b in self.remote.index["books"] if folder_under(key, b["folder"])}
+            issues = sorted((b for b in self.library.books if b.get("source") in refs), key=lambda e: -issue_time(e))
+            title = key.rsplit("/", 1)[-1]
+        rows = [Row(n_issues(len(issues)) if issues else _("no issue of this folder is on this computer yet"), kind=HINT)]
+        for e in issues:
+            rows.append(Row(magazine_issue(e["title"]) if kind == "magazine" else e["title"], self.shelf_line(e),
+                            lambda e=e: self.open_entry(e), lambda e=e: self.shelf_menu(e)))
+        if kind == "folder":
+            rows += [Row(kind=RULE), Row(_("the whole folder on the drive"), "", lambda: self.push((FOLDER, key, False)), lines=1)]
+        return title, rows, None
 
     def screen_library_folders(self):
         """The folders of the drive that make the library: every folder seen to hold books, the
@@ -5120,7 +5829,7 @@ class Main(QtWidgets.QMainWindow):
                 raise IOError("no library")
             tmp = os.path.join(DATA_DIR, "download.tmp")
             remote.download(book, tmp)
-            return self.library.add(tmp, book["name"], source=book["ref"], move=True)
+            return self.library.add(tmp, book["name"], source=book["ref"], move=True, modified=book.get("modified", 0))
 
         def done(entry, error):
             self.fetching = None

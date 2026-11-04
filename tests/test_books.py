@@ -22,6 +22,7 @@ spec = importlib.util.spec_from_file_location("rb", os.path.join(HERE, "readers_
 rb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rb)
 import make_books  # noqa: E402
+from PyQt5 import QtTest  # noqa: E402
 
 APP = rb.QtWidgets.QApplication.instance() or rb.QtWidgets.QApplication([])
 rb.load_bundled_fonts()
@@ -985,6 +986,305 @@ class ShelfToLibrary(unittest.TestCase):
         self.settle(lambda: os.path.exists(os.path.join(notes, "Le même.txt")) and not os.path.exists(os.path.join(notes, "copie.txt")), "the note under its new name")
         main.close()
         rb.save_config(dict(rb.DEFAULTS))
+
+
+# ------------------------------------------------------------------------------------------
+# Magazines: the issues of one magazine grouped, a followed folder of the drive, the contents as
+# pages, the article bar — against a drive of issues served by rclone.
+# ------------------------------------------------------------------------------------------
+
+class Magazines(unittest.TestCase):
+    PORT = 8114
+    BASE = "http://127.0.0.1:%d" % PORT
+    DAY = 24 * 3600
+
+    def test_the_issues_of_one_magazine_share_its_name(self):
+        # the phone's MagazinesTest, case for case
+        for title, name in [
+                ("24 heures — Edition du mardi 3 novembre 2026", "24 heures"), ("NZZ — Édition du vendredi 24 avril 2026", "NZZ"),
+                ("Courrier International — Édition du 2026-04-25", "Courrier International"), ("The Economist — Apr 25th 2026", "The Economist"),
+                ("Informed with Aaron Siri | Substack — Édition du 02.11.2026", "Informed with Aaron Siri | Substack"),
+                ("Huberman Lab — Access the Sublime & Live Your Best Life | Robert Greene — Édition du mardi 3 novembre 2026", "Huberman Lab"),
+                ("Le Monde du 25 avril 2026", "Le Monde"), ("Der Spiegel vom 3. November 2026", "Der Spiegel"),
+                ("The Guardian, Wednesday November 4, 2026", "The Guardian"), ("Le Temps 2026-11-04", "Le Temps"),
+                ("La Revue N° 42", "La Revue"), ("A book without a date", "A book without a date")]:
+            self.assertEqual(rb.magazine_name(title), name, title)
+        self.assertEqual(rb.magazine_key("24 heures — Edition du mardi 3 novembre 2026"), rb.magazine_key("24 Heures — Édition du jeudi 5 novembre 2026"))
+        self.assertEqual(rb.magazine_issue("24 heures — Edition du mercredi 4 novembre 2026"), "Edition du mercredi 4 novembre 2026")
+        self.assertEqual(rb.magazine_issue("Le Monde du 25 avril 2026"), "25 avril 2026")
+
+    def test_a_folder_followed_gives_its_latest_day_at_once(self):
+        import datetime as dt
+        day = 24 * 3600_000
+        t0 = 1_793_000_000_000 - 1_793_000_000_000 % day + 6 * 3600_000
+        books = [{"name": n, "folder": f, "ref": "http://d/%s/%s" % (f, n), "modified": m} for n, f, m in [
+            ("2026-11-02-24heures.epub", "journaux", t0 - 2 * day), ("2026-11-03-24heures.epub", "journaux", t0 - day),
+            ("2026-11-04-24heures.epub", "journaux", t0), ("2026-11-04-nzz.epub", "journaux", t0 + 3600_000),
+            ("2026-11-04-courrier.epub", "journaux/hebdos", t0 + 7200_000), ("Maigret.epub", "Books", t0 + day)]]
+        seen = rb.first_seen(books, "journaux", dt.timezone.utc)
+        self.assertEqual(sorted(r.rsplit("/", 1)[1] for r in seen), ["2026-11-02-24heures.epub", "2026-11-03-24heures.epub"])
+        f = {"folder": "journaux", "seen": seen}
+        self.assertEqual([b["name"] for b in rb.fresh_books(books, f, set())], ["2026-11-04-courrier.epub", "2026-11-04-nzz.epub", "2026-11-04-24heures.epub"])
+        self.assertEqual(len(rb.fresh_books(books, f, {"http://d/journaux/2026-11-04-nzz.epub"})), 2)
+        kept = rb.prune_seen({"folder": "journaux", "seen": ["http://d/journaux/2026-11-04-24heures.epub", "http://d/journaux/gone.epub"]}, books)
+        self.assertEqual(kept["seen"], ["http://d/journaux/2026-11-04-24heures.epub"])
+
+    def put(self, name, title):
+        """An issue sent through the server, as the newspapers pipeline does."""
+        make_books.epub(path("issue.epub"), title=title, chapters=12, magazine=True)
+        with open(path("issue.epub"), "rb") as fh:
+            r = rb.requests.put(self.BASE + "/journaux/" + rb.quote(name), data=fh.read(), auth=("u", "p"))
+        self.assertIn(r.status_code, (200, 201, 204))
+
+    def test_a_followed_folder_brings_its_new_issues_in_one_click(self):
+        if not shutil.which("rclone"):
+            self.skipTest("rclone is needed to serve the test drive")
+        drive = path("magazines-drive")
+        os.makedirs(os.path.join(drive, "journaux"), exist_ok=True)
+        now = time.time()
+        for n, (name, title) in enumerate([("2026-11-02-24heures.epub", "24 heures — Edition du lundi 2 novembre 2026"),
+                                           ("2026-11-03-24heures.epub", "24 heures — Edition du mardi 3 novembre 2026"),
+                                           ("2026-11-04-24heures.epub", "24 heures — Edition du mercredi 4 novembre 2026")]):
+            target = os.path.join(drive, "journaux", name)
+            make_books.epub(target, title=title, chapters=12, magazine=True)
+            os.utime(target, (now - (2 - n) * self.DAY, now - (2 - n) * self.DAY))
+        server = subprocess.Popen(["rclone", "serve", "webdav", drive, "--addr", "127.0.0.1:%d" % self.PORT, "--user", "u", "--pass", "p", "--dir-cache-time", "1s"],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for _i in range(100):
+                try:
+                    rb.requests.get(self.BASE, timeout=1)
+                    break
+                except Exception:
+                    time.sleep(0.1)
+            for f in (rb.INDEX_FILE, rb.FOLLOW_FILE, rb.LIBRARY_FILE):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+            rb.save_config(dict(rb.DEFAULTS, url=self.BASE, username="u", password="p"))
+            main = rb.Main()
+            main.resize(760, 900)
+            main.show()
+            page = LibraryPage.settle
+            page(self, main, lambda: not main.remote.scanning and main.remote.index["scannedAt"] > 0, "the sync")
+            main.show_screen()
+            row = next(r for r in main.rows if r.title == "journaux")
+            follow = next(m for m in row.menu() if m and m[0].startswith(rb._("follow this folder")))
+            follow[1]()
+            # the latest day's issue is new at once; nothing was fetched
+            self.assertEqual(main.rows[0].title, "journaux · " + rb.n_new(1))
+            self.assertEqual(main.library.books, [])
+            LibraryPage.shot(self, main, "mag_followed")
+            # one click: fetched, and its contents open, as pages
+            main.rows[0].action()
+            page(self, main, lambda: main.screen[0] == rb.CHAPTERS, "the new issue")
+            entry = main.library.get(main.screen[1])
+            self.assertEqual(entry["title"], "24 heures — Edition du mercredi 4 novembre 2026")
+            self.assertTrue(main.paged and main.paged[2] > 1, main.paged)
+            self.assertEqual(main.listing.verticalScrollBar().maximum(), 0)     # the page fits: nothing scrolls
+            first = [r.title for r in main.rows if r.kind == rb.ROW]
+            LibraryPage.shot(self, main, "mag_contents_1")
+            main.turn_contents(True)
+            self.assertEqual(main.paged[1], 1)
+            self.assertNotEqual([r.title for r in main.rows if r.kind == rb.ROW], first)
+            self.assertEqual(main.rows[0].kind, rb.SECTION)         # a page names its section first
+            LibraryPage.shot(self, main, "mag_contents_2")
+            # a side click turns back; a click in the middle opens the article
+            vp = main.listing.viewport()
+            QtTest.QTest.mouseClick(vp, rb.QtCore.Qt.LeftButton, pos=rb.QtCore.QPoint(10, 100))
+            self.assertEqual(main.paged[1], 0)
+            article = next(r for r in main.rows if r.kind == rb.ROW and r.title.startswith("Article numéro 2 "))
+            article.action()
+            self.assertEqual(main.screen, (rb.BOOK, entry["id"]))
+            reader = main.reader
+            page(self, main, lambda: reader.book is not None, "the issue")
+            reader.repaint()
+            self.assertEqual(reader.chapter, 1)
+            reader.turn(True)
+            reader.turn(True)
+            left_at = (reader.chapter, reader.page)
+            LibraryPage.shot(self, main, "mag_article")
+            # the bar: next article, then back to the previous one, where it was left
+            zone = reader.bar_zone()
+            QtTest.QTest.mouseClick(reader, rb.QtCore.Qt.LeftButton, pos=rb.QtCore.QPoint(zone.right() - 5, zone.center().y()))
+            reader.repaint()
+            self.assertEqual(reader.chapter, 2)
+            QtTest.QTest.mouseClick(reader, rb.QtCore.Qt.LeftButton, pos=rb.QtCore.QPoint(zone.left() + 5, zone.center().y()))
+            reader.repaint()
+            self.assertEqual((reader.chapter, reader.page), left_at)
+            QtTest.QTest.mouseClick(reader, rb.QtCore.Qt.LeftButton, pos=rb.QtCore.QPoint(zone.center().x(), zone.center().y()))
+            self.assertEqual(main.screen, (rb.CHAPTERS, entry["id"]))
+            self.assertTrue(next(r for r in main.rows if r.current).title.startswith("Article numéro 2 "))
+            # two more issues on the drive: one click brings both, and their list opens
+            self.put("2026-11-05-24heures.epub", "24 heures — Edition du jeudi 5 novembre 2026")
+            self.put("2026-11-06-24heures.epub", "24 heures — Edition du vendredi 6 novembre 2026")
+            main.home()
+            main.show_screen(reset=True)
+            next(r for r in main.rows if r.title.startswith("journaux")).action()
+            page(self, main, lambda: main.screen[0] == rb.ISSUES, "the new issues")
+            self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW][:3],
+                             ["24 heures — Edition du vendredi 6 novembre 2026", "24 heures — Edition du jeudi 5 novembre 2026",
+                              "24 heures — Edition du mercredi 4 novembre 2026"])
+            LibraryPage.shot(self, main, "mag_issues")
+            main.pop()
+            followed = next(r for r in main.rows if r.title.startswith("journaux"))
+            self.assertEqual((followed.title, followed.secondary), ("journaux", rb._("nothing new · %s", rb.when_label(main.following.get("journaux")["checkedAt"]))))
+            # on the shelf: one row for the magazine, the latest issue a click away
+            main.push((rb.SHELF,))
+            rows = [r for r in main.rows if r.kind == rb.ROW]
+            self.assertEqual(rows[0].title, "24 heures · " + rb.n_issues(3))
+            LibraryPage.shot(self, main, "mag_shelf")
+            rows[0].menu()[0][1]()
+            self.assertEqual(main.screen, (rb.ISSUES, "magazine", rb.magazine_key(entry["title"])))
+            self.assertEqual(main.rows[1].title, "Edition du vendredi 6 novembre 2026")
+            # removed, an issue does not come back as new
+            removed = main.library.books[0]
+            main.remove(removed["id"])
+            self.assertIn(removed["source"], main.following.get("journaux")["seen"])
+            main.close()
+        finally:
+            server.terminate()
+            server.wait()
+            for f in (rb.FOLLOW_FILE, rb.LIBRARY_FILE, rb.INDEX_FILE):      # the other tests start without them
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+
+
+# ------------------------------------------------------------------------------------------
+# Italic and bold are runs beside the text, never in it: a highlight is a place in the text of its
+# chapter, the same on the phone and here. Each case compares the text with what the app made of
+# the same page before it knew of emphasis (legacy_to_blocks, the earlier code word for word).
+# ------------------------------------------------------------------------------------------
+
+def legacy_to_blocks(text, image):
+    """Paragraphs with their kind, and the pictures between them. `image` maps an `src` to what
+    the reader can load, or None to drop it. Kinds are marked with control characters before the
+    tags are stripped."""
+    s = rb._COMMENTS.sub("", text)
+    s = rb._SVG_IMAGE.sub(lambda m: '<img src="%s"/>' % m.group(1), s)
+
+    def picture(m):
+        found = image(m.group(1))
+        return "\n\n%s%s\n\n" % (rb.IMG, found) if found else " "
+    s = rb._IMG.sub(picture, s)
+    s = rb._DROP.sub(" ", s)
+    s = rb._HEADING_OPEN.sub(lambda m: m.group(0) + rb.MARK + "H", s)
+
+    def classed(m):
+        c = m.group(2).lower()
+        if rb._LEAD.search(c):
+            return m.group(0) + rb.MARK + "L"
+        if rb._SMALLPRINT.search(c):
+            return m.group(0) + rb.MARK + "S"
+        return m.group(0)
+    s = rb._CLASSED.sub(classed, s)
+    s = rb._BR.sub("\n", s)
+    s = rb._PARA_BREAK.sub("\n\n", s)
+    s = rb._ANY_TAG.sub("", s)
+    s = rb.decode_entities(s)
+    s = rb._SPACES.sub(" ", s)
+    blocks, paras = [], []
+    for raw in rb._BLANK_LINE.split(s):
+        para = "\n".join(line.strip() for line in raw.split("\n") if line.strip())
+        if not para:
+            continue
+        if para.startswith(rb.IMG):
+            if paras:
+                blocks.append(rb.TextBlock(paras))
+                paras = []
+            blocks.append(rb.ImageBlock(para[1:].split("\n")[0].strip()))
+            continue
+        kind, t = rb.NORMAL, para
+        while len(t) > 1 and t[0] == rb.MARK:
+            kind = {"H": rb.HEADING, "L": rb.LEAD, "S": rb.SMALL}.get(t[1], kind)
+            t = t[2:].lstrip()
+        t = rb._MARKS.sub("", t)
+        if t in ("---", "♦"):       # the pipeline's separators
+            continue
+        if t:
+            paras.append(rb.Para(t, kind))
+    if paras:
+        blocks.append(rb.TextBlock(paras))
+    return blocks
+
+
+
+def describe(blocks):
+    return "|".join("IMG:" + b.source if isinstance(b, rb.ImageBlock) else "¶".join(p.kind + ":" + p.text for p in b.paragraphs) for b in blocks)
+
+
+def runs(p):
+    return [(p.text[a:b], f, a) for a, b, f in (p.styles or ())]
+
+
+class Emphasis(unittest.TestCase):
+    def same(self, html):
+        self.assertEqual(describe(legacy_to_blocks(html, lambda s: s)), describe(rb.to_blocks(html, lambda s: s)))
+
+    def test_italic_and_bold_are_runs_and_the_text_is_what_it_was(self):
+        html = ("<p>Il a dit <i>  oui </i>, puis <b>non</b> et <em>peut-<strong>être</strong></em>.</p>"
+                "<p><i>Tout en italique</i></p><h2>Un <i>titre</i></h2><p class=\"lead\">Le <b>chapô</b></p>")
+        self.same(html)
+        paras = rb.to_blocks(html, lambda s: s)[0].paragraphs
+        self.assertEqual(paras[0].text, "Il a dit oui , puis non et peut-être.")
+        # the same runs as the phone's (EmphasisTest)
+        self.assertEqual(runs(paras[0]), [("oui ", rb.ITALIC, 9), ("non", rb.BOLD, 20), ("peut-", rb.ITALIC, 27), ("être", rb.ITALIC | rb.BOLD, 32)])
+        self.assertEqual(runs(paras[1]), [("Tout en italique", rb.ITALIC, 0)])
+        self.assertEqual((paras[2].kind, runs(paras[2])), (rb.HEADING, [("titre", rb.ITALIC, 3)]))
+        self.assertEqual((paras[3].kind, runs(paras[3])), (rb.LEAD, [("chapô", rb.BOLD, 3)]))
+
+    def test_marks_at_the_edges_of_lines_and_paragraphs_change_nothing(self):
+        for html in ["<p><i> </i></p><p>a</p>", "<p>a <i>\n b</i>\n c</p>", "<p>un<br/><i>deux</i><br/> trois</p>",
+                     "<i><p>across</p><p>paragraphs</p></i><p>after</p>", "<p>x</p><b>\n\n</b><p>y</p>",
+                     "<p>&nbsp;<i>&nbsp;espace&nbsp;</i>&nbsp;</p>", "<h1><i>Titre</i></h1><p class=\"author\"><b>Par</b> X</p>",
+                     "<p>---</p><p><i>♦</i></p><p>fin</p>", "<p><b/>vide <b />et <i></i>rien</p>", "<p>un <img src=\"a.png\"/> <i>deux</i></p>",
+                     "<p>unclosed <i>italic</p><p>goes on</p>", "<p>stray </i> close</p>", "<P><I>UPPER</I> <B CLASS=\"x\">case</B></P>",
+                     "<p>\u0003 already there <i>x</i></p>", "<div><blockquote><em>cite</em> — <strong>auteur</strong></blockquote></div>",
+                     "<p>😀 <i>émoji</i> 😀 <b>gras</b></p>"]:
+            self.same(html)
+
+    def test_a_highlight_lands_on_the_same_words_with_emphasis(self):
+        plain = rb.to_blocks("<p>Il dit bonjour à tous.</p><p>Puis il part.</p>", lambda s: None)
+        styled = rb.to_blocks("<p>Il <i>dit</i> <b>bonjour</b> à <em>tous</em>.</p><p><strong>Puis</strong> il part.</p>", lambda s: None)
+        a, b = rb.chapter_text(rb.Chapter("c", plain)), rb.chapter_text(rb.Chapter("c", styled))
+        self.assertEqual(a, b)
+        self.assertIsNone(plain[0].paragraphs[0].styles)
+        # laid out: the italic word is italic, the place of every word unchanged
+        font = rb.QtGui.QFont(rb.SANS_FAMILY)
+        font.setPixelSize(20)
+        laid = rb.LaidBlock(styled[0], font, rb.QtGui.QColor("gray"), 600)
+        self.assertEqual(laid.layout.text().replace(rb.LINE_BREAK, "\n").replace(rb.INDENT, ""), a.rstrip("\n"))
+        italic = [r for r in laid.layout.formats() if r.format.fontItalic()]
+        self.assertEqual([laid.layout.text()[r.start:r.start + r.length] for r in italic], ["dit", "tous"])
+        bold = [r for r in laid.layout.formats() if r.format.fontWeight() == rb.QtGui.QFont.Bold]
+        self.assertEqual([laid.layout.text()[r.start:r.start + r.length] for r in bold], ["bonjour", "Puis"])
+
+    def test_a_long_paragraph_cut_in_two_keeps_its_runs(self):
+        html = "<p>" + " ".join("<i>mot%d</i>" % i if i % 100 == 0 else "mot%d" % i for i in range(1, 3001)) + "</p>"
+        chapters, _ = rb._split_long([rb.Chapter("c", rb.to_blocks(html, lambda s: None))])
+        self.assertGreater(len(chapters), 1)
+        for ch in chapters:
+            for p in ch.blocks[0].paragraphs:
+                for text, flags, _ in runs(p):
+                    self.assertEqual(flags, rb.ITALIC)
+                    self.assertTrue(text.startswith("mot"), text)
+        self.assertEqual(sum(len(runs(p)) for ch in chapters for p in ch.blocks[0].paragraphs), 30)
+
+    def test_every_page_of_real_books_reads_the_same(self):
+        """The EPUBs of $EMPHASIS_BOOKS (folders, separated by ':'), when set: magazines, books."""
+        import zipfile
+        for folder in filter(None, os.environ.get("EMPHASIS_BOOKS", "").split(":")):
+            for name in sorted(os.listdir(folder)):
+                if not name.endswith(".epub"):
+                    continue
+                with zipfile.ZipFile(os.path.join(folder, name)) as z:
+                    pages = [n for n in z.namelist() if n.lower().endswith(("html", ".htm"))]
+                    for n in pages:
+                        self.same(z.read(n).decode("utf-8", "replace"))
+                print("==", name, len(pages), "pages read the same")
 
 
 if __name__ == "__main__":

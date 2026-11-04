@@ -1386,7 +1386,7 @@ class News(unittest.TestCase):
         make_books.epub(os.path.join(drive, "Romans", "Un roman.epub"), "Un roman")
         os.utime(os.path.join(drive, "journaux", "2026-11-03-letemps.epub"), (1793700000, 1793700000))
         os.utime(os.path.join(drive, "journaux", "2026-11-04-letemps.epub"), (1793790000, 1793790000))
-        server = subprocess.Popen(["rclone", "serve", "webdav", drive, "--addr", "127.0.0.1:%d" % self.PORT, "--user", "u", "--pass", "p"],
+        server = subprocess.Popen(["rclone", "serve", "webdav", drive, "--addr", "127.0.0.1:%d" % self.PORT, "--user", "u", "--pass", "p", "--dir-cache-time", "1s"],
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             for _i in range(100):
@@ -1423,6 +1423,31 @@ class News(unittest.TestCase):
             LibraryPage.shot(self, main, "news_list")
             # nothing read twice: the next sync finds every book told
             self.assertEqual(main.remote.unsorted(main.cfg), [])
+            # a new issue comes while a long sync walks the rest of the drive: it is in the news before the sync ends
+            # through the server: what is written behind rclone's back stays unseen for minutes
+            auth = ("u", "p")
+            with open(make_books.epub(path("n-new.epub"), "Le Temps — 5 novembre 2026", magazine=True), "rb") as fh:
+                rb.requests.put(self.BASE + "/journaux/2026-11-05-letemps.epub", data=fh.read(), auth=auth)
+            rb.requests.request("MKCOL", self.BASE + "/Archives/", auth=auth)
+            for i in range(6):
+                rb.requests.request("MKCOL", self.BASE + "/Archives/vide-%d/" % i, auth=auth)
+            slow = rb.WebDav.list
+            def list_slowly(webdav, folder):
+                if "Archives" in folder:
+                    time.sleep(4)
+                return slow(webdav, folder)
+            rb.WebDav.list = list_slowly
+            whole = rb.WebDav.list_all
+            rb.WebDav.list_all = lambda webdav: None       # as kDrive: the tree folder by folder
+            try:
+                main.home()
+                main.scan(False)
+                LibraryPage.settle(self, main, lambda: (main.show_screen() or True) and len(main.remote.news(main.cfg)) == 3, "the new issue in the news")
+                self.assertTrue(main.remote.scanning)
+                LibraryPage.settle(self, main, lambda: not main.remote.scanning, "the end of the sync")
+            finally:
+                rb.WebDav.list = slow
+                rb.WebDav.list_all = whole
             main.close()
         finally:
             server.terminate()

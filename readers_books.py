@@ -30,7 +30,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.18.1"
+VERSION = "1.18.2"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -3733,6 +3733,7 @@ class RemoteLibrary:
         self.sort_lock = threading.Lock()
         self.sort_queue = []        # what is still to look at, the newest first
         self.sort_busy = set()
+        self.sort_stop = threading.Event()      # its own: stopping a sync does not stop this
 
     @property
     def scanning(self):
@@ -3851,6 +3852,8 @@ class RemoteLibrary:
 
     def forget(self):
         self.cancel()
+        self.sort_stop.set()
+        self.sort_stop = threading.Event()
         self.index = dict(EMPTY_INDEX)
         self.kinds = {}
         for f in (INDEX_FILE, KINDS_FILE):
@@ -3920,7 +3923,7 @@ class RemoteLibrary:
         def worker():
             while True:
                 with lock:
-                    if not queue or self.stop.is_set():
+                    if not queue or self.sort_stop.is_set():
                         return
                     b = queue.pop(0)
                     self.sort_busy.add(b["ref"])
@@ -7448,7 +7451,8 @@ class Main(QtWidgets.QMainWindow):
             # then the books of the drive, and nothing else: its collections and its folders
             rows += [Row(kind=RULE), Row(_("on the drive").upper(), kind=SECTION)]
             # the newspapers and magazines, together, the newest first: there only when the library has some
-            if not progress and index["scannedAt"] > 0:
+            # during a sync too: the folders that hold books are listed first, the rest takes long
+            if index["scannedAt"] > 0:
                 remote.sort_books(cfg, {e["source"]: e.get("magazine") for e in self.library.books if e.get("source")})
             news = remote.news(cfg)
             if news:

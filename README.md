@@ -92,9 +92,8 @@ reader, the same library, the same wording.
   Python of their own to set the converter up with.
 * A magazine issue (an EPUB whose contents page carries a section, a title and an author per
   article, as the newspapers pipeline writes them) opens on its contents the first time:
-  sections, titles, authors and larger pictures, as whole pages turned like the book's (the side
-  thirds, the wheel, the arrow keys; a click in the middle opens the article), the page number at
-  the foot. An article is a chapter; above it, a slim bar leads to the previous article, the
+  sections, titles, authors and larger pictures, in a list that scrolls like the others,
+  centred on the article read last; a click opens an article. An article is a chapter; above it, a slim bar leads to the previous article, the
   contents and the next one, and each article reopens where it was left. Opened again, an issue
   goes back to the article it was left at. Several issues of one magazine make one row of the
   shelf, « 24 heures · 3 issues »: a click opens the latest, a right click lists them all. Issues

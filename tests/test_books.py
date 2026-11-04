@@ -1082,24 +1082,19 @@ class Magazines(unittest.TestCase):
             self.assertEqual(main.rows[0].title, "journaux · " + rb.n_new(1))
             self.assertEqual(main.library.books, [])
             LibraryPage.shot(self, main, "mag_followed")
-            # one click: fetched, and its contents open, as pages
+            # one click: fetched, and its contents open: one list that scrolls, sections named once
             main.rows[0].action()
             page(self, main, lambda: main.screen[0] == rb.CHAPTERS, "the new issue")
             entry = main.library.get(main.screen[1])
             self.assertEqual(entry["title"], "24 heures — Edition du mercredi 4 novembre 2026")
-            self.assertTrue(main.paged and main.paged[2] > 1, main.paged)
-            self.assertEqual(main.listing.verticalScrollBar().maximum(), 0)     # the page fits: nothing scrolls
-            first = [r.title for r in main.rows if r.kind == rb.ROW]
-            LibraryPage.shot(self, main, "mag_contents_1")
-            main.turn_contents(True)
-            self.assertEqual(main.paged[1], 1)
-            self.assertNotEqual([r.title for r in main.rows if r.kind == rb.ROW], first)
-            self.assertEqual(main.rows[0].kind, rb.SECTION)         # a page names its section first
-            LibraryPage.shot(self, main, "mag_contents_2")
-            # a side click turns back; a click in the middle opens the article
-            vp = main.listing.viewport()
-            QtTest.QTest.mouseClick(vp, rb.QtCore.Qt.LeftButton, pos=rb.QtCore.QPoint(10, 100))
-            self.assertEqual(main.paged[1], 0)
+            self.assertFalse(hasattr(main, "paged"))
+            self.assertEqual(main.rows[0].kind, rb.SECTION)
+            titles = [r.title for r in main.rows if r.kind == rb.ROW]
+            self.assertEqual(len(titles), len(set(titles)))
+            kinds = [r.kind for r in main.rows]
+            self.assertFalse(any(a == b == rb.SECTION for a, b in zip(kinds, kinds[1:])))   # a section's name once, over its articles
+            self.assertEqual(main.listing.verticalScrollBarPolicy(), rb.QtCore.Qt.ScrollBarAsNeeded)
+            LibraryPage.shot(self, main, "mag_contents")
             article = next(r for r in main.rows if r.kind == rb.ROW and r.title.startswith("Article numéro 2 "))
             article.action()
             self.assertEqual(main.screen, (rb.BOOK, entry["id"]))

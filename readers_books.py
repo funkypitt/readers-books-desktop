@@ -29,7 +29,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.16.0"
+VERSION = "1.16.1"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -5936,7 +5936,6 @@ class Main(QtWidgets.QMainWindow):
         self.follow_progress = {}       # folder -> (done, total) while its new books are fetched; total 0 while it is listed
         self.follow_errors = {}         # folder -> why the last click did not bring everything
         self.follow_changed, self.follow_seen = 0, 0
-        self.contents_page = {}         # book id -> the page of its contents shown
         self.awake = Awake()
         self.stack = [self.home_screen()]
         self.rows = []
@@ -6033,14 +6032,6 @@ class Main(QtWidgets.QMainWindow):
         self.foot_invite.clicked.connect(lambda: self.push((LIBRARY,)))
         box.addWidget(self.foot_open)
         box.addWidget(self.foot_invite)
-        self.foot_page = QtWidgets.QLabel("")
-        self.foot_page.setObjectName("page")
-        self.foot_page.setAlignment(QtCore.Qt.AlignRight)
-        self.foot_page.setVisible(False)
-        box.addWidget(self.foot_page)
-        self.paged = None
-        self.listing.viewport().installEventFilter(self)
-        self.listing.installEventFilter(self)
         self.pages.addWidget(page)
 
         self.reader = Reader(self)
@@ -6050,32 +6041,6 @@ class Main(QtWidgets.QMainWindow):
                              ("Ctrl+O", self.pick_book), ("Ctrl+Q", self.close)):
             shortcut = QtWidgets.QShortcut(QtGui.QKeySequence(keys), self)
             shortcut.activated.connect(action)
-
-    def eventFilter(self, obj, e):
-        """On a magazine's contents: the side thirds turn the page, as in the reader; the wheel
-        and the arrow keys too. The middle third is the list's own: a click opens the article."""
-        if self.paged and obj is self.listing.viewport():
-            t = e.type()
-            if t in (QtCore.QEvent.MouseButtonPress, QtCore.QEvent.MouseButtonRelease, QtCore.QEvent.MouseButtonDblClick) and e.button() == QtCore.Qt.LeftButton:
-                third = obj.width() / 3.0
-                if e.x() < third or e.x() > 2 * third:
-                    if t == QtCore.QEvent.MouseButtonRelease:
-                        self.turn_contents(e.x() > 2 * third)
-                    return True
-            elif t == QtCore.QEvent.Wheel:
-                if e.angleDelta().y():
-                    self.turn_contents(e.angleDelta().y() < 0)
-                return True
-            elif t == QtCore.QEvent.Resize:
-                QtCore.QTimer.singleShot(0, self.show_screen)
-        if self.paged and obj is self.listing and e.type() == QtCore.QEvent.KeyPress:
-            if e.key() in (QtCore.Qt.Key_Right, QtCore.Qt.Key_PageDown, QtCore.Qt.Key_Space):
-                self.turn_contents(True)
-                return True
-            if e.key() in (QtCore.Qt.Key_Left, QtCore.Qt.Key_PageUp):
-                self.turn_contents(False)
-                return True
-        return super().eventFilter(obj, e)
 
     def _rule(self):
         line = QtWidgets.QFrame()
@@ -6304,16 +6269,8 @@ class Main(QtWidgets.QMainWindow):
         self.awake.set(False)
         if kind == LIBRARY and reset:
             self.enter_library()
-        self.paged = None
-        if kind == CHAPTERS and reset:
-            self.contents_page.pop(self.screen[1], None)       # the page of the article read last
         title, rows, menu = getattr(self, "screen_" + kind)()
         self.rows, self.menu_items = rows, menu
-        # a magazine's contents are pages: no scrolling, the page number at the foot as in the reader
-        self.listing.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff if self.paged else QtCore.Qt.ScrollBarAsNeeded)
-        self.foot_page.setVisible(bool(self.paged and self.paged[2] > 1))
-        if self.paged:
-            self.foot_page.setText("%d/%d" % (self.paged[1] + 1, self.paged[2]))
         self.title.setText(title)
         self.back.setVisible(len(self.stack) > 1)
         self.more.setVisible(bool(menu))
@@ -6831,49 +6788,19 @@ class Main(QtWidgets.QMainWindow):
         return entry["title"], rows, None
 
     def contents_rows(self, entry, book, article):
-        """A magazine's contents as whole pages (e-ink: nothing scrolls), turned like the book's
-        pages: a click on the left third goes back a page, on the right third forward, in the
-        middle it opens the article. Sections by name, repeated at the top of a page that begins
-        in the middle of one; larger pictures. The page of the article read last comes first."""
+        """A magazine's contents: its articles under their sections' names, with their authors
+        and larger pictures, in a list that scrolls like the others, centred on the article read
+        last; a click opens an article."""
         store = self.images_of(entry)
         reading = [a for a in book.magazine if a.chapter <= entry.get("chapter", 0) and entry.get("opened")]
         current = reading[-1] if reading else None
-        width, height = self.listing.viewport().width(), max(200, self.listing.viewport().height() - 4)
-        size = lambda row: self.delegate.size_of(row, width).height()
-        pages, page, y = [], [], 0
+        rows = []
         for i, a in enumerate(book.magazine):
-            row = Row(a.title, a.author or "", lambda a=a: article(a.chapter), current=a is current, lines=3,
-                      thumb=(store, a.image) if a.image else None, thumb_size=104)
-            opens = a.category and (i == 0 or a.category != book.magazine[i - 1].category)
-            section = Row(a.category.upper(), kind=SECTION) if a.category else None
-            need = size(row) + (size(section) if opens else 0)
-            if page and y + need > height:
-                pages.append(page)
-                page, y = [], 0
-            if not page and section and not opens:
-                need += size(section)                   # the section named again at the top of the page
-            if section and (opens or not page):
-                page.append(section)
-            page.append(row)
-            y += need
-        if page:
-            pages.append(page)
-        shown = self.contents_page.get(entry["id"])
-        if shown is None:
-            shown = next((n for n, rows in enumerate(pages) if any(r.current for r in rows)), 0)
-        shown = max(0, min(shown, len(pages) - 1))
-        self.contents_page[entry["id"]] = shown
-        self.paged = (entry["id"], shown, len(pages))
-        return pages[shown] if pages else []
-
-    def turn_contents(self, forward):
-        if not self.paged:
-            return
-        book_id, shown, count = self.paged
-        nxt = shown + (1 if forward else -1)
-        if 0 <= nxt < count:
-            self.contents_page[book_id] = nxt
-            self.show_screen()
+            if a.category and (i == 0 or a.category != book.magazine[i - 1].category):
+                rows.append(Row(a.category.upper(), kind=SECTION))
+            rows.append(Row(a.title, a.author or "", lambda a=a: article(a.chapter), current=a is current, lines=3,
+                            thumb=(store, a.image) if a.image else None, thumb_size=104))
+        return rows
 
     # ---- settings ----
 

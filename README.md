@@ -80,7 +80,9 @@ reader, the same library, the same wording.
   made by `magazine2epub.py` instead (pypdfium2 and Pillow only, no Marker, about ten seconds an
   issue): one chapter per article with its section, rubric, title, standfirst and byline, in the
   order of the issue, so the shelf shows it as a magazine with its contents. Each page is read
-  the way the eye goes (bands across, then columns), articles run on across columns and pages,
+  the way the eye goes (bands across, then columns; every cut down the page tried, the one whose
+  text runs on best kept), articles run on across columns and pages (The Economist's own signs
+  are read: ▸ before a piece that goes on from another page, ⏩ after one that jumps, ■ at an end),
   words cut at line ends are mended (the hyphen kept only where the word carries one), small
   capitals, italics and bold kept; photographs, cartoons and charts are cut out of the page with
   their captions; boxes are set apart; poems printed among a piece's pages become pieces of

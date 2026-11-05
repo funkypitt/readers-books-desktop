@@ -80,6 +80,77 @@ class ReadingOrder(unittest.TestCase):
         order = m2e.tail_first([head, body, tail], "watching the clock and drop-")
         self.assertEqual(order[0], tail)
 
+    def test_the_end_of_the_article_before_goes_first_from_under_a_column(self):
+        # the band at the foot of the page is the end of the article before, under the three
+        # columns of a full-page column (The Economist marks its first line ▸, its last ■)
+        rubric = box("rubric", 232, 64, 334, 75, "BACK STORY", "BACK STORY")
+        head = box("head", 193, 81, 373, 99, "The talentless Mr Ripleys", "The talentless Mr Ripleys")
+        c1 = box("body", 37, 143, 191, 592, "HE IS A philandering tech baron", "distrusts her son’s brassy")
+        c2 = box("body", 203, 143, 363, 412, "new love interest.", "So did many of")
+        c3 = box("body", 375, 143, 529, 592, "their predecessors:", "by and large, they don’t.")
+        t1 = box("body", 31, 613, 191, 732, "sinated, and Christian", "Marine barracks, killing")
+        t2 = box("body", 203, 613, 363, 732, "hundreds. Kerr’s murder", "in 1982, defend\x02")
+        t3 = box("body", 375, 613, 535, 730, "ing Israel’s invasion", "learn from them. ■")
+        order = m2e.xy_order([rubric, head, c1, c2, c3, t1, t2, t3])
+        self.assertEqual(order, [rubric, head, c1, c2, c3, t1, t2, t3])
+        m2e.END_MARK = "■"
+        try:
+            self.assertEqual(m2e.tail_first(list(order), "president-elect was assas\x02"), [t1, t2, t3, rubric, head, c1, c2, c3])
+            t1.lines[0].continued = True        # the sign read: the same, whatever the text says
+            self.assertEqual(m2e.tail_first(list(order), "killed or wounded.", jumps=True), [t1, t2, t3, rubric, head, c1, c2, c3])
+        finally:
+            m2e.END_MARK = ""
+
+    def test_a_column_of_the_article_before_then_the_next_one_in_bands(self):
+        # the article before fills the left column and the top of the two others; the next one's
+        # headline spans those two only: that column, then the rest in bands
+        a1 = box("body", 31, 53, 192, 442, "its spending plans.", "Mr Healey could have")
+        a2 = box("body", 203, 53, 363, 232, "gone much further.", "the chancellor made the")
+        a3 = box("body", 375, 53, 535, 232, "system more complicated.", "only goals win games. ■")
+        rubric = box("rubric", 209, 253, 258, 261, "Energy policy", "Energy policy")
+        head = box("head", 209, 266, 367, 284, "Danger! Low voltage", "Danger! Low voltage")
+        b2 = box("body", 209, 343, 362, 722, "BRITISH HOUSEHOLDS and busi\x02", "zero-carbon sources by")
+        b3 = box("body", 375, 343, 529, 722, "2030, which looks", "if the lights go off.")
+        m2e.END_MARK = "■"
+        try:
+            order = m2e.xy_order([b3, head, a3, b2, rubric, a2, a1])
+        finally:
+            m2e.END_MARK = ""
+        self.assertEqual(order, [a1, a2, a3, rubric, head, b2, b3])
+
+    def test_a_justified_line_cut_by_wide_gaps_is_one_line(self):
+        def row(text, x, base, font="EconomistSerif-Light"):
+            out = []
+            for c in text:
+                if c != " ":
+                    out.append(m2e.Char(c, x, base - 8, x + 5, base + 2, base, 9.0, font))
+                x += 5 if c != " " else 3
+            return out
+        # the words of a line set wide apart, under a line that spans the column
+        lines = m2e.lines_of(row("metrics such as economic competitive", 375, 400) + row("ness,", 375, 410)
+                             + row("intercity", 410, 410) + row("mobility,", 470, 410))
+        self.assertEqual([l.text for l in lines], ["metrics such as economic competitive", "ness, intercity mobility,"])
+        # the last lines of two columns' paragraphs, as near: apart
+        lines = m2e.lines_of(row("the end of it", 31, 400) + row("all.", 31, 410) + row("goes on and on", 80, 400) + row("ting", 80, 410))
+        self.assertEqual([l.text for l in lines], ["the end of it", "all.", "goes on and on", "ting"])
+
+    def test_the_signs_of_a_jump_are_read_off_the_lines(self):
+        def row(text, x, base, font="EconomistSerif-Light"):
+            out = []
+            for c in text:
+                if c != " ":
+                    out.append(m2e.Char(c, x, base - 8, x + 5, base + 2, base, 9.0, font))
+                x += 5 if c != " " else 3
+            return out
+        lines = m2e.mark_jumps(m2e.lines_of(row("▸", 22, 400) + row("sinated, and Christian", 31, 400)
+                                            + row("president-elect was assas-", 375, 723) + row("⏩", 503, 723)
+                                            + row("would do well to learn from them.", 375, 500) + row("■", 545, 500)), "▸", "⏩", "■")
+        self.assertEqual([(l.text, l.continued, l.jumps) for l in lines],
+                         [("sinated, and Christian", True, False), ("president-elect was assas-", False, True),
+                          ("would do well to learn from them. ■", False, False)])
+        lines = m2e.mark_jumps(m2e.lines_of(row("▸ its spending plans.", 22, 53)), "▸", "⏩", "■")
+        self.assertEqual([(l.text, l.continued, round(l.x0)) for l in lines], [("its spending plans.", True, 30)])
+
 
 def chars(text, x=10.0, advance=6.0, gap=0.0, size=10.0, font="HelveticaNeueLTPro-Bd-SC750"):
     """Glyphs on one baseline, `gap` points apart (a letter-spaced line when it is wide)."""

@@ -147,6 +147,7 @@ class Line:
             self._untrack(ink)      # letter-spaced: « P a r  n o t r e » is « Par notre »
         self.accent = sum(1 for c in ink if c.accent) > 0.8 * len(ink)
         self.role = None
+        self.continued = self.jumps = False     # marked as going on from another page, as jumping to one
 
     def _tracked(self, ink):
         """Letters set apart all along the line, not a formula's few letters among spaces."""
@@ -203,7 +204,84 @@ def lines_of(chars):
             g.pop()
         if g and any(not c.c.isspace() for c in g):
             out.append(Line(g))
-    return out
+    return mend_fragments(out)
+
+
+def mend_fragments(lines):
+    """A justified line whose word gaps are wider than a column's gutter was read as several
+    lines: one again, where a line just above or below spans them all (they lie in one column)."""
+    out = list(lines)
+    while True:
+        bases = {}
+        for l in out:
+            bases.setdefault(round(l.base), []).append(l)
+        merged = None
+        for a in out:
+            size = a.size
+            mates = [m for k in (round(a.base) - 1, round(a.base), round(a.base) + 1) for m in bases.get(k, ())]
+            for b in mates:
+                if b is a or b.font != a.font or b.size != a.size or abs(b.base - a.base) >= 0.35 * size:
+                    continue
+                gap = b.x0 - a.x1
+                if not (-1 <= gap < 4 * size) or min(len(a.text.split()), len(b.text.split())) > 3:
+                    continue
+                if any(m is not a and m is not b and abs(m.base - a.base) < 0.35 * size
+                       and _overlap(a.x1, b.x0, m.x0, m.x1) > 0 for m in mates):
+                    continue            # something between them
+                if not any(m is not a and m is not b and 0.5 * size < abs(m.base - a.base) < 3.2 * size
+                           and m.x0 <= a.x0 + 2 and m.x1 >= b.x1 - 2 for m in out):
+                    continue            # no line of a column holds them both
+                merged = (a, b)
+                break
+            if merged:
+                break
+        if merged is None:
+            return out
+        a, b = merged
+        out[out.index(a)] = Line(a.chars + b.chars)
+        out.remove(b)
+
+
+def mark_jumps(lines, cont, jump, end):
+    """The signs a magazine prints where an article goes on from another page (▸ before its
+    first line), jumps to one (⏩ after its last) or ends (■): off the text, as flags on the line."""
+    out = []
+    for l in lines:                 # a sign read as part of the line
+        t = l.text
+        if len(t) > 1 and (t.startswith(cont) or t.endswith(jump)):
+            ink = [c for c in l.chars if not c.c.isspace()]
+            drop = ([ink[0]] if t.startswith(cont) else []) + ([ink[-1]] if t.endswith(jump) else [])
+            kept = Line([c for c in l.chars if not any(c is d for d in drop)])
+            kept.continued, kept.jumps = t.startswith(cont), t.endswith(jump)
+            l = kept
+        out.append(l)
+
+    def partner(l, side):
+        best = None
+        for m in out:
+            if m is l or m.text in (cont, jump, end) or abs(m.base - l.base) >= 0.35 * max(l.size, m.size):
+                continue
+            d = m.x0 - l.x1 if side > 0 else l.x0 - m.x1
+            if -1 <= d < 4 * l.size and (best is None or d < best[0]):
+                best = (d, m)
+        return best[1] if best else None
+
+    kept = []
+    for l in out:                   # a sign on a line of its own, beside the line it marks
+        t = l.text
+        if t in (cont, jump, end):
+            m = partner(l, 1 if t == cont else -1)
+            if m is not None:
+                if t == cont:
+                    m.continued = True
+                elif t == jump:
+                    m.jumps = True
+                elif not m.text.endswith(end):
+                    m.spans.append([" " + end, m.spans[-1][1], m.spans[-1][2]])
+                    m.text += " " + end
+                continue
+        kept.append(l)
+    return kept
 
 
 def _bounds(obj):
@@ -273,6 +351,8 @@ class Economist:
     key = "economist"
     name = "The Economist"
     skip_sections = ("Contents",)
+    jump_marks = ("▸", "⏩", "■")   # before an article going on from another page, after one jumping, at an end
+    end_mark = "■"
 
     @staticmethod
     def house(font):
@@ -296,7 +376,7 @@ class Economist:
         f, s, t = l.font, l.size, l.text
         if l.bottom < 38 or l.top > page_h - 24:
             return "furniture"
-        if t in ("▸", "⏩", "■", "▸"):
+        if t in ("▸", "⏩", "■"):
             return "skip"
         if not self.house(f):
             return "foreign"
@@ -1025,7 +1105,7 @@ def settle_roles(prof, lines, page_h):
                         break
                     run += 1
                 whole = all(any(w in f for w in ("Bold", "Medium", "Demi")) for t, f, _s in l.spans if t.strip())
-                l.role = "sub" if whole and run <= 2 and len(l.text) < 70 else "body"
+                l.role = "sub" if whole and run <= 2 and len(l.text) < 70 and not l.text.endswith("\x02") else "body"
             else:
                 l.role = "caption"
     return body_size
@@ -1239,20 +1319,25 @@ def _cut(boxes, axis):
 
 
 ENDS = re.compile(r"[.!?:;”\"’)\]■♦…»]$")
+END_MARK = ""               # set by a profile: the sign printed at an article's end (■)
 
 
 def _seam(a, b):
     """How wrong it looks to read `b` right after `a`: text cut mid-sentence going on with a
-    capital, a finished sentence going on in lower case, a headline over a sentence's end."""
+    capital, a finished sentence going on in lower case, a headline over a sentence's end,
+    text after an article's end sign."""
     if a.kind == "picture" or b.kind == "picture":
         return 0
     last, first = a.lines[-1].text, b.lines[0].text
     lower = b.kind == "body" and first[:1].islower()
+    goes_on = lower or (b.kind == "body" and first[:1].isdigit())      # …sources by | 2030, which
     if a.kind in ("rubric", "head", "stand", "byline", "dateline", "section", "sub") and lower:
         return 1
     if a.kind == "body":
+        if END_MARK and last.endswith(END_MARK) and b.kind in ("body", "sub") and getattr(b.lines[0], "panel", None) is None:
+            return 1
         cut = last.endswith(("\x02", "-")) or not ENDS.search(last)
-        if cut and not lower and b.kind in ("body", "rubric", "head", "sub"):
+        if cut and not goes_on and b.kind in ("body", "rubric", "head", "sub"):
             return 1
         if not cut and lower:
             return 1
@@ -1325,27 +1410,30 @@ def xy_order(boxes):
     """Reading order (XY cut): the page cut where nothing crosses — across into bands read top to
     bottom, or down into columns read left to right. Where both cuts exist, the one whose text
     runs on better from block to block; then the widest gap."""
+    key = frozenset(id(b) for b in boxes)
+    if key in _MEMO:
+        return list(_MEMO[key][1])
     if CUT_AT_HEADS:
-        key = frozenset(id(b) for b in boxes)
-        if key not in _MEMO:
-            _MEMO[key] = _xy_by_heads(boxes)
-        return list(_MEMO[key])
-    if len(boxes) <= 1:
-        return list(boxes)
-    rows, row_gap = _cut(boxes, "y")
-    cols, col_gap = _cut(boxes, "x")
-    if len(cols) > 1 and len(rows) > 1:
-        by_cols = [x for g in cols for x in xy_order(g)]
-        by_rows = [x for g in rows for x in xy_order(g)]
-        a, b = _score(by_cols), _score(by_rows)
-        if a != b:
-            return by_cols if a < b else by_rows
-        return by_cols if col_gap > row_gap + 2 else by_rows
-    if len(cols) > 1:
-        return [x for g in cols for x in xy_order(g)]
-    if len(rows) > 1:
-        return [x for g in rows for x in xy_order(g)]
-    return sorted(boxes, key=lambda b: (b.top, b.x0))
+        out = _xy_by_heads(boxes)
+    elif len(boxes) <= 1:
+        out = list(boxes)
+    else:
+        rows, row_gap = _cut(boxes, "y")
+        cols, _gap = _cut(boxes, "x")
+        options = []                # (wrongness, - gap, rows first, order)
+        if len(rows) > 1:
+            seq = [x for g in rows for x in xy_order(g)]
+            options.append((_score(seq), -(row_gap + 2), 0, seq))
+        for i in range(len(cols) - 1):      # each cut down the page: the columns before it,
+            left = [b for g in cols[:i + 1] for b in g]      # then the rest (in bands, maybe)
+            right = [b for g in cols[i + 1:] for b in g]
+            gap = min(b.x0 for b in cols[i + 1] if b.kind != "picture" or len(cols[i + 1]) == 1) - \
+                max(b.x1 for b in cols[i] if b.kind != "picture" or len(cols[i]) == 1)
+            seq = xy_order(left) + xy_order(right)
+            options.append((_score(seq), -gap, 1, seq))
+        out = min(options, key=lambda o: o[:3])[3] if options else sorted(boxes, key=lambda b: (b.top, b.x0))
+    _MEMO[key] = (list(boxes), out)         # (the boxes kept: their ids stay theirs)
+    return list(out)
 
 
 def repair_flow(order):
@@ -1395,32 +1483,49 @@ def repair_flow(order):
     return order
 
 
-def tail_first(order, open_text):
+def tail_first(order, open_text, jumps=False):
     """The end of the article that runs on from the page before goes first, wherever the page
-    puts it: the topmost text of a column, starting in lower case, before any headline."""
-    if not open_text or not (open_text.endswith(("\x02", "-")) or not ENDS.search(open_text)):
+    puts it: the block the magazine marks as going on (▸); else the topmost text of a column or
+    of a band, starting in lower case, after a headline. What runs on from it comes along, up to
+    the article's end sign where the magazine prints one."""
+    cut = jumps or (open_text and (open_text.endswith(("\x02", "-")) or not ENDS.search(open_text)))
+    if not cut:
         return order
     heads = [i for i, b in enumerate(order) if b.kind in HEAD_ROLES + ("section",)]
     if not heads:
         return order
-    for i, b in enumerate(order):
-        if i < heads[0]:
-            continue
-        before = next((o for o in reversed(order[:i]) if o.kind != "picture"), None)
-        if before is not None and before.kind == "body" and not ENDS.search(before.lines[-1].text):
-            continue                # it goes on from the column before it, on this page
-        if b.kind == "body" and b.lines[0].text[:1].islower() and \
-                not any(o is not b and o.kind != "picture" and o.bottom <= b.top + 1 and _overlap(o.x0, o.x1, b.x0, b.x1) > 0
-                        for o in order):
-            run = [b]
-            for c in order[i + 1:]:
-                if c.kind == "body" and _overlap(c.x0, c.x1, b.x0, b.x1) > 0 and c.top >= run[-1].bottom - 1 \
-                        and c.top - run[-1].bottom < 3 * c.lines[0].size and not ENDS.search(run[-1].lines[-1].text):
-                    run.append(c)
-                else:
-                    break
-            return run + [o for o in order if not any(o is r for r in run)]
-    return order
+    start = next((i for i, b in enumerate(order) if b.kind == "body" and b.lines
+                  and getattr(b.lines[0], "continued", False)), None)
+    if start is None:
+        for i, b in enumerate(order):
+            if i < heads[0] or b.kind != "body" or not b.lines[0].text[:1].islower():
+                continue
+            before = next((o for o in reversed(order[:i]) if o.kind != "picture"), None)
+            if before is not None and before.kind == "body" and not ENDS.search(before.lines[-1].text):
+                continue                # it goes on from the column before it, on this page
+            above = [o.bottom for o in order if o is not b and o.kind != "picture" and o.bottom <= b.top + 1
+                     and _overlap(o.x0, o.x1, b.x0, b.x1) > 0]
+            if above and max(above) > b.top - 1.5 * b.lines[0].size:
+                continue                # the column runs on into it from right above
+            start = i
+            break
+    text = [i for i, b in enumerate(order) if b.kind != "picture"]
+    if start is None or start == text[0]:
+        return order
+    b = order[start]
+    run = [b]
+    for c in order[start + 1:]:
+        last = run[-1].lines[-1].text
+        if END_MARK:
+            if last.endswith(END_MARK) or c.kind not in ("body", "sub", "picture"):
+                break
+            if c.kind == "picture":
+                continue
+        elif not (c.kind == "body" and _overlap(c.x0, c.x1, b.x0, b.x1) > 0 and c.top >= run[-1].bottom - 1
+                  and c.top - run[-1].bottom < 3 * c.lines[0].size and not ENDS.search(last)):
+            break
+        run.append(c)
+    return run + [o for o in order if not any(o is r for r in run)]
 
 
 # ------------------------------------------------------------------------------------------
@@ -1555,6 +1660,7 @@ class Article:
         self.pages = set()
         self.notes = []             # footnotes, html
         self.first_page = 0
+        self.jumped = False         # its last line read was marked as jumping to another page
 
     @property
     def has_head(self):
@@ -1673,11 +1779,31 @@ class Builder:
                 a.title.append(title)
             a.section_opener = True
 
+    def resume(self, a):
+        """A block marked as going on from another page: the article that jumped there goes on,
+        its last paragraph open again, when another one was read in between."""
+        if a.jumped:
+            a.jumped = False
+            return a
+        for j in reversed(self.articles):
+            if j.jumped:
+                j.jumped = False
+                self.close_para()
+                self.cur = a = j
+                if a.items and a.items[-1][0] == "p":
+                    plain = re.sub(r"<[^>]+>", "", a.items[-1][1])
+                    if plain.endswith("-") or not ENDS.search(plain):
+                        a.open = [a.items.pop()[1]]         # cut mid-sentence: it goes on
+                break
+        return a
+
     def add_text(self, box, drops, beside=()):
         if self.skipping:
             return
         a = self.ensure()
         lines = box.lines
+        if box.kind == "body" and lines and getattr(lines[0], "continued", False):
+            a = self.resume(a)
         width_right = max(l.x1 for l in lines)
         if len(lines) >= 3:
             a.column = max(a.column, width_right - min(l.x0 for l in lines))
@@ -1700,7 +1826,10 @@ class Builder:
                 continue
             if box.kind == "note":
                 self.close_para()
-                a.items.append(("note", line_html(l)))
+                if i and a.items and a.items[-1][0] == "note" and not ENDS.search(lines[i - 1].text):
+                    a.items[-1] = ("note", self.join_html(a.items[-1][1], line_html(l), l.text))
+                else:               # (« Henry Holt; $32.99. Bloomsbury | Continuum; £25 »: one note)
+                    a.items.append(("note", line_html(l)))
                 continue
             sig = signature(l)
             if sig:
@@ -1711,7 +1840,9 @@ class Builder:
                 a.last_line = l
                 continue
             if getattr(a, "open_class", None) == "signature" and a.open is not None:
-                if not indented and l.x1 - l.x0 < 0.88 * a.column and len(l.text) < 50:
+                if not indented and l.x1 - l.x0 < 0.88 * a.column and len(l.text) < 50 and \
+                        (a.last_line is None or l.base - a.last_line.base < 1.6 * l.size):
+                    # (a signature's lines follow at the text's pitch: after a blank line, the next letter)
                     a.open.append(" · ")
                     a.open.append(line_html(l))
                     a.last_line = l
@@ -1743,6 +1874,8 @@ class Builder:
             a._right = max(getattr(a, "_right", 0), l.x1) if i else l.x1
             a.last_line = l
             a.right_of = width_right
+            if getattr(l, "jumps", False):
+                a.jumped = True
 
     def append_line(self, a, l):
         piece = line_html(l)
@@ -1906,6 +2039,9 @@ def read_issue(pdf_path, prof, doc):
         w, h = page.get_width(), page.get_height()
         chars = page_chars(page)
         lines = [l for l in lines_of(chars) if l.x1 > 1 and l.x0 < w - 1]   # what lies beyond the page is the facing one's
+        marks = getattr(prof, "jump_marks", None)
+        if marks:
+            lines = mark_jumps(lines, *marks)
         images, paths, panels = page_objects(page, getattr(prof, "framed_panels", False))
         pages.append((w, h, lines, images, paths, panels))
         cut = False
@@ -1986,8 +2122,9 @@ def join_seam(left, right, w):
 
 
 def build(pdf_path, prof, doc):
-    global CUT_AT_HEADS
+    global CUT_AT_HEADS, END_MARK
     CUT_AT_HEADS = getattr(prof, "cut_at_heads", False)
+    END_MARK = getattr(prof, "end_mark", "")
     pages, vocab = read_issue(pdf_path, prof, doc)
     sizes = Counter()
     for w, h, lines, _i, _p, _q in pages:
@@ -2137,7 +2274,8 @@ def build(pdf_path, prof, doc):
         order = xy_order(blocks + pics)
         cur = b.cur
         open_text = cur.last_line.text if cur is not None and cur.open and cur.last_line is not None else ""
-        order = tail_first(order, open_text)
+        jumps = cur is not None and cur.last_line is not None and getattr(cur.last_line, "jumps", False)
+        order = tail_first(order, open_text, jumps)
         if CUT_AT_HEADS:
             order = repair_flow(order)
         pending_hero = []

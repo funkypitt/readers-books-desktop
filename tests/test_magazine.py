@@ -151,6 +151,50 @@ class ReadingOrder(unittest.TestCase):
         lines = m2e.mark_jumps(m2e.lines_of(row("▸ its spending plans.", 22, 53)), "▸", "⏩", "■")
         self.assertEqual([(l.text, l.continued, round(l.x0)) for l in lines], [("its spending plans.", True, 30)])
 
+    def test_two_facing_pages_are_read_in_bands_a_page_at_a_time(self):
+        # a headline across the fold (at 892), the article's columns on both pages; under a second
+        # headline across, the next article; a column at the left edge runs on past that headline
+        h1 = box("head", 300, 100, 1300, 140, "De Keir Starmer", "relève de la garde")
+        side_h = box("head", 45, 300, 246, 340, "Chronique", "libérale (II)")
+        s1 = box("body", 45, 350, 246, 760, "La recommandation", "il y en a.")
+        s2 = box("body", 45, 780, 246, 1000, "Pour accoucher", "la tyrannie. »")
+        l1 = box("body", 300, 160, 560, 700, "Monsieur Andrew", "ne va plus.")
+        r1 = box("body", 934, 160, 1189, 700, "Ces politiques", "la même chose. »")
+        h2 = box("head", 300, 768, 1300, 800, "Le soutien intéressé", "de Londres à Kiev")
+        l2 = box("body", 300, 820, 560, 1000, "C’est un labyrinthe", "indispensable.")
+        r2 = box("body", 934, 820, 1189, 1000, "Les tories", "sa reconstruction.")
+        order = m2e.sheet_order([r2, l2, h2, r1, l1, s2, s1, side_h, h1], 892)
+        at = {id(b): i for i, b in enumerate(order)}
+        self.assertEqual(at[id(s2)], at[id(s1)] + 1)          # the side column, whole
+        self.assertLess(at[id(h1)], at[id(l1)])
+        self.assertLess(at[id(l1)], at[id(r1)])             # the left page, then the right
+        self.assertLess(at[id(r1)], at[id(h2)])             # before the next article
+        self.assertLess(at[id(s2)], at[id(h2)])
+        self.assertEqual([at[id(h2)] < at[id(l2)], at[id(l2)] < at[id(r2)]], [True, True])
+
+    def test_an_articles_last_column_beside_the_next_piece_goes_on_from_the_word_cut(self):
+        # a review in three columns, a shorter one set under its first two: the third column is
+        # read after the short piece, unless the word cut at the second's foot says otherwise
+        if not m2e._dictionary("fr"):
+            self.skipTest("no French word list")
+        c1 = box("body", 70, 790, 263, 946, "’ai pris, du premier", "de la même année.")
+        c2a = box("body", 279, 790, 473, 878, "« Que de mensonges André »", "même pleurer…»")
+        c2b = box("body", 280, 890, 473, 948, "«Nadja n’est pas un roman", "familiaux, corres\x02")
+        rubric = box("rubric", 42, 974, 216, 990, "Roman graphique", "Roman graphique")
+        head = box("head", 87, 1005, 218, 1050, "Martin Eden", "à Waikiki")
+        m1 = box("body", 70, 1073, 263, 1291, "ACK London à Hawaï", "George Freeth, «un")
+        m2 = box("body", 280, 1226, 473, 1244, "dieu vivant», première légende", "est un métis.")
+        sig_m = box("sig", 397, 1249, 464, 1256, "Daniel Matias.", "Daniel Matias.")
+        c3 = box("body", 490, 790, 674, 898, "pondances accessibles(3).", "plus insaisissable.")
+        c4 = box("body", 488, 910, 674, 1068, "Ella Balaert veut", "répond Balaert.")
+        sig_c = box("sig", 552, 1183, 666, 1190, "Philippe Pataud Célérier.", "Philippe Pataud Célérier.")
+        m2e.VOCAB = m2e.Vocabulary("fr")
+        try:
+            order = m2e.repair_flow([c1, c2a, c2b, rubric, head, m1, m2, sig_m, c3, c4, sig_c])
+        finally:
+            m2e.VOCAB = None
+        self.assertEqual(order, [c1, c2a, c2b, c3, c4, sig_c, rubric, head, m1, m2, sig_m])
+
 
 def chars(text, x=10.0, advance=6.0, gap=0.0, size=10.0, font="HelveticaNeueLTPro-Bd-SC750"):
     """Glyphs on one baseline, `gap` points apart (a letter-spaced line when it is wide)."""

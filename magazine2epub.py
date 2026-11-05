@@ -1320,6 +1320,7 @@ def _cut(boxes, axis):
 
 ENDS = re.compile(r"[.!?:;”\"’)\]■♦…»]$")
 END_MARK = ""               # set by a profile: the sign printed at an article's end (■)
+VOCAB = None                # the issue's words, once read
 
 
 def _seam(a, b):
@@ -1329,7 +1330,7 @@ def _seam(a, b):
     if a.kind == "picture" or b.kind == "picture":
         return 0
     last, first = a.lines[-1].text, b.lines[0].text
-    lower = b.kind == "body" and first[:1].islower()
+    lower = b.kind == "body" and first[:1].islower() and not getattr(b.lines[0], "drop", False)
     goes_on = lower or (b.kind == "body" and first[:1].isdigit())      # …sources by | 2030, which
     if a.kind in ("rubric", "head", "stand", "byline", "dateline", "section", "sub") and lower:
         return 1
@@ -1341,6 +1342,8 @@ def _seam(a, b):
             return 1
         if not cut and lower:
             return 1
+        if lower and last.endswith("\x02") and VOCAB is not None and not VOCAB.joins(last[:-1], first):
+            return 0.5              # corres-|dieu: no such word (a tie-breaker)
     if b.kind == "rubric" and a.kind in ("rubric", "head", "stand", "byline"):
         return 1
     return 0
@@ -1368,8 +1371,8 @@ def _bands(rows):
         first = min(g, key=lambda b: (b.top, b.x0))
         region = out and any(b.lines and getattr(b.lines[0], "region", False) for b in out[-1]) and \
             all(b.kind in HEAD_ROLES + ("section", "picture") for b in out[-1])
-        if out and (region or not (first.kind in HEAD_ROLES + ("section", "picture", "sub") or _heads_only(out[-1]) or _heads_only(g))):
-            out[-1] = out[-1] + g
+        if out and (region or not (first.kind in ("rubric", "head", "section", "picture", "sub") or _heads_only(out[-1]) or _heads_only(g))):
+            out[-1] = out[-1] + g       # (a standfirst beside the first column: not a band of its own)
         else:
             out.append(g)
     return out
@@ -1436,11 +1439,45 @@ def xy_order(boxes):
     return list(out)
 
 
+def sheet_order(boxes, gutter):
+    """The reading order of a page; or of two facing pages read as one: in bands, one from each
+    headline across the fold; in each, the left page's text before the right's, what lies across
+    the fold (the headline, a picture) with the left."""
+    if gutter is None:
+        return xy_order(boxes)
+    across = lambda b: b.x0 < gutter - 2 and b.x1 > gutter + 2
+    if any(across(b) and b.kind not in HEAD_ROLES + ("section", "picture") and getattr(b.lines[0], "panel", None) is None
+           for b in boxes):
+        return xy_order(boxes)      # text across the fold: the pages are one
+    cuts = []
+    for h in sorted((b for b in boxes if across(b) and b.kind in ("head", "section")), key=lambda b: b.top)[1:]:
+        over = [b for b in boxes if across(b) and b.kind == "rubric" and 0 <= h.top - b.bottom < 40]
+        cuts.append(min([h.top] + [b.top for b in over]))
+    bands = [[] for _ in range(len(cuts) + 1)]
+    band = {}
+    for b in sorted(boxes, key=lambda b: (b.top, b.x0)):
+        k = sum(1 for c in cuts if b.top >= c - 2)
+        for u in boxes:             # a column running on across the cut (beside the headline) stays
+            if b.kind not in HEAD_ROLES + ("section",) and id(u) in band and band[id(u)] < k \
+                    and u.kind not in HEAD_ROLES + ("section",) and u.bottom <= b.top + 1 and b.top - u.bottom < 36 \
+                    and _overlap(u.x0, u.x1, b.x0, b.x1) > 0.5 * min(u.x1 - u.x0, b.x1 - b.x0):
+                k = band[id(u)]
+        band[id(b)] = k
+        bands[k].append(b)
+    out = []
+    for band in bands:
+        left = [b for b in band if b.x1 <= gutter + 2 or across(b)]
+        done = set(id(b) for b in left)
+        out += xy_order(left) + xy_order([b for b in band if id(b) not in done])
+    return out
+
+
 def repair_flow(order):
     """A sentence cut at a column's foot goes on in the next column, whatever the page's order
     put in between (a promotion, a box without a frame): that goes aside, after the paragraph."""
     cut = lambda b: b.lines[-1].text.endswith(("\x02", "-")) or not ENDS.search(b.lines[-1].text)
-    lower = lambda b: b.kind == "body" and b.lines[0].text[:1].islower()
+    lower = lambda b: b.kind == "body" and b.lines[0].text[:1].islower() and not getattr(b.lines[0], "drop", False)
+    boxed = lambda b: b.lines and getattr(b.lines[0], "panel", None) is not None
     panel = 1000
     for _ in range(6):
         seq = [i for i, b in enumerate(order) if b.kind not in ("picture", "footnote", "caption")]
@@ -1478,6 +1515,30 @@ def repair_flow(order):
                 break
             if moved:
                 break
+        if not moved and VOCAB is not None:     # across another piece: an article's last column
+            for k, i in enumerate(seq):         # runs on beside the piece set under its first
+                b = order[i]                    # columns — known by the word cut in two
+                if not lower(b) or k == 0 or boxed(b):
+                    continue
+                p = order[seq[k - 1]]
+                if p.kind == "body" and cut(p):
+                    continue
+                for kk in range(k - 2, -1, -1):
+                    a = order[seq[kk]]
+                    if a.kind != "body" or boxed(a) or not a.lines[-1].text.endswith("\x02") or lower(order[seq[kk + 1]]):
+                        continue
+                    if not (b.x0 >= a.x1 - 2 or b.top >= a.bottom - 2) or \
+                            not VOCAB.joins(a.lines[-1].text[:-1], b.lines[0].text, strict=True):
+                        break
+                    j = i + 1               # the rest of b's column: the article's end, its signature
+                    while j < len(order) and order[j].kind in ("body", "sub", "sig", "footnote", "picture") \
+                            and _overlap(order[j].x0, order[j].x1, b.x0, b.x1) > 0 and order[j].top >= order[j - 1].bottom - 1:
+                        j += 1
+                    order[:] = order[:seq[kk] + 1] + order[i:j] + order[seq[kk] + 1:i] + order[j:]
+                    moved = True
+                    break
+                if moved:
+                    break
         if not moved:
             break
     return order
@@ -1498,7 +1559,7 @@ def tail_first(order, open_text, jumps=False):
                   and getattr(b.lines[0], "continued", False)), None)
     if start is None:
         for i, b in enumerate(order):
-            if i < heads[0] or b.kind != "body" or not b.lines[0].text[:1].islower():
+            if i < heads[0] or b.kind != "body" or not b.lines[0].text[:1].islower() or getattr(b.lines[0], "drop", False):
                 continue
             before = next((o for o in reversed(order[:i]) if o.kind != "picture"), None)
             if before is not None and before.kind == "body" and not ENDS.search(before.lines[-1].text):
@@ -1594,6 +1655,21 @@ class Vocabulary:
         if known(a) and known(b) and len(a) >= 2 and len(b) >= 3:
             return True             # long-|awaited, white-|collar
         return False
+
+    def joins(self, left, right, strict=False):
+        """`left` ended a line on a hyphen: can `right` be the rest of its word, or of a compound?
+        (Only said no with a word list at hand: corres-|dieu.) Strict: the whole is a word known."""
+        a = WORD.findall(left)
+        b = WORD.findall(right)
+        if not a or not b or not self.dictionary:
+            return not strict
+        a, b = a[-1].lower(), b[0].lower()
+        if (a + b) in self.words or (a + b) in self.dictionary or (a + "-" + b) in self.hyphened:
+            return True
+        if strict:
+            return False
+        known = lambda w: self.words.get(w, 0) or w in self.dictionary
+        return b in SUFFIXES or bool(known(a) and known(b))
 
 
 def _span_html(text, font, sc_upper=True):
@@ -2122,10 +2198,11 @@ def join_seam(left, right, w):
 
 
 def build(pdf_path, prof, doc):
-    global CUT_AT_HEADS, END_MARK
+    global CUT_AT_HEADS, END_MARK, VOCAB
     CUT_AT_HEADS = getattr(prof, "cut_at_heads", False)
     END_MARK = getattr(prof, "end_mark", "")
     pages, vocab = read_issue(pdf_path, prof, doc)
+    VOCAB = vocab
     sizes = Counter()
     for w, h, lines, _i, _p, _q in pages:
         for l in lines:
@@ -2224,6 +2301,7 @@ def build(pdf_path, prof, doc):
             if cands:
                 first = min(cands, key=lambda l: l.top)
                 drops[id(first)] = d.text
+                first.drop = True
                 for l in body_lines:
                     if l.x0 >= d.x1 - 2 and l.x0 - d.x1 < 3 * bs and l.top < d.bottom - 2 and l.bottom > d.top:
                         beside.add(id(l))
@@ -2249,6 +2327,23 @@ def build(pdf_path, prof, doc):
                 best.caption = ((best.caption + " ") if best.caption else "") + text.replace("\x02", "-")
         for l in text_lines:
             l.panel = None
+        framed = len(panels)
+
+        def runs_out(inside):
+            """The text in the frame going on just outside it, at the lines' pitch: a frame the
+            text is set round (a map's), not a box set apart."""
+            ids = set(id(l) for l in inside)
+            for l in inside:
+                if l.role != "body":
+                    continue
+                for m in text_lines:
+                    if id(m) in ids or m.role != "body" or \
+                            _overlap(l.x0, l.x1, m.x0, m.x1) < 0.5 * min(l.x1 - l.x0, m.x1 - m.x0):
+                        continue
+                    if -1 < m.top - l.bottom < 0.6 * l.size or -1 < l.top - m.bottom < 0.6 * l.size:
+                        return True
+            return False
+
         panels = list(panels) + bold_panels(text_lines)
         heads_ok = getattr(prof, "heads_in_boxes", False)
         for k, (x0, top, x1, bottom) in enumerate(panels):
@@ -2258,7 +2353,7 @@ def build(pdf_path, prof, doc):
             # (a box may have a title of its own, where the magazine says so; never a byline: that is an article)
             heads = ("section", "byline") if getattr(prof, "heads_in_boxes", False) else ("head", "section")
             if inside and not any(l.role in heads for l in inside) and \
-                    sum(len(l.text) for l in inside if l.role == "body") > 80:
+                    sum(len(l.text) for l in inside if l.role == "body") > 80 and not (k < framed and runs_out(inside)):
                 for l in inside:
                     if l.panel is None:
                         l.panel = k
@@ -2271,7 +2366,7 @@ def build(pdf_path, prof, doc):
                         pc.crop = getattr(pc, "crop", None) or (pc.x0, pc.top, pc.x1, pc.bottom)
                         pc.top = l.bottom + 0.5
         _MEMO.clear()
-        order = xy_order(blocks + pics)
+        order = sheet_order(blocks + pics, w0 if len(sheet) > 1 else None)
         cur = b.cur
         open_text = cur.last_line.text if cur is not None and cur.open and cur.last_line is not None else ""
         jumps = cur is not None and cur.last_line is not None and getattr(cur.last_line, "jumps", False)

@@ -89,7 +89,10 @@ reader, the same library, the same wording.
   their own, a title that is only a drawing is found in the table of contents; advertisements,
   the contents, the masthead and the crossword are left out. Le Monde diplomatique, a newspaper,
   has more: the articles begun on the front page are joined to their end (« Lire la suite page
-  13 »), a headline across two facing pages is read as one, the boxed pieces and their
+  13 »), a headline across two facing pages is read as one and the pages under it a page at a
+  time, in bands from each such headline; a review's last column running on beside the next
+  piece is read before it where the word cut at the column's foot says so; a frame the text is
+  set round (a map's) is not a box; the boxed pieces and their
   footnotes follow their article, the short reviews of the books' pages are grouped by field,
   and the issue is dated the first of its month. On its own:
   `<that environment>/bin/python magazine2epub.py issue.pdf issue.epub` (`--which issue.pdf`

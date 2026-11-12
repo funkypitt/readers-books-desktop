@@ -6,6 +6,7 @@ place in each book kept), the same magazine contents, the same optional library 
 WebDAV address), the same highlights, the same credentials file. One file, PyQt5 — and
 paper2epub.py next to it, which turns a paper in PDF into an EPUB.
 """
+import html
 import json
 import locale
 import os
@@ -30,7 +31,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.19.2"
+VERSION = "1.20.0"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -157,6 +158,9 @@ STRINGS = {
   "latest %s": "dernier : %s",
   "looking for more… %d/%d": "recherche en cours… %d/%d",
   "the newest first": "les plus récents d'abord",
+  "by periodical": "par périodique",
+  "every issue": "chaque numéro",
+  "the latest issue first": "dernière parution d'abord",
   "search": "rechercher",
   "title, author or folder": "titre, auteur ou dossier",
   "no book matches": "aucun livre ne correspond",
@@ -311,6 +315,9 @@ STRINGS = {
   "latest %s": "neueste: %s",
   "looking for more… %d/%d": "Suche läuft… %d/%d",
   "the newest first": "die neuesten zuerst",
+  "by periodical": "nach Zeitschrift",
+  "every issue": "jede Ausgabe",
+  "the latest issue first": "neueste Ausgabe zuerst",
   "search": "suchen",
   "title, author or folder": "Titel, Autor oder Ordner",
   "no book matches": "kein Buch passt dazu",
@@ -465,6 +472,9 @@ STRINGS = {
   "latest %s": "último: %s",
   "looking for more… %d/%d": "buscando más… %d/%d",
   "the newest first": "los más recientes primero",
+  "by periodical": "por publicación",
+  "every issue": "cada número",
+  "the latest issue first": "último número primero",
   "search": "buscar",
   "title, author or folder": "título, autor o carpeta",
   "no book matches": "ningún libro coincide",
@@ -619,6 +629,9 @@ STRINGS = {
   "latest %s": "último: %s",
   "looking for more… %d/%d": "procurando mais… %d/%d",
   "the newest first": "os mais recentes primeiro",
+  "by periodical": "por publicação",
+  "every issue": "cada número",
+  "the latest issue first": "último número primeiro",
   "search": "pesquisar",
   "title, author or folder": "título, autor ou pasta",
   "no book matches": "nenhum livro corresponde",
@@ -774,6 +787,9 @@ STRINGS = {
   "latest %s": "последний: %s",
   "looking for more… %d/%d": "идёт поиск… %d/%d",
   "the newest first": "сначала новые",
+  "by periodical": "по изданиям",
+  "every issue": "каждый выпуск",
+  "the latest issue first": "сначала с последним выпуском",
   "search": "поиск",
   "title, author or folder": "название, автор или папка",
   "no book matches": "ни одна книга не подходит",
@@ -905,6 +921,17 @@ def n_new(n):
 
 def n_issues(n):
     return _plural(ISSUES_COUNT, n)
+
+
+PERIODICALS_COUNT = {
+ "en": ("%d periodical", "%d periodicals"), "fr": ("%d périodique", "%d périodiques"), "de": ("%d Zeitschrift", "%d Zeitschriften"),
+ "es": ("%d publicación", "%d publicaciones"), "pt": ("%d publicação", "%d publicações"),
+ "ru": ("%d издание", "%d издания", "%d изданий"),
+}
+
+
+def n_periodicals(n):
+    return _plural(PERIODICALS_COUNT, n)
 
 
 def n_books(n):
@@ -3278,25 +3305,29 @@ def epub_is_news(read):
     return epub_kind(read)[0]
 
 
+_DC_TITLE = re.compile(r"<dc:title[^>]*>([^<]*)")
 _DC_DATE = re.compile(r"<dc:date[^>]*>\s*(\d{4})-(\d{2})-(\d{2})")
 
 
 def epub_kind(read):
-    """(news, issue date): news = True for an issue of a newspaper or a magazine, or a gathering
+    """(news, issue date, title): news = True for an issue of a newspaper or a magazine, or a gathering
     of articles (a newsletter's, a channel's summaries: a contents page of titles, with or without
     their authors); False for a book; None when the drive would not say (no byte ranges, a broken
-    file). The issue's date is its own (dc:date), in milliseconds, 0 when it has none.
+    file). The issue's date is its own (dc:date), in milliseconds, 0 when it has none; its title
+    is its dc:title, "" when it has none (None when the package was not read).
     `read(start, length)` as WebDav.read_range."""
     entries = _zip_directory(read)
     if entries is None:
-        return None, 0
+        return None, 0, None
     opf_name = next((n for n in entries if n.lower().endswith(".opf")), None)
     if opf_name is None:
-        return None, 0
+        return None, 0, None
     opf = _zip_member(read, entries, opf_name)
     if opf is None:
-        return None, 0
+        return None, 0, None
     opf = opf.decode("utf-8", "replace")
+    m = _DC_TITLE.search(opf)
+    title = html.unescape(m.group(1)).strip() if m else ""
     m = _DC_DATE.search(opf)
     try:
         date = int(datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).timestamp() * 1000) if m else 0
@@ -3321,11 +3352,11 @@ def epub_kind(read):
             text = text.decode("utf-8", "replace")
             # one title per article (a publisher may call its contents' own heading "toc-title")
             if re.search(r'<span\b[^>]*class="[^"]*\btoc-title\b', text):
-                return True, date
+                return True, date, title
     # signature B: the articles themselves start with their section and a headline
     spine = [items[i] for i in re.findall(r'<itemref\b[^>]*idref="([^"]+)"', opf) if i in items]
     if len(spine) < 3:
-        return False, date
+        return False, date, title
     picks = [spine[len(spine) * k // 4] for k in (1, 2, 3)]
     structured = 0
     for name in picks:
@@ -3335,7 +3366,7 @@ def epub_kind(read):
         text = text.decode("utf-8", "replace")
         if re.search(r'<p\b[^>]*class="[^"]*\bcategory\b', text, re.I) and re.search(r"<h1\b", text, re.I):
             structured += 1
-    return structured >= 2, date
+    return structured >= 2, date, title
 
 
 def news_date(book, kind=None):
@@ -3539,6 +3570,78 @@ def magazine_issue(title):
         return t
     rest = _LEADING.sub("", t[len(name):].lstrip(" —–-,:|·")) if t.startswith(name) else t
     return rest or t
+
+
+_FILE_DATED = re.compile(r"^(\d{4}-\d{2}-\d{2}|\d{8})[-_ .]+(.+)$")
+_BLACKLISTED = re.compile(r"_blacklisted_.*$")
+_YEAR = re.compile(r"\b(19|20)\d{2}\b")
+
+
+def periodical_file_keys(names):
+    """What each file name says of its periodical. « 2026-11-10-letemps.epub » belongs to
+    « letemps »; when several files go on differently after the same first word
+    (« 2026-11-09-norwitz-how-to….epub », « 2026-11-02-norwitz-could-this….epub »), that word is
+    the periodical and the rest names the issue. A file without a date in front is filed by its
+    name with the date taken off, as the shelf does with titles. Rule for rule the Android app's
+    Periodicals.fileKeys."""
+    rests = {}
+    for name in names:
+        stem = _BLACKLISTED.sub("", name.rsplit(".", 1)[0] if "." in name else name).strip()
+        m = _FILE_DATED.match(stem)
+        rests[name] = (True, m.group(2).lower()) if m else (False, stem)
+    after = {}
+    for dated, r in rests.values():
+        if dated and "-" in r:
+            after.setdefault(r.split("-", 1)[0], set()).add(r)
+    out = {}
+    for name, (dated, r) in rests.items():
+        if not dated:
+            out[name] = magazine_key(r.replace("_", " "))
+        elif "-" in r and len(after.get(r.split("-", 1)[0], ())) >= 2:
+            out[name] = r.split("-", 1)[0]
+        else:
+            out[name] = r
+    return out
+
+
+def periodicals(news, title, date):
+    """The periodicals of these issues, the one with the latest issue first; in each, the newest
+    issue first: [{"key", "name", "issues", "latest"}]. Issues go together by their file names;
+    the periodical is named as its issues name it inside (`title(book)`, None or "" when not
+    known), and two ways of naming the files of one periodical (same name inside) make one."""
+    keys = periodical_file_keys({b["name"] for b in news})
+    groups = {}
+    for b in news:
+        groups.setdefault(keys[b["name"]], []).append(b)
+    newest = lambda b: (date(b), b["name"])
+    named = {}
+    for key, issues in groups.items():
+        issues.sort(key=newest, reverse=True)
+        inside = next((magazine_name(t) for t in (title(b) for b in issues) if t and t.strip()), None)
+        name = inside or key.replace("_", " ").replace("-", " ")
+        named.setdefault(magazine_key(name.replace("’", "'")) or name, []).append((name, issues))
+    out = []
+    for key, parts in named.items():
+        issues = sorted((b for _name, part in parts for b in part), key=newest, reverse=True)
+        name = max(parts, key=lambda part: date(part[1][0]))[0]
+        out.append({"key": key, "name": name, "issues": issues, "latest": date(issues[0])})
+    out.sort(key=lambda p: p["name"].lower())
+    out.sort(key=lambda p: p["latest"], reverse=True)
+    return out
+
+
+def periodical_issue_title(book, title):
+    """What names an issue in the list of its periodical: its title inside without the
+    periodical's name, and without the edition's date when something else names it (the date is
+    on the line below); else its file's name."""
+    if not title or not title.strip():
+        return remote_title(book)
+    issue = magazine_issue(title)
+    for dash in _DASHES:
+        i = issue.rfind(dash)
+        if i > 0 and _YEAR.search(issue[i:]):
+            return issue[:i].strip()
+    return issue
 
 
 def issue_time(entry):
@@ -3873,19 +3976,29 @@ class RemoteLibrary:
     def issue_date(self, book):
         return news_date(book, self.kind_of(book))
 
+    def issue_title(self, book):
+        """The title an issue carries inside, None while it was not read."""
+        return (self.kind_of(book) or {}).get("n")
+
+    def periodicals(self, cfg):
+        """The news by periodical, the one with the latest issue first."""
+        return periodicals(self.news(cfg), self.issue_title, self.issue_date)
+
     def news(self, cfg):
         """The library's newspapers, magazines and gatherings of articles, the newest issue first."""
         found = [b for b in self.shown(cfg) if (self.kind_of(b) or {}).get("news")]
         return sorted(found, key=lambda b: (self.issue_date(b), b.get("created") or b.get("modified") or 0), reverse=True)
 
     def unsorted(self, cfg):
-        """The EPUBs not yet looked at (or changed since), and those the drive would not answer for, three times at most."""
+        """The EPUBs not yet looked at (or changed since), those the drive would not answer for,
+        three times at most, and the issues whose title was never read (told apart before titles
+        were kept)."""
         out = []
         for b in self.shown(cfg):
             if _ext(b["name"]) != "epub":
                 continue
             k = self.kind_of(b)
-            if k is None or (k.get("news") is None and k.get("t", 0) < ATTEMPTS):
+            if k is None or (k.get("news") is None and k.get("t", 0) < ATTEMPTS) or (k.get("news") and k.get("n") is None):
                 out.append(b)
         return out
 
@@ -3904,10 +4017,11 @@ class RemoteLibrary:
                     self.sorting = (self.sorting[0], self.sorting[1] + len(new)) if self.sorting else (0, len(new))
             return
         known = known or {}
-        told = [b for b in todo if b["ref"] in known]
+        told = [b for b in todo if b["ref"] in known and (self.kind_of(b) or {}).get("news") is None]
         for b in told:
             self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": bool(known[b["ref"]]), "v": KINDS_VERSION}
-        todo = [b for b in todo if b["ref"] not in known]
+        # an issue known from this computer is still read on the drive, for its title and its date
+        todo = [b for b in todo if known.get(b["ref"]) is not False]
         if not todo:
             if told:
                 self._save_kinds()
@@ -3928,18 +4042,23 @@ class RemoteLibrary:
                     b = queue.pop(0)
                     self.sort_busy.add(b["ref"])
                 try:
-                    news, date = epub_kind(lambda start, length: remote.read_range(b["ref"], start, length, b.get("size") or 0))
+                    news, date, name = epub_kind(lambda start, length: remote.read_range(b["ref"], start, length, b.get("size") or 0))
                 except WrongLogin:
                     with lock:
                         queue.clear()
                     return
                 except Exception:
-                    news, date = None, 0
+                    news, date, name = None, 0, None
                 with lock:
                     self.sort_busy.discard(b["ref"])
                     old = self.kinds.get(b["ref"]) or {}
                     tries = (old.get("t", 0) + 1) if news is None and old.get("m") == b.get("modified") else (1 if news is None else 0)
-                    self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": news, "t": tries, "d": date, "v": KINDS_VERSION}
+                    kept = self.kind_of(b)
+                    if news is None and kept and kept.get("news"):
+                        # an issue already told, read again only for its title: the drive not answering takes nothing back
+                        self.kinds[b["ref"]] = dict(kept, n="")
+                    else:
+                        self.kinds[b["ref"]] = {"s": b.get("size"), "m": b.get("modified"), "news": news, "t": tries, "d": date, "v": KINDS_VERSION, "n": name or ""}
                     done = self.sorting[0] + 1 if self.sorting else 1
                     self.sorting = (done, len(todo))
                     if done % 25 == 0:
@@ -4661,7 +4780,7 @@ DEFAULTS = {"theme": "DARK", "dark": True, "font": "sans", "text_size": "M", "re
             # the orders of a folder's books, of all books, of the folders, of the shelf; the library by top
             # folders only; a folder with the books of the folders inside it
             "library_sort": "NAME", "all_books_sort": "NEWEST", "folder_sort": "NAME", "shelf_sort": "OPENED",
-            "library_top_folders": False, "library_subfolders": False,
+            "library_top_folders": False, "library_subfolders": False, "news_by_periodical": False,
             # the folders of the drive that make the library (empty = the whole drive); whether the choice was offered
             "library_folders": [], "library_excluded": [], "library_folders_asked": False}
 AUTO_READER_PT = 13
@@ -6354,6 +6473,7 @@ class PictureView(QtWidgets.QWidget):
 
 SHELF, BOOK, CHAPTERS, SETTINGS, LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS, SEARCH = "shelf", "book", "chapters", "settings", "library", "folder", "all", "library_folders", "search"
 NEWS = "news"
+PERIODICAL = "periodical"     # (PERIODICAL, key): the issues of one periodical of the news
 ISSUES = "issues"       # the issues on this computer of one magazine ("magazine", key) or of one followed folder ("folder", path)
 ADD_TO_LIBRARY = "add_to_library"       # choosing the folder of the library a book of the shelf is sent to
 UI_SIZES = {"S": 11, "M": 13, "L": 15}
@@ -6663,6 +6783,8 @@ class Main(QtWidgets.QMainWindow):
     def back_label(self):
         """What a back leads to, named as the screen below calls itself."""
         below = self.stack[-2][0] if len(self.stack) > 1 else None
+        if below == NEWS and self.screen[0] == PERIODICAL:
+            return _("news")
         if below in (LIBRARY, FOLDER, ALL_BOOKS, SEARCH, NEWS):
             return _("library")
         if below == SHELF and self.stack[0][0] != SHELF:
@@ -7406,7 +7528,7 @@ class Main(QtWidgets.QMainWindow):
     def watch_scan(self):
         if self.remote.changed != self.seen_change or self.follow_changed != self.follow_seen:
             self.seen_change, self.follow_seen = self.remote.changed, self.follow_changed
-            if self.screen[0] in (LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS, NEWS):
+            if self.screen[0] in (LIBRARY, FOLDER, ALL_BOOKS, LIBRARY_FOLDERS, NEWS, PERIODICAL):
                 self.show_screen()
 
     def scan(self, fresh):
@@ -7728,9 +7850,26 @@ class Main(QtWidgets.QMainWindow):
 
     def screen_news(self):
         """The library's newspapers and magazines, whatever their folder: the newest issue first."""
+        if self.cfg.get("news_by_periodical"):
+            # by periodical: the one with the latest issue first, its issues one click further
+            found = self.remote.periodicals(self.cfg)
+            rows = [Row(" · ".join((n_periodicals(len(found)), _("the latest issue first"))), kind=SECTION)]
+            for p in found:
+                rows.append(Row(p["name"], " · ".join((n_issues(len(p["issues"])), _("latest %s", date_label(p["latest"])))),
+                                lambda key=p["key"]: self.push((PERIODICAL, key))))
+            return _("news"), rows, [(_("every issue"), lambda: self.set("news_by_periodical", False)), None, (_("search"), self.ask_search)]
         books = self.remote.news(self.cfg)
         title, rows, menu = self.book_list(_("news"), books, "NEWEST", None, folder=True, dated=self.remote.issue_date,
                                            heading=" · ".join((n_issues(len(books)), _("the newest first"))))
+        return title, rows, [(_("by periodical"), lambda: self.set("news_by_periodical", True)), None, (_("search"), self.ask_search)]
+
+    def screen_periodical(self):
+        """The issues of one periodical of the news, the newest first, each named by its own title."""
+        found = next((p for p in self.remote.periodicals(self.cfg) if p["key"] == self.screen[1]), None)
+        books = found["issues"] if found else []
+        title, rows, menu = self.book_list(found["name"] if found else _("news"), books, "NEWEST", None, dated=self.remote.issue_date,
+                                           heading=" · ".join((n_issues(len(books)), _("the newest first"))),
+                                           titled=lambda b: periodical_issue_title(b, self.remote.issue_title(b)))
         return title, rows, [(_("search"), self.ask_search)]
 
     def screen_search(self):
@@ -7770,7 +7909,7 @@ class Main(QtWidgets.QMainWindow):
         else:
             self.push((SEARCH, query))
 
-    def book_list(self, title, books, order, setting, heading=None, folder=False, base="", opened=None, extra=(), searching=False, dated=None):
+    def book_list(self, title, books, order, setting, heading=None, folder=False, base="", opened=None, extra=(), searching=False, dated=None, titled=None):
         """The drive's books under a title, the order named above them and the orders offered
         under ⋯ (`extra` = what else the menu offers). A click fetches the book (once) and opens
         it. `folder` names each book's folder on its line, as seen from `base`."""
@@ -7783,7 +7922,7 @@ class Main(QtWidgets.QMainWindow):
             seen = _("opened %s", when_label(opened[b["ref"]])) if opened and opened.get(b["ref"]) else ""
             where = (relative_folder(base, b["folder"]) or (_("top of the drive") if not base else "")) if folder else ""
             line = " · ".join(x for x in (state, seen, where, date_label((dated or (lambda b: b["modified"]))(b)), _ext(b["name"]), size_label(b["size"])) if x)
-            rows.append(Row(remote_title(b), line, lambda b=b: self.fetch(b)))
+            rows.append(Row((titled or remote_title)(b), line, lambda b=b: self.fetch(b)))
         menu = self.order_menu(BOOK_ORDERS, order, setting) + list(extra)
         menu += [None, (_("search again"), self.ask_search)] if searching else [None, (_("search"), self.ask_search)]
         return title, rows, menu

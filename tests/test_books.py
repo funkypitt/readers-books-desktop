@@ -1338,6 +1338,46 @@ class SyncOrder(unittest.TestCase):
         self.assertEqual(w.next(), "dav:x")
 
 
+class Periodicals(unittest.TestCase):
+    """The news by periodical: issues go together by what their file names share, the periodical
+    is named as its issues name it inside."""
+
+    def test_file_names_tell_the_periodical(self):
+        keys = rb.periodical_file_keys([
+            "2026-11-10-letemps.epub", "2026-11-09-letemps.epub", "2026-09-03-jaxen-highwire.epub", "2026-09-10-jaxen-highwire.epub",
+            "2026-11-09-norwitz-how-to-reverse-2-5-years-of-aging-in-15-days-qyy8fCuQ5_E.epub", "2026-06-01-norwitz-0a7q8ENyBOk.epub",
+            "2026-06-02-foundmyfitness-DwtNC2A8gBk.epub", "2026-06-02-foundmyfitness-DwtNC2A8gBk_blacklisted_20260602_185017_speOzTugch.epub",
+            "2026-06-03-foundmyfitness-rdcMvDvY4rU.epub", "2026-06-25-apollohealth-pa-20260531.epub", "2026-06-01-apollohealth-pa-20221101.epub",
+            "2026-11-01-diplo.epub", "2026-06-24-mel_robbins-sNzswsEIJ-E.epub", "2026-06-25-mel_robbins-bwQkIWf7rhE.epub",
+            "Le Temps 2026-11-04.epub", "Le Temps 2026-11-05.epub"])
+        self.assertEqual(keys["2026-11-10-letemps.epub"], "letemps")
+        self.assertEqual(keys["2026-09-03-jaxen-highwire.epub"], "jaxen-highwire")
+        self.assertEqual(keys["2026-06-01-norwitz-0a7q8ENyBOk.epub"], "norwitz")
+        self.assertEqual(keys["2026-06-02-foundmyfitness-DwtNC2A8gBk_blacklisted_20260602_185017_speOzTugch.epub"], "foundmyfitness")
+        self.assertEqual(keys["2026-06-25-apollohealth-pa-20260531.epub"], "apollohealth")
+        self.assertEqual(keys["2026-11-01-diplo.epub"], "diplo")
+        self.assertEqual(keys["2026-06-24-mel_robbins-sNzswsEIJ-E.epub"], "mel_robbins")
+        self.assertEqual(keys["Le Temps 2026-11-04.epub"], keys["Le Temps 2026-11-05.epub"])
+
+    def test_periodicals_by_latest_issue_and_issues_newest_first(self):
+        titles = {
+            "2026-11-10-letemps.epub": "Le Temps — Édition du 10.11.2026",
+            "2026-11-09-norwitz-how-to-reverse-qyy8fCuQ5_E.epub": "Nick Norwitz MD PhD — How to Reverse — Édition du lundi 9 novembre 2026",
+            "2026-10-10-impertinent.epub": "L'Impertinent — Samedi 10 octobre 2026",
+            "2026-11-08-impertinent_hebdo.epub": "L’Impertinent — Dimanche 8 novembre 2026"}
+        days = {"2026-11-08-letemps.epub": 8, "2026-11-10-letemps.epub": 10, "2026-11-09-norwitz-how-to-reverse-qyy8fCuQ5_E.epub": 9,
+                "2026-11-02-norwitz-could-this-wJ72xlhdpoQ.epub": 2, "2026-10-10-impertinent.epub": 1, "2026-11-08-impertinent_hebdo.epub": 8,
+                "2026-11-11-24heures.epub": 11}
+        news = [{"name": n, "modified": d} for n, d in days.items()]
+        found = rb.periodicals(news, lambda b: titles.get(b["name"]), lambda b: b["modified"])
+        self.assertEqual([p["name"] for p in found], ["24heures", "Le Temps", "Nick Norwitz MD PhD", "L’Impertinent"])
+        self.assertEqual([b["name"] for b in found[1]["issues"]], ["2026-11-10-letemps.epub", "2026-11-08-letemps.epub"])
+        self.assertEqual(len(found[3]["issues"]), 2)       # two ways of naming the files, one name inside
+        self.assertEqual(rb.periodical_issue_title(news[2], titles[news[2]["name"]]), "How to Reverse")
+        self.assertEqual(rb.periodical_issue_title(news[1], titles[news[1]["name"]]), "Édition du 10.11.2026")
+        self.assertEqual(rb.periodical_issue_title(news[3], None), "2026-11-02-norwitz-could-this-wJ72xlhdpoQ")
+
+
 class News(unittest.TestCase):
     """The library's newspapers and magazines: told from the books by a few bytes of their
     contents page read on the drive, then one row of the library, the newest issue first."""
@@ -1367,7 +1407,7 @@ class News(unittest.TestCase):
                        '<item id="nav" href="toc.xhtml" properties="nav"/><item id="a" href="a.xhtml"/></manifest><spine><itemref idref="a"/></spine></package>')
             z.writestr("OEBPS/toc.xhtml", '<nav><ol><li><a href="a.xhtml"><span class="toc-title">Selling the EU</span><span class="toc-author">Thomas Fazi</span></a></li></ol></nav>')
             z.writestr("OEBPS/a.xhtml", "<html><body><h1>Selling the EU</h1></body></html>")
-        self.assertEqual(rb.epub_kind(file_reader(letter)), (True, int(rb.datetime(2026, 4, 16).timestamp() * 1000)))
+        self.assertEqual(rb.epub_kind(file_reader(letter))[:2], (True, int(rb.datetime(2026, 4, 16).timestamp() * 1000)))
         # a publisher calling its contents' heading "toc-title" is no newspaper
         book = path("n-publisher.epub")
         with zipfile.ZipFile(book, "w") as z:
@@ -1421,6 +1461,20 @@ class News(unittest.TestCase):
             titles = [r.title for r in main.rows if r.kind == rb.ROW]
             self.assertEqual(titles, ["2026-11-04-letemps", "2026-11-03-letemps"])
             LibraryPage.shot(self, main, "news_list")
+            # by periodical: one row for the paper, named as its issues name it inside; its issues one click further
+            self.assertEqual(main.remote.issue_title(main.remote.news(main.cfg)[0]), "Le Temps — 4 novembre 2026")
+            main.set("news_by_periodical", True)
+            rows = [r for r in main.rows if r.kind == rb.ROW]
+            self.assertEqual([r.title for r in rows], ["Le Temps"])
+            self.assertTrue(rows[0].secondary.startswith(rb.n_issues(2)), rows[0].secondary)
+            LibraryPage.shot(self, main, "news_by_periodical")
+            rows[0].action()
+            self.assertEqual(main.screen[0], rb.PERIODICAL)
+            self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["4 novembre 2026", "3 novembre 2026"])
+            LibraryPage.shot(self, main, "news_periodical")
+            main.pop()
+            main.set("news_by_periodical", False)
+            self.assertEqual([r.title for r in main.rows if r.kind == rb.ROW], ["2026-11-04-letemps", "2026-11-03-letemps"])
             # nothing read twice: the next sync finds every book told
             self.assertEqual(main.remote.unsorted(main.cfg), [])
             # a new issue comes while a long sync walks the rest of the drive: it is in the news before the sync ends

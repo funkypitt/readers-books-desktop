@@ -1338,6 +1338,35 @@ class SyncOrder(unittest.TestCase):
         self.assertEqual(w.next(), "dav:x")
 
 
+class SingleQuotes(unittest.TestCase):
+    """An EPUB may write its attributes between single quotes: it opens like any other."""
+
+    def test_attributes_between_single_quotes_are_read_as_the_others(self):
+        self.assertEqual(rb.double_quotes("<item id='nav' href='nav.xhtml' properties='nav'/>"), '<item id="nav" href="nav.xhtml" properties="nav"/>')
+        # the text is never touched, nor an apostrophe inside a double-quoted value, nor a value that holds a double quote
+        self.assertEqual(
+            rb.double_quotes("""<p class='a b' id = 'x'>l'été <img src='a.jpg' alt="it's a='b' here"/> <a href='x.html#y' title='say "hi"'>d'un</a> x='y'</p>"""),
+            """<p class="a b" id = "x">l'été <img src="a.jpg" alt="it's a='b' here"/> <a href="x.html#y" title='say "hi"'>d'un</a> x='y'</p>""")
+        plain = '<p class="a">rien à changer</p>'
+        self.assertIs(rb.double_quotes(plain), plain)
+
+    def test_a_book_written_with_single_quotes_opens_with_its_contents_and_is_news(self):
+        made = make_books.epub(path("sq-double.epub"), "Le Journal — 4 novembre 2026", magazine=True)
+        single = path("sq-single.epub")
+        with zipfile.ZipFile(made) as src, zipfile.ZipFile(single, "w") as dst:
+            for info in src.infolist():
+                data = src.read(info.filename)
+                if info.filename.endswith((".xml", ".opf", ".xhtml", ".html")):
+                    data = data.decode("utf-8").replace('"', "'").encode("utf-8")
+                dst.writestr(info, data)
+        want, got = rb.parse_book(made, rb.EPUB, "x"), rb.parse_book(single, rb.EPUB, "x")
+        self.assertEqual([c.title for c in got.chapters], [c.title for c in want.chapters])
+        self.assertEqual(got.total, want.total)
+        self.assertEqual([(a.category, a.title, a.author) for a in got.magazine], [(a.category, a.title, a.author) for a in want.magazine])
+        self.assertTrue(rb.epub_is_news(file_reader(single)))
+        self.assertEqual(rb.epub_id(single, rb.EPUB), rb.epub_id(made, rb.EPUB))
+
+
 class Periodicals(unittest.TestCase):
     """The news by periodical: issues go together by what their file names share, the periodical
     is named as its issues name it inside."""

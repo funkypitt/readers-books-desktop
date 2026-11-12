@@ -31,7 +31,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.20.0"
+VERSION = "1.20.1"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -2359,7 +2359,7 @@ def _parse_epub(path, fallback_title):
             name = name if name in names else name.lstrip("/")
             if name not in names:
                 return None
-            return zf.read(name).decode("utf-8", "replace")
+            return double_quotes(zf.read(name).decode("utf-8", "replace"))
 
         container = read("META-INF/container.xml")
         if container is None:
@@ -3301,6 +3301,26 @@ def _zip_member(read, entries, name, limit=400000):
     return None
 
 
+_TAG_OPEN = re.compile(r"<[A-Za-z][^<>]*>")
+_TAG_ATTR = re.compile(r"""(\s[\w:.-]+\s*=\s*)(?:"([^"]*)"|'([^'"]*)')""")
+
+
+def double_quotes(xml):
+    """The attributes of every tag between double quotes. XML allows single quotes as well
+    (id='nav', src='a.jpg'), and some makers of EPUBs write them: read as they are, the package,
+    the contents page and the pictures of such a book would not be found. Only attributes change,
+    never the text. Rule for rule the Android app's Quotes.double."""
+    if "'" not in xml:
+        return xml
+
+    def attr(m):
+        return m.group(0) if m.group(3) is None else '%s"%s"' % (m.group(1), m.group(3))
+
+    def tag(m):
+        return _TAG_ATTR.sub(attr, m.group(0)) if "'" in m.group(0) else m.group(0)
+    return _TAG_OPEN.sub(tag, xml)
+
+
 def epub_is_news(read):
     return epub_kind(read)[0]
 
@@ -3325,7 +3345,7 @@ def epub_kind(read):
     opf = _zip_member(read, entries, opf_name)
     if opf is None:
         return None, 0, None
-    opf = opf.decode("utf-8", "replace")
+    opf = double_quotes(opf.decode("utf-8", "replace"))
     m = _DC_TITLE.search(opf)
     title = html.unescape(m.group(1)).strip() if m else ""
     m = _DC_DATE.search(opf)
@@ -3349,7 +3369,7 @@ def epub_kind(read):
     if nav:
         text = _zip_member(read, entries, nav)
         if text is not None:
-            text = text.decode("utf-8", "replace")
+            text = double_quotes(text.decode("utf-8", "replace"))
             # one title per article (a publisher may call its contents' own heading "toc-title")
             if re.search(r'<span\b[^>]*class="[^"]*\btoc-title\b', text):
                 return True, date, title
@@ -3363,7 +3383,7 @@ def epub_kind(read):
         text = _zip_member(read, entries, name)
         if text is None:
             continue
-        text = text.decode("utf-8", "replace")
+        text = double_quotes(text.decode("utf-8", "replace"))
         if re.search(r'<p\b[^>]*class="[^"]*\bcategory\b', text, re.I) and re.search(r"<h1\b", text, re.I):
             structured += 1
     return structured >= 2, date, title
@@ -4330,9 +4350,9 @@ def epub_id(path, fmt):
         return ""
     try:
         with zipfile.ZipFile(path) as z:
-            container = z.read("META-INF/container.xml").decode("utf-8", "replace")
+            container = double_quotes(z.read("META-INF/container.xml").decode("utf-8", "replace"))
             found = re.search(r'full-path="([^"]+)"', container)
-            return package_id(z.read(found.group(1)).decode("utf-8", "replace")) if found else ""
+            return package_id(double_quotes(z.read(found.group(1)).decode("utf-8", "replace"))) if found else ""
     except Exception:
         return ""
 

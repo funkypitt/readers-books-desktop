@@ -4,8 +4,10 @@
 # Actions tab (the binaries are then kept as artifacts for a few days). The .deb and the PKGBUILD
 # stay where they are: this workflow only adds the two desktops that cannot build themselves here.
 #
-# Neither binary is signed: Windows shows a SmartScreen warning, macOS says the app "cannot be
-# opened" until it is opened once with a right click. The README says so to the reader.
+# Neither binary is signed by a developer (the Mac's has an ad hoc signature only): Windows shows a
+# SmartScreen warning; macOS refuses the first launch until it is allowed in System Settings ›
+# Privacy & Security › Open Anyway (a right click › Open on macOS 14 and earlier). The README's
+# Install section says so to the reader.
 
 name: Windows and macOS builds
 
@@ -86,6 +88,8 @@ jobs:
             --add-data "packaging/readers-books.png:." \
             --add-data "packaging/fonts:fonts" \
             readers_books.py
+          # the version, the oldest macOS it runs on, the books it opens from the Finder
+          python packaging/macos-info.py "dist/Readers Books.app" "$VERSION"
           # Ad hoc signature: on Apple Silicon an unsigned binary does not start at all.
           codesign --force --deep --sign - "dist/Readers Books.app"
           codesign --verify --deep --strict "dist/Readers Books.app"

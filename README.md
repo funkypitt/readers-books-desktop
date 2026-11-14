@@ -40,6 +40,9 @@ reader, the same library, the same wording.
   highlights and the page you are at travel like those of any book of the library.
 * Add a book from the shelf (Ctrl+O), by dropping the file on the window, or from a file manager
   ("open with"). Books are copied into the app, so the original can move.
+* On a Mac (1.20.2), the Finder hands books over too: a double click, Open With, a book dropped
+  on the Dock icon — EPUB, MOBI, AZW3, FB2, TXT; the screen stays awake there as well, and the
+  app speaks the Mac's language even when opened from the Finder.
 * The position is kept per book and survives a change of text size or window. The text sits in a
   column no wider than a comfortable line, whatever the window. The screen stays awake while a
   page is open, until fifteen minutes after the last turn (where the system lets a program ask).
@@ -182,11 +185,29 @@ haptic tick.
 Or run it from the source: `python3 readers_books.py` (Python 3.8+, PyQt5, requests; python3-venv
 for the papers in PDF).
 
+**macOS** — download `readers-books_<version>_macos_apple-silicon.dmg` (an M1 or later Mac) or
+`readers-books_<version>_macos_intel.dmg` from the
+[releases](https://github.com/funkypitt/readers-books-desktop/releases), open it and drag
+Reader's Books to Applications. It needs macOS 11 (Big Sur) or later on Apple silicon, 10.13 or
+later on Intel. The app has no Apple developer signature, so the first launch is refused: then
+open System Settings › Privacy & Security, and under the refusal click **Open Anyway** (macOS 15
+and later); on macOS 14 and earlier, right click the app › Open › Open. Once is enough. Or, in
+the Terminal:
+
+    xattr -dr com.apple.quarantine "/Applications/Readers Books.app"
+
+The Mac and Windows builds read every book but do not turn PDFs into EPUBs: that converter needs
+a Python of its own, which the Linux packages and the source have.
+
+**Windows** — `readers-books_<version>_windows_x64.exe` runs as it is; SmartScreen warns once
+(More info › Run anyway).
+
 ## Where things are kept
 
 `~/.local/share/readers-books/` holds the books of the shelf, `library.json` (the shelf and the
 place in each book) and the list of the drive's books; `~/.config/readers-books/config.json` holds
-the settings and the library's account, readable by your account only.
+the settings and the library's account, readable by your account only. On a Mac both are in
+`~/Library/Application Support/readers-books/`; on Windows in `%APPDATA%\Readers Books\`.
 
 ## Tests
 

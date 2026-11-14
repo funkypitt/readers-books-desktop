@@ -31,7 +31,7 @@ import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 APP = "readers-books"
-VERSION = "1.20.1"
+VERSION = "1.20.2"
 AGENT = "Readers-Books/%s (+https://gallaz.ch/apps)" % VERSION
 
 
@@ -216,6 +216,7 @@ STRINGS = {
   "books, or a PDF to turn into an EPUB": "livres, ou un PDF à convertir en EPUB",
   "a PDF, turned into an EPUB": "un PDF, converti en EPUB",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "rien sur l'étagère. Ouvrir un fichier epub, mobi, fb2 ou texte, ou un PDF à convertir en EPUB : d'ici, ou en le déposant sur cette fenêtre.",
+  "“%s” is a PDF: this version of the app cannot turn a PDF into an EPUB (the Linux packages and the source can).": "« %s » est un PDF : cette version de l'app ne peut pas convertir un PDF en EPUB (les paquets Linux et le code source le peuvent).",
  },
  "de": {
   "follow this folder": "diesem Ordner folgen",
@@ -373,6 +374,7 @@ STRINGS = {
   "books, or a PDF to turn into an EPUB": "Bücher, oder ein PDF zum Umwandeln in EPUB",
   "a PDF, turned into an EPUB": "ein PDF, in EPUB umgewandelt",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nichts im Regal. Eine epub-, mobi-, fb2- oder Textdatei öffnen, oder ein PDF zum Umwandeln in EPUB: von hier oder durch Ablegen auf diesem Fenster.",
+  "“%s” is a PDF: this version of the app cannot turn a PDF into an EPUB (the Linux packages and the source can).": "„%s“ ist ein PDF: Diese Version der App kann kein PDF in EPUB umwandeln (die Linux-Pakete und der Quellcode können es).",
  },
  "es": {
   "follow this folder": "seguir esta carpeta",
@@ -530,6 +532,7 @@ STRINGS = {
   "books, or a PDF to turn into an EPUB": "libros, o un PDF para convertir en EPUB",
   "a PDF, turned into an EPUB": "un PDF, convertido en EPUB",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada en la estantería. Abre un archivo epub, mobi, fb2 o de texto, o un PDF para convertir en EPUB: desde aquí, o soltándolo sobre esta ventana.",
+  "“%s” is a PDF: this version of the app cannot turn a PDF into an EPUB (the Linux packages and the source can).": "«%s» es un PDF: esta versión de la app no puede convertir un PDF en EPUB (los paquetes de Linux y el código fuente sí).",
  },
  "pt": {
   "follow this folder": "seguir esta pasta",
@@ -687,6 +690,7 @@ STRINGS = {
   "books, or a PDF to turn into an EPUB": "livros, ou um PDF para converter em EPUB",
   "a PDF, turned into an EPUB": "um PDF, convertido em EPUB",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "nada na estante. Abra um ficheiro epub, mobi, fb2 ou de texto, ou um PDF para converter em EPUB: daqui, ou largando-o sobre esta janela.",
+  "“%s” is a PDF: this version of the app cannot turn a PDF into an EPUB (the Linux packages and the source can).": "«%s» é um PDF: esta versão da app não pode converter um PDF em EPUB (os pacotes Linux e o código-fonte podem).",
  },
  "ru": {
   "follow this folder": "следить за этой папкой",
@@ -845,6 +849,7 @@ STRINGS = {
   "books, or a PDF to turn into an EPUB": "книги или PDF для преобразования в EPUB",
   "a PDF, turned into an EPUB": "PDF, преобразуемый в EPUB",
   "nothing on the shelf. Open an epub, mobi, fb2 or plain-text file, or a PDF to turn into an EPUB: from here, or by dropping it on this window.": "на полке пусто. Откройте файл epub, mobi, fb2 или текст либо PDF для преобразования в EPUB: отсюда или перетащив его в это окно.",
+  "“%s” is a PDF: this version of the app cannot turn a PDF into an EPUB (the Linux packages and the source can).": "«%s» — это PDF: эта версия приложения не может преобразовать PDF в EPUB (пакеты для Linux и исходный код могут).",
  },
 }
 
@@ -888,6 +893,15 @@ def _lang():
                 return code
             if code == "en":
                 return "en"
+    if sys.platform == "darwin":
+        # opened from the Finder, the app has no LANG: the Mac's own list of languages says it
+        try:
+            for name in QtCore.QLocale.system().uiLanguages():
+                code = name.split("-")[0].split("_")[0].lower()
+                if code in STRINGS or code == "en":
+                    return code
+        except Exception:
+            pass
     try:
         code = (locale.getdefaultlocale()[0] or "en").split("_")[0].lower()
     except Exception:
@@ -5671,6 +5685,7 @@ class Awake:
     def __init__(self):
         self.cookie = None
         self.on = False
+        self.caffeinate = None      # macOS: caffeinate keeps the display on as long as it runs
 
     def set(self, wanted):
         if wanted == self.on:
@@ -5680,6 +5695,16 @@ class Awake:
             if sys.platform == "win32":
                 import ctypes
                 ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | (0x00000002 if wanted else 0))
+            elif sys.platform == "darwin":
+                if wanted:
+                    # -w: it ends with the app, even when the app does not end well
+                    self.caffeinate = subprocess.Popen(["/usr/bin/caffeinate", "-d", "-w", str(os.getpid())],
+                                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                                       stderr=subprocess.DEVNULL)
+                elif self.caffeinate is not None:
+                    self.caffeinate.terminate()
+                    self.caffeinate.wait(2)
+                    self.caffeinate = None
             elif sys.platform.startswith("linux"):
                 from PyQt5 import QtDBus
                 bus = QtDBus.QDBusConnection.sessionBus()
@@ -7008,12 +7033,21 @@ class Main(QtWidgets.QMainWindow):
     def import_files(self, paths):
         """Books opened from here, dropped on the window or handed over by the file manager: they
         land on the shelf, and the last one opens."""
-        papers = [p for p in paths if PAPERS_POSSIBLE and is_pdf(p)]
+        papers = [p for p in paths if is_pdf(p)]
         paths = [p for p in paths if p not in papers]
-        if papers:
+        if papers and PAPERS_POSSIBLE:
             self.add_papers(papers)
+        elif papers:
+            # the Windows and macOS builds have no Python to set the converter up with: said so,
+            # rather than "this file could not be read"
+            self.paper_error = _("“%s” is a PDF: this version of the app cannot turn a PDF into an EPUB (the Linux packages and the source can).") % os.path.basename(papers[0])
+            if not paths:
+                self.home()
+                self.show_screen(reset=True)
         if not paths or self.importing:
             return
+        if not papers and not PAPERS_POSSIBLE:
+            self.paper_error = ""       # the PDF refused before is old news
         self.importing, self.import_failed = True, False
         self.home()
         self.show_screen(reset=True)
@@ -8075,6 +8109,37 @@ def credentials_cli(argv):
     return None
 
 
+class FinderFiles(QtCore.QObject):
+    """macOS hands the books opened from the Finder (double click, Open With, the Dock icon) as
+    QEvent.FileOpen, not as arguments: gathered a moment, they are imported as a drop is."""
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.window, self.paths = window, []
+        self.timer = QtCore.QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.setInterval(200)
+        self.timer.timeout.connect(self.flush)
+
+    def eventFilter(self, obj, e):
+        if e.type() == QtCore.QEvent.FileOpen:
+            path = e.file() or (e.url().toLocalFile() if e.url().isLocalFile() else "")
+            if path and os.path.isfile(path) and path not in self.paths:
+                self.paths.append(path)
+                self.timer.start()
+            return True
+        return False
+
+    def flush(self):
+        if not self.paths:
+            return
+        if self.window.importing:       # an import going on would drop them: they wait for it
+            self.timer.start(500)
+            return
+        paths, self.paths = self.paths, []
+        self.window.import_files(paths)
+
+
 def main():
     code = credentials_cli(sys.argv)
     if code is not None:
@@ -8086,6 +8151,18 @@ def main():
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
+    # the books the Finder opens before the window exists are kept until it does
+    early = []
+
+    class Early(QtCore.QObject):
+        def eventFilter(self, obj, e):
+            if e.type() == QtCore.QEvent.FileOpen:
+                early.append(e.file() or e.url().toLocalFile())
+                return True
+            return False
+
+    early_filter = Early()
+    app.installEventFilter(early_filter)
     load_bundled_fonts()
     app.setApplicationName("Reader's Books")
     app.setDesktopFileName("readers-books")
@@ -8101,6 +8178,12 @@ def main():
     paths = [a for a in sys.argv[1:] if not a.startswith("-") and os.path.isfile(a)]
     if paths:
         window.import_files(paths)
+    finder = FinderFiles(window)
+    app.removeEventFilter(early_filter)
+    app.installEventFilter(finder)
+    finder.paths = [p for p in early if p and os.path.isfile(p) and p not in paths]
+    if finder.paths:
+        finder.timer.start()
     sys.exit(app.exec_())
 
 

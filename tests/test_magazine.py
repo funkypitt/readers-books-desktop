@@ -208,6 +208,52 @@ def chars(text, x=10.0, advance=6.0, gap=0.0, size=10.0, font="HelveticaNeueLTPr
     return out
 
 
+def tight(text, wide, tracking=-0.35, font="TNYAdobeCaslonPro-Regular", size=10.5):
+    """A line set tight: letters overlapping by `tracking`, no space glyph, and after the k-th
+    glyph (the keys of `wide`) the gap the squeezed word space left."""
+    out, x = [], 200.0
+    for k, c in enumerate(text):
+        out.append(m2e.Char(c, x, 100, x + 5, 110, 108, size, font))
+        x += 5 + wide.get(k, tracking)
+    return out
+
+
+class TightLines(unittest.TestCase):
+    def test_a_word_space_squeezed_to_almost_nothing_is_still_a_space(self):
+        self.assertEqual(m2e.Line(tight("tall,with", {4: 0.5})).text, "tall, with")
+        self.assertEqual(m2e.Line(tight("January26,2024,Jontay", {6: 2.0, 9: 1.1, 14: 0.3})).text, "January 26, 2024, Jontay")
+        self.assertEqual(m2e.Line(tight("ofIndonesia", {1: 0.75}, tracking=0.0, font="EconomistSerif-Light", size=9.0)).text,
+                         "of Indonesia")
+        # a number's comma, a name with a capital inside: as they are
+        self.assertEqual(m2e.Line(tight("paid1,000toYouTube", {3: 2.0, 8: 2.0, 10: 2.0})).text, "paid 1,000 to YouTube")
+
+    def test_a_soft_hyphen_drawn_in_a_line_is_a_hyphen(self):
+        self.assertEqual(m2e.Line(tight("self\xadconscious", {})).text, "self-conscious")
+        self.assertEqual(m2e.Line(tight("M.\xadBrahim", {1: 2.0})).text, "M. Brahim")
+
+    def test_a_name_cut_at_its_inner_capital_is_one_word(self):
+        v = m2e.Vocabulary()
+        v.learn("bets on DraftKings and FanDuel")
+        self.assertFalse(v.mend("to a brick-and-mortar Draft", "Kings sportsbook"))
+        self.assertFalse(v.mend("a visit to Regan Mac", "Neil, the"))
+        self.assertTrue(v.mend("anti", "AfD firewall"))
+
+    def test_the_bullets_under_a_cartoon_are_not_a_break_in_the_text(self):
+        line = m2e.Line(chars("• •", size=15.5, font="TNYAdobeCaslonPro-Italic"))
+        self.assertEqual(m2e.NewYorker().role(line, 774), "skip")
+
+    def test_an_article_going_on_after_another_takes_up_its_cut_paragraph_past_its_picture(self):
+        b = m2e.Builder(m2e.Economist(), m2e.Vocabulary(), 9.0)
+        first = b.start()
+        first.items = [("p", "whose allies deny talks have be-"), ("picture", object())]
+        first.jumped = True
+        other = b.start()
+        self.assertIs(b.resume(other), first)
+        self.assertEqual(first.open, ["whose allies deny talks have be-"])
+        self.assertEqual([k for k, _v in first.items], [])
+        self.assertEqual([k for k, _v in first.waiting], ["picture"])
+
+
 class Diplo(unittest.TestCase):
     def test_a_letter_spaced_line_reads_as_words(self):
         line = m2e.Line(chars("Par  notre  envoyé", gap=2.5))

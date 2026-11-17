@@ -127,8 +127,15 @@ class Line:
         self.font, self.size = Counter((c.font, c.size) for c in ink).most_common(1)[0][0]
         self.spans = []             # (text, font, size): runs of one font, spaces put back
         prev = before = None
-        for c in chars:
+        # the line's own letter spacing: in a line set tight, a word space is hardly wider
+        gaps = sorted((b.x0 - a.x1) / b.size for a, b in zip(ink, ink[1:]) if a.c.isalpha() and b.c.isalpha() and b.size)
+        usual = min(0.0, gaps[len(gaps) // 2]) if gaps else 0.0
+        for k, c in enumerate(chars):
             ch = c.c
+            if ch == "\xad":            # a soft hyphen drawn between two letters is a hyphen; else nothing
+                if not (0 < k < len(chars) - 1 and chars[k - 1].c.isalpha() and chars[k + 1].c.isalpha()):
+                    continue
+                ch = "-"
             if ch == " ":
                 if self.spans and not self.spans[-1][0].endswith(" "):
                     self._add(" ", prev.font if prev else c.font, c.size)
@@ -136,7 +143,13 @@ class Line:
             gap = c.x0 - prev.x1 if prev is not None else 0
             after_stop = prev is not None and prev.c in ",;:!?.)”" and not (prev.c in ".," and ch.isdigit())
             sentence = after_stop and prev.c in ".!?" and before is not None and before.c.islower() and (ch.isupper() or ch in "“‘")
-            if prev is not None and (gap > 0.12 * c.size or (after_stop and gap > 0.05 * c.size) or (sentence and gap > -0.05 * c.size)) \
+            wide = gap - usual * c.size
+            squeezed = prev is not None and before is not None and before.c.isalnum() and (
+                (prev.c in ",;" and ch.isalpha() and wide > 0.02 * c.size) or        # « tall,with »
+                (prev.c == "," and ch.isdigit() and wide > 0.09 * c.size) or         # « January 26,2024 », not « 1,000 »
+                (prev.c.islower() and ch.isupper() and before.c.islower() and wide > 0.06 * c.size))   # « ofIndonesia »
+            if prev is not None and (gap > 0.12 * c.size or (after_stop and gap > 0.05 * c.size) or (sentence and gap > -0.05 * c.size)
+                                     or squeezed) \
                     and self.spans and not self.spans[-1][0].endswith(" "):
                 self._add(" ", prev.font, prev.size)
             self._add(ch, c.font, c.size)
@@ -506,7 +519,7 @@ class NewYorker:
             if s >= 18 and len(t) <= 2 and t[-1:].isalpha() and (len(t) == 1 or not t[0].isalnum()):
                 return "drop"
             if s >= 13 and not re.sub(r"[•\s]", "", t):
-                return "break"          # the bullets between the parts of a long piece
+                return "skip"           # the two bullets under a cartoon: the text goes on after it
             if s >= 15:
                 return "head"
             if "Italic" in f and s >= 10.9:
@@ -517,9 +530,11 @@ class NewYorker:
                 return "verse?"
             if 10 <= s <= 11.2:
                 return "body"
+            if 11.5 <= s < 13.5 and "Italic" not in f and len(t) < 60:
+                return "place?"         # the name and the address of the place a column is about
             return "chart"
-        if f.startswith("WilliamsCaslonText"):
-            return "body"
+        if f.startswith(("WilliamsCaslonText", "WilliamsCaslonSmall")) and s >= 8:
+            return "body"               # (the small face: the columns of Goings On set tighter)
         if f.startswith("TNYNeutraface"):
             if "Demi" in f and 9.5 <= s <= 10.5:
                 return "body"           # run-in names in the listings of Goings On
@@ -530,6 +545,15 @@ class NewYorker:
 
     def section_head(self, box):
         return " ".join(l.plain for l in box.lines).strip() in self.sections
+
+    @staticmethod
+    def fix_roles(lines, above):
+        """A place's name and address, right under a column's department: a heading in the text.
+        Elsewhere a line in that size is a chart's, or an advertisement of the magazine's."""
+        for l in sorted((l for l in lines if l.role == "place?"), key=lambda l: l.top):
+            prev = above(l, 30)
+            l.role = "sub" if prev is not None and prev.role in ("rubric?", "sub") and prev.font.startswith(
+                ("TNYIrvinEM", "TNYAdobeCaslonPro")) else "chart"
 
     def contents(self, lines):
         """The pieces the table of contents lists: department, author, page, title."""
@@ -1051,11 +1075,19 @@ def settle_roles(prof, lines, page_h):
         for l in lines:
             if l.role in ("verse?", "stand?", "sig"):
                 prev = above(l, 30)
-                if prev is not None and prev.role in ("poemtitle", "verse") and abs(prev.x0 - l.x0) < 60:
+                if prev is not None and prev.role in ("poemtitle", "verse") and \
+                        (abs(prev.x0 - l.x0) < 60 or (l.role == "sig" and prev.role == "verse")):
                     l.role = "versesig" if l.role == "sig" else "verse"
+                elif prev is not None and prev.role == "verse?" and l.role == "stand?" and abs(prev.x0 - l.x0) < 2 and \
+                        abs(prev.size - l.size) < 0.3:
+                    l.role = "verse?"       # a line of the poem in italics, in a stanza further down
     for l in lines:
         if l.role == "verse?":
             l.role = "verse"
+    for l in lines:                 # the poet's name under the last stanza, set to the right
+        if l.role == "sig":
+            if any(m.role == "verse" and -2 <= l.top - m.bottom < 30 and l.x0 - m.x1 < 80 and m.x0 < l.x0 for m in lines):
+                l.role = "versesig"
     # a rubric is a line just above a headline (or above another rubric line that is)
     for _ in range(2):
         for l in lines:
@@ -1094,13 +1126,13 @@ def settle_roles(prof, lines, page_h):
             elif l.role == "bold?":
                 run, m = 1, l
                 while True:
-                    m = below_any(m, 3)
+                    m = below_any(m, 0.5 * l.size)       # (a line without descenders stands further off the next)
                     if m is None or m.role not in ("bold?", "body") or "Bold" not in m.font and "Medium" not in m.font:
                         break
                     run += 1
                 m = l
                 while True:
-                    m = above(m, 3)
+                    m = above(m, 0.5 * l.size)
                     if m is None or m.role not in ("bold?", "body") or "Bold" not in m.font and "Medium" not in m.font:
                         break
                     run += 1
@@ -1644,6 +1676,8 @@ class Vocabulary:
             return True
         a, b = a[-1].lower(), b[0].lower()
         if right[:1].isupper() and not left[-1:].isupper():
+            if (a + b) in self.words or re.search(r"\b(Ma?c|O|De|Di|La|Le|Van)$", left):
+                return False        # Mac-|Neil, we-|Sizwe written whole elsewhere in the issue
             return True             # anti-|AfD, ex-|Soviet
         if (a + "-" + b) in self.hyphened:
             return True
@@ -1866,10 +1900,15 @@ class Builder:
                 j.jumped = False
                 self.close_para()
                 self.cur = a = j
-                if a.items and a.items[-1][0] == "p":
-                    plain = re.sub(r"<[^>]+>", "", a.items[-1][1])
+                k = len(a.items)        # (the pictures put after its last paragraph stay after it)
+                while k and a.items[k - 1][0] in ("picture", "box"):
+                    k -= 1
+                if k and a.items[k - 1][0] == "p":
+                    plain = re.sub(r"<[^>]+>", "", a.items[k - 1][1])
                     if plain.endswith("-") or not ENDS.search(plain):
-                        a.open = [a.items.pop()[1]]         # cut mid-sentence: it goes on
+                        a.waiting = a.items[k:] + a.waiting
+                        a.open = [a.items[k - 1][1]]        # cut mid-sentence: it goes on
+                        del a.items[k - 1:]
                 break
         return a
 
@@ -1890,6 +1929,9 @@ class Builder:
             indented = 0.7 * l.size < l.x0 - indent_ref < 2.2 * l.size and id(l) not in beside
             if nxt is not None and id(nxt) in beside and id(l) in beside:
                 indented = False
+            up = lines[i - 1] if i else a.last_line
+            if up is not None and up.bottom - up.top > 1.7 * l.size and up.top < l.top < up.bottom - 2 and l.x0 > up.x0:
+                indented = False    # beside a drop capital that is part of the line above
             drop = drops.pop(id(l), None)
             if box.kind == "sub":
                 if i == 0:
@@ -1907,6 +1949,12 @@ class Builder:
                 else:               # (« Henry Holt; $32.99. Bloomsbury | Continuum; £25 »: one note)
                     a.items.append(("note", line_html(l)))
                 continue
+            if i == 0 and nxt is not None and not a.open and a.items and a.items[-1][0] == "sub" and \
+                    re.match(r"by\s+[A-Z]", l.text) and "Italic" in l.font and "Italic" not in nxt.font and \
+                    l.x1 < width_right - 2.5 * l.size:
+                self.close_para()       # under a title in the text, who wrote it: a line of its own
+                a.items.append(("note", line_html(l)))
+                continue
             sig = signature(l)
             if sig:
                 self.close_para()
@@ -1916,7 +1964,8 @@ class Builder:
                 a.last_line = l
                 continue
             if getattr(a, "open_class", None) == "signature" and a.open is not None:
-                if not indented and l.x1 - l.x0 < 0.88 * a.column and len(l.text) < 50 and \
+                place = nxt is not None and "Italic" in nxt.font and len(nxt.text) < 40     # (the town, last)
+                if not indented and (l.x1 - l.x0 < 0.88 * a.column or place) and len(l.text) < 50 and \
                         (a.last_line is None or l.base - a.last_line.base < 1.6 * l.size):
                     # (a signature's lines follow at the text's pitch: after a blank line, the next letter)
                     a.open.append(" · ")
@@ -1934,6 +1983,15 @@ class Builder:
                 prev = a.last_line
                 ended = re.search(r"[.!?:”\"’)■]$", prev.text)
                 short = prev.x1 < prev_right(prev, a) - 2.5 * prev.size
+                if short and i and len(lines) >= 6:
+                    # text set ragged: its lines end anywhere, only a much shorter one ends a paragraph
+                    ragged = sum(1 for m in lines if m.x1 < width_right - m.size)
+                    if ragged > 0.5 * len(lines):
+                        short = prev.x1 < width_right - 0.3 * (width_right - min(m.x0 for m in lines))
+                if short and i and prev.x1 - prev.x0 > 8 * prev.size:
+                    # lines set round a picture all end short, at one edge: not ends of paragraphs
+                    like = [m for m in lines[max(0, i - 4):i + 2] if m is not prev and abs(m.x1 - prev.x1) < 0.4 * prev.size]
+                    short = len(like) < 2
                 if i == 0 and ended and short:
                     new = True
                 elif i > 0 and short and ended and not indented and l.x0 <= prev.x0 + 1:
